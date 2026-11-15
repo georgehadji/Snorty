@@ -31,28 +31,28 @@ Stdlib only at runtime. Each task leaves `uv run pytest` green.
 ## Task List
 
 ### Phase 1: Foundation and riskiest part first
-- [ ] Task 1: Project scaffold (uv project, tooling config, empty `snorty.core`, smoke test)
-- [ ] Task 2: Domain models (`Alert`, `Suppression` + threshold line)
-- [ ] Task 3: `alert_fast` parser + fixtures + `python -m snorty.core.parser` check script
+- [x] Task 1: Project scaffold (uv project, tooling config, empty `snorty.core`, smoke test)
+- [x] Task 2: Domain models (`Alert`, `Suppression` + threshold line)
+- [x] Task 3: `alert_fast` parser + fixtures + `python -m snorty.core.parser` check script
 
 ### Checkpoint A (after Tasks 1–3)
-- [ ] `uv run pytest tests/core` green; ruff and mypy clean
-- [ ] Parsing the real `C:\Snort\log\alert.ids` reports 0 failed lines
-- [ ] Human review before continuing
+- [x] `uv run pytest tests/core` green; ruff and mypy clean
+- [x] Parsing the real `C:\Snort\log\alert.ids` reports 0 failed lines
+- [x] Human review before continuing
 
 ### Phase 2: Events and storage
-- [ ] Task 4: Event types + `EventBus` with bounded drop-oldest queues
-- [ ] Task 5: `AlertRepository` (schema, idempotent add, queries, counts, prune)
+- [x] Task 4: Event types + `EventBus` with bounded drop-oldest queues
+- [x] Task 5: `AlertRepository` (schema, idempotent add, queries, counts, prune)
 
 ### Checkpoint B (after Tasks 4–5)
-- [ ] All core tests green in under 2 s
+- [x] All core tests green in under 2 s
 
 ### Phase 3: Spec success criteria
-- [ ] Task 6: Success-criteria tests (1,000 alerts stored twice; 10,000 events with a stalled subscriber), coverage ≥ 90%, strict mypy
+- [x] Task 6: Success-criteria tests (1,000 alerts stored twice; 10,000 events with a stalled subscriber), coverage ≥ 90%, strict mypy
 
 ### Checkpoint C: Module complete
-- [ ] Every Success Criteria box in SPEC-alert-core.md checked
-- [ ] Human review, then spec for `snort-adapter`
+- [x] Every Success Criteria box in SPEC-alert-core.md checked
+- [x] Human review, then spec for `snort-adapter`
 
 Task 4 depends only on Task 1, so it can be built in parallel with Tasks 2–3.
 Task 5 depends on Task 2. In practice this runs in one session, in order.

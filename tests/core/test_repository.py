@@ -1,5 +1,6 @@
 import sqlite3
 from collections.abc import Iterator
+from contextlib import closing
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -114,7 +115,8 @@ def test_wal_mode_and_concurrent_reader(tmp_path: Path) -> None:
     path = tmp_path / "alerts.db"
     writer, reader = AlertRepository(path), AlertRepository(path)
     try:
-        assert sqlite3.connect(path).execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        with closing(sqlite3.connect(path)) as probe:
+            assert probe.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         writer.add(make_alert(1))
         writer._conn.execute("BEGIN IMMEDIATE")  # open write transaction
         writer._conn.execute("DELETE FROM alerts")
@@ -124,3 +126,13 @@ def test_wal_mode_and_concurrent_reader(tmp_path: Path) -> None:
     finally:
         writer.close()
         reader.close()
+
+
+def test_failed_add_many_rolls_back(repo: AlertRepository) -> None:
+    def gen() -> Iterator[Alert]:
+        yield make_alert(1)
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        repo.add_many(gen())
+    assert repo.query() == []

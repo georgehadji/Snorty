@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from snorty.core.models import Alert
-from snorty.core.parser import parse_line
+from snorty.core.parser import main, parse_line
 
 TZ = timezone(timedelta(hours=2))
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "alert_fast.txt"
@@ -121,3 +121,26 @@ def test_trailing_newline_is_ignored() -> None:
 )
 def test_malformed_returns_none(line: str) -> None:
     assert parse(line) is None
+
+
+def test_cli_reports_counts(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main([str(FIXTURE)]) == 0
+    assert capsys.readouterr().out.strip() == f"parsed={len(REAL_LINES)} failed=0"
+
+
+def test_cli_lists_failures(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    bad = tmp_path / "bad.txt"
+    bad.write_text("garbage\n\n" + REAL_LINES[0] + "\n")
+    assert main([str(bad)]) == 1
+    out = capsys.readouterr().out
+    assert "parsed=1 failed=1" in out
+    assert "FAILED: garbage" in out
+
+
+def test_cli_usage(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main([]) == 2
+    assert "usage" in capsys.readouterr().out
+
+
+def test_unrecognised_timestamp_returns_none() -> None:
+    assert parse("99-xx  [**] [1:1:1] x [**] [Priority: 1] {TCP} 1.1.1.1:1 -> 2.2.2.2:2") is None

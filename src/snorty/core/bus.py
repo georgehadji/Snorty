@@ -16,8 +16,6 @@ class Subscription:
         self.dropped = 0
 
     def _put(self, event: Event) -> None:
-        if self._closed:
-            return
         if self._queue.full():
             self._queue.get_nowait()
             self.dropped += 1

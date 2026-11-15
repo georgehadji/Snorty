@@ -186,12 +186,12 @@ def parse_line(line: str, *, default_year: int, tz: tzinfo) -> Alert | None:
 
 ## Success Criteria
 
-- [ ] `uv sync` then `uv run pytest tests/core` passes on a clean checkout.
-- [ ] Every line in `tests/fixtures/alert_fast.txt` parses to the expected `Alert`; every malformed fixture returns `None`.
-- [ ] Parsing `C:\Snort\log\alert.ids` from this machine yields no `None` results (manual check script: `uv run python -m snorty.core.parser C:\Snort\log\alert.ids` prints parsed/failed counts).
-- [ ] Storing the same 1,000 alerts twice leaves exactly 1,000 rows.
-- [ ] A subscriber that never reads does not slow the publisher: publishing 10,000 events with one stalled subscriber finishes in under 1 s.
-- [ ] `ruff check` and `mypy src/snorty/core` report no errors; coverage ≥ 90%.
+- [x] `uv sync` then `uv run pytest tests/core` passes on a clean checkout.
+- [x] Every line in `tests/fixtures/alert_fast.txt` parses to the expected `Alert`; every malformed fixture returns `None`.
+- [x] Parsing `C:\Snort\log\alert.ids` from this machine yields no `None` results (manual check script: `uv run python -m snorty.core.parser C:\Snort\log\alert.ids` prints parsed/failed counts).
+- [x] Storing the same 1,000 alerts twice leaves exactly 1,000 rows.
+- [x] A subscriber that never reads does not slow the publisher: publishing 10,000 events with one stalled subscriber finishes in under 1 s.
+- [x] `ruff check` and `mypy src/snorty/core` report no errors; coverage ≥ 90%.
 
 ## Out of Scope (Deferred)
 

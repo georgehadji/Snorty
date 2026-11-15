@@ -77,3 +77,10 @@ async def test_other_event_types_flow() -> None:
     event = SensorStateChanged(old="stopped", new="running", reason=None)
     bus.publish(event)
     assert await take(sub, 1) == [event]
+
+
+async def test_close_twice_is_harmless() -> None:
+    sub = EventBus().subscribe()
+    sub.close()
+    sub.close()
+    assert [e async for e in sub] == []
