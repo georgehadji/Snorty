@@ -1,0 +1,4 @@
++++++++++++++++++++++++++++++++++++++++++++++++++++
+Initializing rule chains...
+ERROR: C:\Users\tesse\AppData\Local\Temp\bad2.conf(1) Unknown rule type: badkeyword_xyz.
+Fatal Error, Quitting..

@@ -1,0 +1,15 @@
+Parsing Rules file "C:\Snort\etc\snort.conf"
+WARNING: ip4 normalizations disabled because not inline.
+WARNING: tcp normalizations disabled because not inline.
+WARNING: icmp4 normalizations disabled because not inline.
+WARNING: ip6 normalizations disabled because not inline.
+WARNING: icmp6 normalizations disabled because not inline.
+WARNING: Can't find any whitelist/blacklist entries. Reputation Preprocessor disabled.
+WARNING: C:\Snort\rules/emerging-activex.rules(1105) threshold (in rule) is deprecated; use detection_filter instead.
+52442 Snort rules read
+    52442 detection rules
+    0 decoder rules
+    0 preprocessor rules
+MaxRss at the end of detection rules:316379392
+Snort successfully validated the configuration!
+Snort exiting
