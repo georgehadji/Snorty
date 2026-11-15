@@ -1,71 +1,60 @@
-# Implementation Plan: alert-core
+# Implementation Plan: snort-adapter
 
-Source spec: [SPEC-alert-core.md](../SPEC-alert-core.md) · Module map: [CAPABILITY-MAP.md](../CAPABILITY-MAP.md)
+Source spec: [SPEC-snort-adapter.md](../SPEC-snort-adapter.md) · Module map: [CAPABILITY-MAP.md](../CAPABILITY-MAP.md)
 Task list: [tasks/todo.md](todo.md)
+Previous module: alert-core, done (its plan and tasks are in git history, commits `06d0858`..`569c28d`).
 
 ## Overview
 
-Build the Snorty project skeleton and the `snorty.core` package: domain types,
-the `alert_fast` parser, the async event bus and the SQLite alert repository.
-Stdlib only at runtime. Each task leaves `uv run pytest` green.
+Build `snorty.snort`: the only package that runs `snort.exe`. Pure parsers and
+command builders, one injectable `Runner`, and a service layer (interfaces,
+config check, live start/stop, pcap run). Stdlib only. Depends on `snorty.core`.
 
 ## Architecture Decisions
 
-- **Repository is synchronous.** `sqlite3` is blocking; async callers (sensor,
-  dashboard) will wrap calls in `asyncio.to_thread`. Keeps the core simple and
-  testable without an event loop. One connection per repository instance,
-  WAL mode, `check_same_thread=False` guarded by a `threading.Lock`.
-- **Idempotency key = raw line.** `UNIQUE(raw)` with `INSERT OR IGNORE`. Two
-  genuinely different alerts always differ in timestamp (microseconds) or
-  rule/endpoints, so their lines differ.
-- **Timestamps stored as UTC ISO-8601 text**, converted back to the local zone
-  on read. Avoids DST ambiguity in range queries.
-- **Parser is one anchored regex plus small pure helpers** (`_parse_ts`,
-  `_split_endpoint`). Unknown lines return `None`; no exceptions escape.
-- **EventBus:** one `asyncio.Queue(maxsize=N)` per subscriber. `publish` is a
-  plain (non-async) method using `put_nowait`; on `QueueFull` it drops the
-  oldest item with `get_nowait` and retries once, then increments that
-  subscriber's `dropped` counter. The publisher can never await.
-- **Layout and tooling** exactly as the spec's Project Structure and Commands.
+- **Runner is the seam.** `Runner` Protocol, `SubprocessRunner` real impl. Unit tests pass a fake; only `@pytest.mark.snort` tests touch Snort.
+- **Live process is separate from the Runner.** `start_live` returns an `asyncio.subprocess.Process` (long-lived, needs `CREATE_NEW_PROCESS_GROUP` so Ctrl+Break reaches only Snort); the Runner covers run-to-completion calls.
+- **Integration tests never use `C:\Snort\log`.** They pass `SnortPaths(log_dir=tmp_path)`, so the real alert log stays untouched.
+- **Risk first:** the Ctrl+Break clean-stop assumption is proved in Task 3, before more is built on it.
+- Interface pick by IP match (`find_local_ip` + `pick_interface`); no hard-coded index.
+- Spec's package layout and commands are used as written.
 
 ## Task List
 
-### Phase 1: Foundation and riskiest part first
-- [x] Task 1: Project scaffold (uv project, tooling config, empty `snorty.core`, smoke test)
-- [x] Task 2: Domain models (`Alert`, `Suppression` + threshold line)
-- [x] Task 3: `alert_fast` parser + fixtures + `python -m snorty.core.parser` check script
+### Phase 1: Foundation and the riskiest assumption
+- [ ] Task 1: models, interface parsing, picking, local IP
+- [ ] Task 2: command builders and `Runner` + `SubprocessRunner`
+- [ ] Task 3: `start_live` / `stop_live` with a real-Snort flush test
 
 ### Checkpoint A (after Tasks 1–3)
-- [x] `uv run pytest tests/core` green; ruff and mypy clean
-- [x] Parsing the real `C:\Snort\log\alert.ids` reports 0 failed lines
-- [x] Human review before continuing
+- [ ] Unit tests green; `-m snort` live test shows the alert flushed after Ctrl+Break
+- [ ] If the flush test fails: stop, report, revise spec (open question 3)
 
-### Phase 2: Events and storage
-- [x] Task 4: Event types + `EventBus` with bounded drop-oldest queues
-- [x] Task 5: `AlertRepository` (schema, idempotent add, queries, counts, prune)
+### Phase 2: Config check and pcap
+- [ ] Task 4: `list_interfaces` + `check_config` (fixtures, fake runner, real `-T`)
+- [ ] Task 5: `run_pcap` (fake runner, hand-built pcap, real run)
 
 ### Checkpoint B (after Tasks 4–5)
-- [x] All core tests green in under 2 s
+- [ ] `-m "not snort"` under 2 s; `-m snort` green on this PC
 
-### Phase 3: Spec success criteria
-- [x] Task 6: Success-criteria tests (1,000 alerts stored twice; 10,000 events with a stalled subscriber), coverage ≥ 90%, strict mypy
+### Phase 3: Gates
+- [ ] Task 6: coverage ≥ 90%, strict mypy, subprocess-containment check, spec boxes ticked
 
-### Checkpoint C: Module complete
-- [x] Every Success Criteria box in SPEC-alert-core.md checked
-- [x] Human review, then spec for `snort-adapter`
-
-Task 4 depends only on Task 1, so it can be built in parallel with Tasks 2–3.
-Task 5 depends on Task 2. In practice this runs in one session, in order.
+### Checkpoint C: module complete
+- [ ] Every Success Criteria box in SPEC-snort-adapter.md checked
+- [ ] Then SPEC-sensor.md
 
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| `alert_fast` variants not seen yet (IPv6 compressed form, odd protocols like `{PROTO:255}`, `msg` with brackets) | Med | Fixtures from the real `alert.ids`; regex keeps `msg` non-greedy up to ` [**]`; protocol group accepts any text in braces; every new failing line becomes a fixture |
-| Lines without a year read across New Year | Low | Sensor runs Snort with `-y`; for old lines the caller passes the year; documented in `parse_line` docstring |
-| SQLite locking on Windows when the dashboard reads while the sensor writes | Med | WAL mode, single writer connection, readers in short transactions; tested with two connections in Task 5 |
-| Timezone/DST errors in hour buckets | Low | Store UTC, bucket in the caller's zone; test a DST-change day |
+| Snort 2.9 ignores Ctrl+Break, or exits without flushing | High | Task 3 proves it first; on failure stop and revise the spec |
+| Windows console-signal quirks (event goes to the wrong process group) | Med | `CREATE_NEW_PROCESS_GROUP`; test asserts the parent test process survives |
+| Hand-built pcap rejected or ignored by Snort (checksums, link type) | Med | Ethernet link type 1, valid IP checksum; pass `-k none` in `pcap_command` |
+| `-W` or `-T` output text differs between runs | Low | Fixtures are real output; parsers tolerate extra lines; unknown shape gives `ok=False` / `[]`, never raises |
+| Integration tests flaky on timing (waiting for alerts) | Med | Poll with a deadline instead of fixed sleeps |
+| Npcap capture needs the right adapter | Low | Live test uses the loopback adapter found via `-W` |
 
 ## Open Questions
 
-- **Git:** initialise a git repository in `Snorty` now so each task can be committed? (Commits only when you ask.)
+- None blocking. Spec question 2 (interface override in `snorty.toml`) goes to the sensor spec.

@@ -1,137 +1,140 @@
-# Tasks: alert-core
+# Tasks: snort-adapter
 
-Plan: [tasks/plan.md](plan.md) · Spec: [SPEC-alert-core.md](../SPEC-alert-core.md)
+Plan: [tasks/plan.md](plan.md) · Spec: [SPEC-snort-adapter.md](../SPEC-snort-adapter.md)
 
 Definition of done for every task: its tests pass, `uv run ruff check src tests`
-and `uv run mypy src/snorty/core` are clean, and the full `uv run pytest` stays green.
+and `uv run mypy src/snorty/core src/snorty/snort` are clean, and
+`uv run pytest -m "not snort"` stays green. Tasks that touch real Snort also pass `-m snort`.
 
-## Task 1: Project scaffold
+## Task 1: Models, interface parsing, local IP
 
-**Description:** Create the uv project with the layout from the spec, tool
-configuration, and an empty `snorty.core` package with one smoke test.
-
-**Acceptance criteria:**
-- [x] `pyproject.toml`: name `snorty`, Python `>=3.12`, `src/` layout, no runtime deps; dev group: pytest, pytest-asyncio, pytest-cov, ruff, mypy
-- [x] ruff (line length 100, rules `E,F,I,B,UP`), mypy (`strict` for `snorty.core`), pytest (`asyncio_mode = "auto"`, `snort` marker registered) configured in `pyproject.toml`
-- [x] `.gitignore` covers `.venv/`, `__pycache__/`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `*.db`, `snorty.toml`
-
-**Verification:**
-- [x] `uv sync` succeeds
-- [x] `uv run pytest` runs 1 passing smoke test (`import snorty.core`)
-- [x] `uv run ruff check src tests` and `uv run mypy src/snorty/core` clean
-
-**Dependencies:** None
-
-**Files likely touched:** `pyproject.toml`, `.gitignore`, `src/snorty/__init__.py`, `src/snorty/core/__init__.py`, `tests/core/test_smoke.py`
-
-**Estimated scope:** S
-
-## Task 2: Domain models
-
-**Description:** Frozen, slotted `Alert` and `Suppression` dataclasses.
-`Suppression.to_threshold_line()` renders the Snort 2.9 `threshold.conf` line.
+**Description:** Create `snorty.snort` with the data types and the pure interface
+functions. Save the real `snort -W` output as a fixture.
 
 **Acceptance criteria:**
-- [x] `Alert` has exactly the fields in the spec; instances are immutable and hashable
-- [x] `Suppression(1, 2010935).to_threshold_line() == "suppress gen_id 1, sig_id 2010935"`; with `track="by_src", ip="1.2.3.4"` → `"suppress gen_id 1, sig_id 2010935, track by_src, ip 1.2.3.4"`
-- [x] `track` without `ip` (or `ip` without `track`) raises `ValueError` on construction
+- [ ] `SnortPaths`, `Interface`, `ConfigCheck`, `RunResult`, `SnortError` as in the spec (frozen, slotted)
+- [ ] `parse_interfaces(text)` parses the real fixture: 9 rows; row 4 has ip `192.168.10.230`; `disabled` rows and the IPv6 loopback row give `ip=None`; garbage input gives `[]`
+- [ ] `pick_interface(interfaces, ip)` returns the match or `None`
+- [ ] `find_local_ip()` returns a valid IPv4 string without sending a packet (UDP `connect` + `getsockname`); returns `None` when the PC has no route
+- [ ] pytest marker `snort` already registered; `-m "not snort"` deselects nothing yet
 
 **Verification:**
-- [x] `uv run pytest tests/core/test_models.py -q`
+- [ ] `uv run pytest tests/snort -q`
+- [ ] ruff and mypy clean
+
+**Dependencies:** none (alert-core done)
+
+**Files likely touched:** `src/snorty/snort/{__init__,models,interfaces}.py`, `tests/snort/test_interfaces.py`, `tests/fixtures/snort_W.txt`
+
+**Estimated scope:** M
+
+## Task 2: Command builders and Runner
+
+**Description:** Pure argv builders and the single subprocess runner.
+
+**Acceptance criteria:**
+- [ ] `live_command`, `test_command` (`-T -i N -c conf`), `pcap_command` (`-r pcap -c conf -l dir -A fast -y -k none -q`) return exact argv lists of strings
+- [ ] `Runner` Protocol; `SubprocessRunner` returns `RunResult` with decoded stdout/stderr (`errors="replace"`)
+- [ ] Timeout kills the child and raises `SnortError("timeout ...")`; missing executable raises `SnortError`
+- [ ] Tested with `sys.executable -c ...` (no Snort needed)
+
+**Verification:**
+- [ ] `uv run pytest tests/snort/test_commands.py tests/snort/test_runner.py -q`
 
 **Dependencies:** Task 1
 
-**Files likely touched:** `src/snorty/core/models.py`, `tests/core/test_models.py`
+**Files likely touched:** `src/snorty/snort/{commands,runner}.py`, `tests/snort/test_commands.py`, `tests/snort/test_runner.py`
 
 **Estimated scope:** S
 
-## Task 3: alert_fast parser
+## Task 3: Live start and clean stop (the risk spike)
 
-**Description:** `parse_line(line, *, default_year, tz) -> Alert | None` plus a
-`__main__` entry that parses a file and prints parsed/failed counts. Fixture
-file built from the real `C:\Snort\log\alert.ids` and crafted edge cases.
+**Description:** `start_live` spawns Snort in its own process group;
+`stop_live` sends Ctrl+Break, waits, kills only as a last resort. Prove with real
+Snort on the loopback adapter that an alert is flushed after a clean stop.
 
 **Acceptance criteria:**
-- [x] Parses: year/no-year timestamps; with/without classification; TCP/UDP with ports; ICMP without ports; IPv4; expanded 9-group IPv6 with port
-- [x] Malformed input (empty, truncated, random text, bad date like `13/45`) returns `None` and never raises
-- [x] `uv run python -m snorty.core.parser <file>` prints `parsed=N failed=M` and lists the first 5 failed lines
+- [ ] `start_live(paths, iface) -> asyncio.subprocess.Process` uses `CREATE_NEW_PROCESS_GROUP`
+- [ ] `stop_live(proc, timeout) -> StopResult("clean" | "killed")`; the test process itself survives the signal
+- [ ] `@pytest.mark.snort` test: temp `log_dir`; start on loopback; wait until Snort is ready; send a TCP payload containing `uid=0(root)` to a local socket; `stop_live`; poll for `alert.ids` containing sid `1000002`; result is `"clean"`
+- [ ] Unit test with a fake process proves the kill fallback path
+- [ ] If Ctrl+Break does not flush: STOP and report; do not work around it silently
 
 **Verification:**
-- [x] `uv run pytest tests/core/test_parser.py -q` (parametrized over `tests/fixtures/alert_fast.txt` and malformed cases)
-- [x] Manual: `uv run python -m snorty.core.parser C:\Snort\log\alert.ids` → `failed=0`
+- [ ] `uv run pytest tests/snort -q -m snort -k live`
+- [ ] `uv run pytest tests/snort -q -m "not snort"`
 
 **Dependencies:** Task 2
 
-**Files likely touched:** `src/snorty/core/parser.py`, `tests/core/test_parser.py`, `tests/fixtures/alert_fast.txt`
+**Files likely touched:** `src/snorty/snort/service.py`, `src/snorty/snort/models.py` (StopResult), `tests/snort/test_live.py`, `tests/snort/conftest.py`
 
 **Estimated scope:** M
 
 ## Checkpoint A: after Tasks 1–3
-- [x] All tests green; ruff and mypy clean
-- [x] Real `alert.ids` parses with 0 failures
-- [x] Review with human before continuing
+- [ ] All unit tests green; live flush test green on this PC
+- [ ] Review with human only if the flush test failed
 
-## Task 4: Events and EventBus
+## Task 4: Interface listing and config check
 
-**Description:** Frozen event dataclasses (`AlertRaised`, `SensorStateChanged`,
-`RulesUpdated`) and an `EventBus` with per-subscriber bounded queues.
+**Description:** `list_interfaces` and `check_config` over the Runner.
 
 **Acceptance criteria:**
-- [x] `subscribe(maxsize=1000)` returns a `Subscription` (async iterator, `.dropped` counter, `.close()`); `publish(event)` is synchronous and never blocks
-- [x] Three subscribers each receive every event published after subscribing, in order; closed subscriptions receive nothing further
-- [x] On a full queue the oldest event is dropped, the new one is kept, and `dropped` increments
+- [ ] `list_interfaces(paths, runner)` runs `-W` and parses it
+- [ ] `check_config(paths, iface, runner, conf=None)` returns `ConfigCheck`; good fixture gives `ok=True` and the rule count; bad fixture (real output from a conf with one bad line) gives `ok=False` and the error line(s)
+- [ ] Non-zero exit with unknown output gives `ok=False`, never an exception; `SnortError` from the runner (timeout) is converted to `ok=False` with the message
+- [ ] `@pytest.mark.snort`: real `-W` contains the loopback adapter; real `-T -i <n>` on `C:\Snort\etc\snort.conf` gives `ok=True` and `rule_count > 50000`
 
 **Verification:**
-- [x] `uv run pytest tests/core/test_bus.py -q`
-
-**Dependencies:** Task 1 (uses `Alert` from Task 2 only in tests)
-
-**Files likely touched:** `src/snorty/core/events.py`, `src/snorty/core/bus.py`, `tests/core/test_bus.py`
-
-**Estimated scope:** S
-
-## Task 5: AlertRepository
-
-**Description:** SQLite store for alerts: schema creation, idempotent insert,
-filtered queries, per-SID and per-hour counts, retention pruning.
-
-**Acceptance criteria:**
-- [x] `add(alert) -> bool` and `add_many(alerts) -> int` (new rows only); re-adding the same alert returns `False` / adds 0 rows
-- [x] `query(since=, until=, sid=, min_priority=, limit=, offset=)` returns newest first; `min_priority=1` returns only priority-1 alerts
-- [x] `counts_by_sid(since, until)` and `counts_by_hour(since, until, tz)`; `prune(before)` deletes rows strictly older than `before`
-- [x] Opening the DB enables WAL; a second connection can read while the first writes
-
-**Verification:**
-- [x] `uv run pytest tests/core/test_repository.py -q` (uses `tmp_path`)
+- [ ] `uv run pytest tests/snort -q` (both marker groups)
 
 **Dependencies:** Task 2
 
-**Files likely touched:** `src/snorty/core/repository.py`, `tests/core/test_repository.py`
+**Files likely touched:** `src/snorty/snort/service.py`, `tests/snort/test_service.py`, `tests/fixtures/snort_T_ok.txt`, `tests/fixtures/snort_T_bad.txt`
+
+**Estimated scope:** M
+
+## Task 5: Pcap run
+
+**Description:** `run_pcap` runs Snort over a pcap with a given conf and log dir and
+returns parsed alerts.
+
+**Acceptance criteria:**
+- [ ] `run_pcap(paths, pcap, runner, *, conf=None, log_dir=None, year, tz)` returns `list[Alert]` using `snorty.core.parser`; missing pcap file raises `SnortError` before running anything; non-zero exit raises `SnortError` with stderr tail
+- [ ] Uses a fresh temp dir when `log_dir` is None and removes it afterwards
+- [ ] Unit test with a fake runner that writes a fixture `alert.ids`
+- [ ] `@pytest.mark.snort`: a test helper builds a tiny pcap (Ethernet/IPv4/TCP, payload `uid=0(root)`); real `run_pcap` returns one alert with sid `1000002`
+
+**Verification:**
+- [ ] `uv run pytest tests/snort -q` (both marker groups)
+
+**Dependencies:** Tasks 2, 4
+
+**Files likely touched:** `src/snorty/snort/service.py`, `tests/snort/pcap.py` (helper), `tests/snort/test_pcap.py`
 
 **Estimated scope:** M
 
 ## Checkpoint B: after Tasks 4–5
-- [x] `uv run pytest tests/core -q` green in under 2 s
+- [ ] `uv run pytest tests/snort -m "not snort"` under 2 s; `-m snort` green
 
-## Task 6: Success criteria and quality gates
+## Task 6: Quality gates
 
-**Description:** Add the spec's success-criteria tests and close coverage and typing gaps.
+**Description:** Close coverage and typing gaps; verify containment; tick the spec.
 
 **Acceptance criteria:**
-- [x] Test: storing the same 1,000 alerts twice leaves exactly 1,000 rows
-- [x] Test: publishing 10,000 events with one stalled subscriber finishes in under 1 s
-- [x] Coverage for `snorty.core` ≥ 90%; `mypy src/snorty/core` strict clean
+- [ ] Coverage for `snorty.snort` ≥ 90% (unit tests only counted)
+- [ ] `grep -r subprocess src/snorty` matches only `runner.py` and `service.py`
+- [ ] `snorty.snort` imports no snorty package except `snorty.core`
+- [ ] Success Criteria boxes in the spec ticked; public API re-exported in `snorty/snort/__init__.py`
 
 **Verification:**
-- [x] `uv run pytest tests/core --cov=snorty.core --cov-report=term-missing`
-- [x] `uv run ruff check src tests` and `uv run mypy src/snorty/core`
+- [ ] `uv run pytest tests/snort -m "not snort" --cov=snorty.snort --cov-report=term-missing`
+- [ ] `uv run ruff check src tests`; `uv run mypy src/snorty/core src/snorty/snort`
 
 **Dependencies:** Tasks 3, 4, 5
 
-**Files likely touched:** `tests/core/test_success_criteria.py`, any core file with uncovered branches
+**Files likely touched:** `src/snorty/snort/__init__.py`, tests for uncovered branches, `SPEC-snort-adapter.md`
 
 **Estimated scope:** S
 
 ## Checkpoint C: module complete
-- [x] All Success Criteria in SPEC-alert-core.md checked
-- [x] Human review; then write SPEC-snort-adapter.md
+- [ ] All Success Criteria in SPEC-snort-adapter.md checked; then write SPEC-sensor.md
