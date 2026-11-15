@@ -1,6 +1,7 @@
 import asyncio
 import signal
 import socket
+import sys
 import threading
 from datetime import UTC
 from pathlib import Path
@@ -99,3 +100,24 @@ async def test_real_snort_alert_survives_clean_stop(tmp_path: Path) -> None:
         if (a := parse_line(line, default_year=2026, tz=UTC)) is not None
     }
     assert 1000002 in sids
+
+
+async def test_start_live_reports_early_exit(tmp_path: Path) -> None:
+    # Stand-in "snort": python runs the "conf" as code and exits with 3 at once.
+    paths = SnortPaths(Path(sys.executable), Path("raise SystemExit(3)"), tmp_path)
+    with pytest.raises(SnortError, match=r"exited early \(code 3\)"):
+        await start_live(paths, Interface(1, "m", None, "d", "x"), ready_timeout=20)
+
+
+async def test_start_live_times_out_when_never_ready(tmp_path: Path) -> None:
+    paths = SnortPaths(Path(sys.executable), Path("import time; time.sleep(60)"), tmp_path)
+    with pytest.raises(SnortError, match="not ready"):
+        await start_live(paths, Interface(1, "m", None, "d", "x"), ready_timeout=0.3)
+
+
+async def test_start_live_returns_when_ready_marker_appears(tmp_path: Path) -> None:
+    code = "print('Commencing packet processing', flush=True); import time; time.sleep(60)"
+    paths = SnortPaths(Path(sys.executable), Path(code), tmp_path)
+    proc = await start_live(paths, Interface(1, "m", None, "d", "x"), ready_timeout=20)
+    result = await stop_live(proc, timeout=10)
+    assert result.how in ("clean", "killed")

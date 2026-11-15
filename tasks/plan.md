@@ -22,26 +22,26 @@ config check, live start/stop, pcap run). Stdlib only. Depends on `snorty.core`.
 ## Task List
 
 ### Phase 1: Foundation and the riskiest assumption
-- [ ] Task 1: models, interface parsing, picking, local IP
-- [ ] Task 2: command builders and `Runner` + `SubprocessRunner`
-- [ ] Task 3: `start_live` / `stop_live` with a real-Snort flush test
+- [x] Task 1: models, interface parsing, picking, local IP
+- [x] Task 2: command builders and `Runner` + `SubprocessRunner`
+- [x] Task 3: `start_live` / `stop_live` with a real-Snort flush test
 
 ### Checkpoint A (after Tasks 1–3)
-- [ ] Unit tests green; `-m snort` live test shows the alert flushed after Ctrl+Break
-- [ ] If the flush test fails: stop, report, revise spec (open question 3)
+- [x] Unit tests green; `-m snort` live test shows the alert flushed after Ctrl+Break
+- [x] If the flush test fails: stop, report, revise spec (open question 3)
 
 ### Phase 2: Config check and pcap
-- [ ] Task 4: `list_interfaces` + `check_config` (fixtures, fake runner, real `-T`)
-- [ ] Task 5: `run_pcap` (fake runner, hand-built pcap, real run)
+- [x] Task 4: `list_interfaces` + `check_config` (fixtures, fake runner, real `-T`)
+- [x] Task 5: `run_pcap` (fake runner, hand-built pcap, real run)
 
 ### Checkpoint B (after Tasks 4–5)
-- [ ] `-m "not snort"` under 2 s; `-m snort` green on this PC
+- [x] `-m "not snort"` under 2 s; `-m snort` green on this PC
 
 ### Phase 3: Gates
-- [ ] Task 6: coverage ≥ 90%, strict mypy, subprocess-containment check, spec boxes ticked
+- [x] Task 6: coverage ≥ 90%, strict mypy, subprocess-containment check, spec boxes ticked
 
 ### Checkpoint C: module complete
-- [ ] Every Success Criteria box in SPEC-snort-adapter.md checked
+- [x] Every Success Criteria box in SPEC-snort-adapter.md checked
 - [ ] Then SPEC-sensor.md
 
 ## Risks and Mitigations

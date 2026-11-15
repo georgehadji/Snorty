@@ -1,6 +1,8 @@
 import ipaddress
 from pathlib import Path
 
+import pytest
+
 from snorty.snort.interfaces import find_local_ip, parse_interfaces, pick_interface
 from snorty.snort.models import Interface
 
@@ -46,3 +48,11 @@ def test_pick_interface() -> None:
 def test_find_local_ip_is_ipv4_or_none() -> None:
     ip = find_local_ip()
     assert ip is None or isinstance(ipaddress.ip_address(ip), ipaddress.IPv4Address)
+
+
+def test_find_local_ip_without_route_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*args: object, **kwargs: object) -> None:
+        raise OSError("network unreachable")
+
+    monkeypatch.setattr("snorty.snort.interfaces.socket.socket", boom)
+    assert find_local_ip() is None

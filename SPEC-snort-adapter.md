@@ -161,11 +161,11 @@ reads `getsockname()`: no packet is sent.
 
 ## Success Criteria
 
-- [ ] `uv run pytest tests/snort -m "not snort"` passes in under 2 s with Snort uninstalled-safe fakes.
-- [ ] `uv run pytest tests/snort -m snort` passes on this PC: real `-W`, real `-T`, pcap run, live start/stop with the alert flushed.
-- [ ] Wi-Fi (or Ethernet, whichever is the default route) is picked automatically on this PC.
-- [ ] `grep -r "subprocess" src/snorty` matches only `src/snorty/snort/runner.py` and `service.py`.
-- [ ] `ruff check`, `mypy src/snorty/core src/snorty/snort` clean; coverage ≥ 90%.
+- [x] `uv run pytest tests/snort -m "not snort"` passes in under 2 s with Snort uninstalled-safe fakes.
+- [x] `uv run pytest tests/snort -m snort` passes on this PC: real `-W`, real `-T`, pcap run, live start/stop with the alert flushed.
+- [x] Wi-Fi (or Ethernet, whichever is the default route) is picked automatically on this PC.
+- [x] `grep -r "subprocess" src/snorty` matches only `src/snorty/snort/runner.py` and `service.py`.
+- [x] `ruff check`, `mypy src/snorty/core src/snorty/snort` clean; coverage ≥ 90%.
 
 ## Out of Scope (Deferred)
 

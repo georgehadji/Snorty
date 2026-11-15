@@ -12,15 +12,15 @@ and `uv run mypy src/snorty/core src/snorty/snort` are clean, and
 functions. Save the real `snort -W` output as a fixture.
 
 **Acceptance criteria:**
-- [ ] `SnortPaths`, `Interface`, `ConfigCheck`, `RunResult`, `SnortError` as in the spec (frozen, slotted)
-- [ ] `parse_interfaces(text)` parses the real fixture: 9 rows; row 4 has ip `192.168.10.230`; `disabled` rows and the IPv6 loopback row give `ip=None`; garbage input gives `[]`
-- [ ] `pick_interface(interfaces, ip)` returns the match or `None`
-- [ ] `find_local_ip()` returns a valid IPv4 string without sending a packet (UDP `connect` + `getsockname`); returns `None` when the PC has no route
-- [ ] pytest marker `snort` already registered; `-m "not snort"` deselects nothing yet
+- [x] `SnortPaths`, `Interface`, `ConfigCheck`, `RunResult`, `SnortError` as in the spec (frozen, slotted)
+- [x] `parse_interfaces(text)` parses the real fixture: 9 rows; row 4 has ip `192.168.10.230`; `disabled` rows and the IPv6 loopback row give `ip=None`; garbage input gives `[]`
+- [x] `pick_interface(interfaces, ip)` returns the match or `None`
+- [x] `find_local_ip()` returns a valid IPv4 string without sending a packet (UDP `connect` + `getsockname`); returns `None` when the PC has no route
+- [x] pytest marker `snort` already registered; `-m "not snort"` deselects nothing yet
 
 **Verification:**
-- [ ] `uv run pytest tests/snort -q`
-- [ ] ruff and mypy clean
+- [x] `uv run pytest tests/snort -q`
+- [x] ruff and mypy clean
 
 **Dependencies:** none (alert-core done)
 
@@ -33,13 +33,13 @@ functions. Save the real `snort -W` output as a fixture.
 **Description:** Pure argv builders and the single subprocess runner.
 
 **Acceptance criteria:**
-- [ ] `live_command`, `test_command` (`-T -i N -c conf`), `pcap_command` (`-r pcap -c conf -l dir -A fast -y -k none -q`) return exact argv lists of strings
-- [ ] `Runner` Protocol; `SubprocessRunner` returns `RunResult` with decoded stdout/stderr (`errors="replace"`)
-- [ ] Timeout kills the child and raises `SnortError("timeout ...")`; missing executable raises `SnortError`
-- [ ] Tested with `sys.executable -c ...` (no Snort needed)
+- [x] `live_command`, `test_command` (`-T -i N -c conf`), `pcap_command` (`-r pcap -c conf -l dir -A fast -y -k none -q`) return exact argv lists of strings
+- [x] `Runner` Protocol; `SubprocessRunner` returns `RunResult` with decoded stdout/stderr (`errors="replace"`)
+- [x] Timeout kills the child and raises `SnortError("timeout ...")`; missing executable raises `SnortError`
+- [x] Tested with `sys.executable -c ...` (no Snort needed)
 
 **Verification:**
-- [ ] `uv run pytest tests/snort/test_commands.py tests/snort/test_runner.py -q`
+- [x] `uv run pytest tests/snort/test_commands.py tests/snort/test_runner.py -q`
 
 **Dependencies:** Task 1
 
@@ -54,15 +54,15 @@ functions. Save the real `snort -W` output as a fixture.
 Snort on the loopback adapter that an alert is flushed after a clean stop.
 
 **Acceptance criteria:**
-- [ ] `start_live(paths, iface) -> asyncio.subprocess.Process` uses `CREATE_NEW_PROCESS_GROUP`
-- [ ] `stop_live(proc, timeout) -> StopResult("clean" | "killed")`; the test process itself survives the signal
-- [ ] `@pytest.mark.snort` test: temp `log_dir`; start on loopback; wait until Snort is ready; send a TCP payload containing `uid=0(root)` to a local socket; `stop_live`; poll for `alert.ids` containing sid `1000002`; result is `"clean"`
-- [ ] Unit test with a fake process proves the kill fallback path
-- [ ] If Ctrl+Break does not flush: STOP and report; do not work around it silently
+- [x] `start_live(paths, iface) -> asyncio.subprocess.Process` uses `CREATE_NEW_PROCESS_GROUP`
+- [x] `stop_live(proc, timeout) -> StopResult("clean" | "killed")`; the test process itself survives the signal
+- [x] `@pytest.mark.snort` test: temp `log_dir`; start on loopback; wait until Snort is ready; send a TCP payload containing `uid=0(root)` to a local socket; `stop_live`; poll for `alert.ids` containing sid `1000002`; result is `"clean"`
+- [x] Unit test with a fake process proves the kill fallback path
+- [x] If Ctrl+Break does not flush: STOP and report; do not work around it silently
 
 **Verification:**
-- [ ] `uv run pytest tests/snort -q -m snort -k live`
-- [ ] `uv run pytest tests/snort -q -m "not snort"`
+- [x] `uv run pytest tests/snort -q -m snort -k live`
+- [x] `uv run pytest tests/snort -q -m "not snort"`
 
 **Dependencies:** Task 2
 
@@ -71,21 +71,21 @@ Snort on the loopback adapter that an alert is flushed after a clean stop.
 **Estimated scope:** M
 
 ## Checkpoint A: after Tasks 1–3
-- [ ] All unit tests green; live flush test green on this PC
-- [ ] Review with human only if the flush test failed
+- [x] All unit tests green; live flush test green on this PC
+- [x] Review with human only if the flush test failed
 
 ## Task 4: Interface listing and config check
 
 **Description:** `list_interfaces` and `check_config` over the Runner.
 
 **Acceptance criteria:**
-- [ ] `list_interfaces(paths, runner)` runs `-W` and parses it
-- [ ] `check_config(paths, iface, runner, conf=None)` returns `ConfigCheck`; good fixture gives `ok=True` and the rule count; bad fixture (real output from a conf with one bad line) gives `ok=False` and the error line(s)
-- [ ] Non-zero exit with unknown output gives `ok=False`, never an exception; `SnortError` from the runner (timeout) is converted to `ok=False` with the message
-- [ ] `@pytest.mark.snort`: real `-W` contains the loopback adapter; real `-T -i <n>` on `C:\Snort\etc\snort.conf` gives `ok=True` and `rule_count > 50000`
+- [x] `list_interfaces(paths, runner)` runs `-W` and parses it
+- [x] `check_config(paths, iface, runner, conf=None)` returns `ConfigCheck`; good fixture gives `ok=True` and the rule count; bad fixture (real output from a conf with one bad line) gives `ok=False` and the error line(s)
+- [x] Non-zero exit with unknown output gives `ok=False`, never an exception; `SnortError` from the runner (timeout) is converted to `ok=False` with the message
+- [x] `@pytest.mark.snort`: real `-W` contains the loopback adapter; real `-T -i <n>` on `C:\Snort\etc\snort.conf` gives `ok=True` and `rule_count > 50000`
 
 **Verification:**
-- [ ] `uv run pytest tests/snort -q` (both marker groups)
+- [x] `uv run pytest tests/snort -q` (both marker groups)
 
 **Dependencies:** Task 2
 
@@ -99,13 +99,13 @@ Snort on the loopback adapter that an alert is flushed after a clean stop.
 returns parsed alerts.
 
 **Acceptance criteria:**
-- [ ] `run_pcap(paths, pcap, runner, *, conf=None, log_dir=None, year, tz)` returns `list[Alert]` using `snorty.core.parser`; missing pcap file raises `SnortError` before running anything; non-zero exit raises `SnortError` with stderr tail
-- [ ] Uses a fresh temp dir when `log_dir` is None and removes it afterwards
-- [ ] Unit test with a fake runner that writes a fixture `alert.ids`
-- [ ] `@pytest.mark.snort`: a test helper builds a tiny pcap (Ethernet/IPv4/TCP, payload `uid=0(root)`); real `run_pcap` returns one alert with sid `1000002`
+- [x] `run_pcap(paths, pcap, runner, *, conf=None, log_dir=None, year, tz)` returns `list[Alert]` using `snorty.core.parser`; missing pcap file raises `SnortError` before running anything; non-zero exit raises `SnortError` with stderr tail
+- [x] Uses a fresh temp dir when `log_dir` is None and removes it afterwards
+- [x] Unit test with a fake runner that writes a fixture `alert.ids`
+- [x] `@pytest.mark.snort`: a test helper builds a tiny pcap (Ethernet/IPv4/TCP, payload `uid=0(root)`); real `run_pcap` returns one alert with sid `1000002`
 
 **Verification:**
-- [ ] `uv run pytest tests/snort -q` (both marker groups)
+- [x] `uv run pytest tests/snort -q` (both marker groups)
 
 **Dependencies:** Tasks 2, 4
 
@@ -114,21 +114,21 @@ returns parsed alerts.
 **Estimated scope:** M
 
 ## Checkpoint B: after Tasks 4–5
-- [ ] `uv run pytest tests/snort -m "not snort"` under 2 s; `-m snort` green
+- [x] `uv run pytest tests/snort -m "not snort"` under 2 s; `-m snort` green
 
 ## Task 6: Quality gates
 
 **Description:** Close coverage and typing gaps; verify containment; tick the spec.
 
 **Acceptance criteria:**
-- [ ] Coverage for `snorty.snort` ≥ 90% (unit tests only counted)
-- [ ] `grep -r subprocess src/snorty` matches only `runner.py` and `service.py`
-- [ ] `snorty.snort` imports no snorty package except `snorty.core`
-- [ ] Success Criteria boxes in the spec ticked; public API re-exported in `snorty/snort/__init__.py`
+- [x] Coverage for `snorty.snort` ≥ 90% (unit tests only counted)
+- [x] `grep -r subprocess src/snorty` matches only `runner.py` and `service.py`
+- [x] `snorty.snort` imports no snorty package except `snorty.core`
+- [x] Success Criteria boxes in the spec ticked; public API re-exported in `snorty/snort/__init__.py`
 
 **Verification:**
-- [ ] `uv run pytest tests/snort -m "not snort" --cov=snorty.snort --cov-report=term-missing`
-- [ ] `uv run ruff check src tests`; `uv run mypy src/snorty/core src/snorty/snort`
+- [x] `uv run pytest tests/snort -m "not snort" --cov=snorty.snort --cov-report=term-missing`
+- [x] `uv run ruff check src tests`; `uv run mypy src/snorty/core src/snorty/snort`
 
 **Dependencies:** Tasks 3, 4, 5
 
@@ -137,4 +137,4 @@ returns parsed alerts.
 **Estimated scope:** S
 
 ## Checkpoint C: module complete
-- [ ] All Success Criteria in SPEC-snort-adapter.md checked; then write SPEC-sensor.md
+- [x] All Success Criteria in SPEC-snort-adapter.md checked; then write SPEC-sensor.md

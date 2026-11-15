@@ -85,3 +85,11 @@ async def test_real_snort_finds_alert_in_handmade_pcap(tmp_path: Path) -> None:
     )
     alerts = await run_pcap(SnortPaths(), pcap, SubprocessRunner(), year=2026, tz=UTC)
     assert 1000002 in {a.sid for a in alerts}
+
+
+async def test_no_alert_file_means_no_alerts(tmp_path: Path) -> None:
+    class Silent:
+        async def __call__(self, argv: Sequence[str], *, timeout: float) -> RunResult:
+            return RunResult(0, "", "")
+
+    assert await run_pcap(SnortPaths(), make_pcap(tmp_path), Silent(), year=2026, tz=UTC) == []
