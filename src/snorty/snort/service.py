@@ -2,10 +2,14 @@ import asyncio
 import re
 import signal
 import subprocess
+import tempfile
+from datetime import tzinfo
 from pathlib import Path
 from typing import Protocol
 
-from snorty.snort.commands import check_command, interfaces_command, live_command
+from snorty.core.models import Alert
+from snorty.core.parser import parse_line
+from snorty.snort.commands import check_command, interfaces_command, live_command, pcap_command
 from snorty.snort.interfaces import parse_interfaces
 from snorty.snort.models import ConfigCheck, Interface, SnortError, SnortPaths, StopResult
 from snorty.snort.runner import Runner
@@ -98,3 +102,49 @@ async def check_config(
     if not errors:
         errors = (f"snort exited with code {result.returncode} and no error text",)
     return ConfigCheck(False, rule_count, errors)
+
+
+async def run_pcap(
+    paths: SnortPaths,
+    pcap: Path,
+    runner: Runner,
+    *,
+    year: int,
+    tz: tzinfo,
+    conf: Path | None = None,
+    log_dir: Path | None = None,
+) -> list[Alert]:
+    """Run Snort over `pcap` and return its alerts (read from <log_dir>/alert.ids).
+
+    Without `log_dir`, a temp directory is used and removed afterwards. `conf` lets
+    rule-lab point at its own sandbox config. Raises SnortError if the pcap is missing
+    or Snort fails.
+    """
+    if not pcap.is_file():
+        raise SnortError(f"pcap not found: {pcap}")
+    if log_dir is not None:
+        return await _run_pcap_in(paths, pcap, runner, conf, log_dir, year, tz)
+    with tempfile.TemporaryDirectory(prefix="snorty-pcap-") as tmp:
+        return await _run_pcap_in(paths, pcap, runner, conf, Path(tmp), year, tz)
+
+
+async def _run_pcap_in(
+    paths: SnortPaths,
+    pcap: Path,
+    runner: Runner,
+    conf: Path | None,
+    log_dir: Path,
+    year: int,
+    tz: tzinfo,
+) -> list[Alert]:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    result = await runner(pcap_command(paths, pcap, conf=conf, log_dir=log_dir), timeout=300)
+    if result.returncode != 0:
+        tail = "\n".join(f"{result.stdout}\n{result.stderr}".strip().splitlines()[-5:])
+        raise SnortError(f"snort exited with code {result.returncode}: {tail}")
+    alert_file = log_dir / "alert.ids"
+    if not alert_file.exists():
+        return []
+    lines = alert_file.read_text(errors="replace").splitlines()
+    parsed = (parse_line(ln, default_year=year, tz=tz) for ln in lines)
+    return [a for a in parsed if a is not None]
