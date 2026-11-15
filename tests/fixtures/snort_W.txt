@@ -1,0 +1,12 @@
+Index	Physical Address	IP Address	Device Name	Description
+-----	----------------	----------	-----------	-----------
+    1	00:00:00:00:00:00	disabled	\Device\NPF_{FC12AAD4-32E9-4832-BD10-16B1345E42DC}	WAN Miniport (Network Monitor)
+    2	00:00:00:00:00:00	disabled	\Device\NPF_{7FCD67E2-6163-4982-88D4-CEDA29FAF5A2}	WAN Miniport (IPv6)
+    3	00:00:00:00:00:00	disabled	\Device\NPF_{CB19FCEB-9F0F-4854-A8E1-4245AD07F562}	WAN Miniport (IP)
+    4	48:45:E6:48:53:93	192.168.10.230	\Device\NPF_{288C83B6-43F3-4D94-B6E5-09B97623D405}	MediaTek Wi-Fi 7 MT7925 Wireless LAN Card
+    5	4A:45:E6:48:63:A3	169.254.86.154	\Device\NPF_{5D43BE44-9CA8-45E1-975A-AA31D660A9D9}	MediaTek Wi-Fi 7 MT7925 Wireless LAN Card #4
+    6	4A:45:E6:48:73:B3	169.254.23.195	\Device\NPF_{2CBC0ED7-AEB2-444E-9E13-CF8E3C30FCDF}	MediaTek Wi-Fi 7 MT7925 Wireless LAN Card #3
+    7	C8:53:09:FE:AD:27	192.168.1.25	\Device\NPF_{BED98EAD-7F85-47BD-A28D-BF65D85072EE}	Realtek PCIe GbE Family Controller
+    8	00:15:5D:A2:4F:EB	172.19.96.1	\Device\NPF_{FD81313F-2CC6-4473-805F-869AAE30B91F}	Hyper-V Virtual Ethernet Adapter
+    9	00:00:00:00:00:00	0000:0000:0000:0000:0000:0000:0000:0000	\Device\NPF_Loopback	Adapter for loopback traffic capture
+   10	00:00:00:00:00:00	169.254.16.56	\Device\NPF_{0E9B6E29-A118-49F9-AF61-E10ECBD56820}	OpenVPN Data Channel Offload

@@ -38,5 +38,5 @@ select = ["E", "F", "I", "B", "UP"]
 python_version = "3.12"
 
 [[tool.mypy.overrides]]
-module = "snorty.core.*"
+module = ["snorty.core.*", "snorty.snort.*"]
 strict = true
