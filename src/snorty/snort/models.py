@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +31,12 @@ class RunResult:
     returncode: int
     stdout: str
     stderr: str
+
+
+@dataclass(frozen=True, slots=True)
+class StopResult:
+    how: Literal["clean", "killed", "already_exited"]
+    returncode: int | None
 
 
 class SnortError(Exception):
