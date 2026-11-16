@@ -37,10 +37,10 @@ the manual run.
 
 ### Phase 2: Pipeline and sandbox
 - [x] Task 4: models, `summarize`, `LabService` pipeline with a fake `Runner`
-- [ ] Task 5: sandbox safety (cleanup on every exit, stale files, lock, live files untouched)
+- [x] Task 5: sandbox safety (cleanup on every exit, stale files, lock, live files untouched)
 
 ### Checkpoint: Service
-- [ ] Spec criteria 1-8 and 10 each covered by a passing test; unit suite under 3 s
+- [x] Spec criteria 1-8 and 10 each covered by a passing test; unit suite under 3 s
 
 ### Phase 3: CLI and real checks
 - [ ] Task 6: `python -m snorty.lab check | run | make-pcap`

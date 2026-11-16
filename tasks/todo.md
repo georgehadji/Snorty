@@ -48,17 +48,17 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 5: Sandbox safety (M)
 `service.py` (the `LabSandbox` context manager), `tests/lab/test_lab_sandbox.py`.
-- [ ] `LabSandbox` creates the temp folder, writes `lab.rules` (the user's text, normalized to LF) and the temp config beside `snort.conf`; removes both in `finally`
-- [ ] Cleanup verified after success, lint failure, `-T` failure, `-r` failure, `TimeoutError` and `asyncio.CancelledError`
-- [ ] Hashes of a fake live tree (`snort.conf`, `rules\`, `threshold.conf`, `log\`) are identical before and after each of those paths
-- [ ] Stale `snorty-lab-*.conf` older than 1 hour are removed at job start; younger ones and unrelated files are left alone
-- [ ] Two jobs started together run one after the other (the lock), and a cancelled waiter does not block later jobs
-- [ ] A temp path with spaces gives `error`, not a Snort run
-- [ ] Verify: `uv run pytest tests/lab -q`
+- [x] `LabSandbox` creates the temp folder, writes `lab.rules` (the user's text, normalized to LF) and the temp config beside `snort.conf`; removes both in `finally`
+- [x] Cleanup verified after success, lint failure, `-T` failure, `-r` failure, `TimeoutError` and `asyncio.CancelledError`
+- [x] Hashes of a fake live tree (`snort.conf`, `rules\`, `threshold.conf`, `log\`) are identical before and after each of those paths
+- [x] Stale `snorty-lab-*.conf` older than 1 hour are removed at job start; younger ones and unrelated files are left alone
+- [x] Two jobs started together run one after the other (the lock), and a cancelled waiter does not block later jobs
+- [x] A temp path with spaces gives `error`, not a Snort run
+- [x] Verify: `uv run pytest tests/lab -q`
 - Dependencies: Task 4 · Files: `service.py`, `test_lab_sandbox.py`
 
 ### Checkpoint: Tasks 4-5
-- [ ] Spec criteria 1-8 and 10 each covered by a passing test; whole lab unit suite under 3 s; ruff and strict mypy clean
+- [x] Spec criteria 1-8 and 10 each covered by a passing test; whole lab unit suite under 3 s; ruff and strict mypy clean
 
 ## Task 6: CLI (M)
 `src/snorty/lab/__main__.py`.

@@ -1,8 +1,11 @@
 """The lab pipeline: lint, sandbox, `snort -T`, `snort -r`, summarize."""
 
+import asyncio
+import contextlib
 import re
 import shutil
 import tempfile
+import time
 from collections.abc import Sequence
 from datetime import UTC, datetime, tzinfo
 from pathlib import Path
@@ -16,6 +19,7 @@ from snorty.snort import Runner, SnortError, SnortPaths, check_config, list_inte
 
 LAB_RULES_NAME = "lab.rules"
 MAX_PCAP_BYTES = 50 * 1024 * 1024
+STALE_SECONDS = 3600
 
 _RULE_ERROR = re.compile(r"lab\.rules\((\d+)\)\s*(.*)")
 
@@ -78,6 +82,15 @@ class LabSandbox:
         self.close()
 
 
+def sweep_stale(conf_dir: Path, max_age: float = STALE_SECONDS) -> None:
+    """Remove configs a crashed run left behind: only `snorty-lab-*.conf`, only when old."""
+    cutoff = time.time() - max_age
+    for conf in conf_dir.glob("snorty-lab-*.conf"):
+        with contextlib.suppress(OSError):
+            if conf.stat().st_mtime < cutoff:
+                conf.unlink()
+
+
 def _pcap_problem(pcap: Path) -> str | None:
     if not pcap.is_file():
         return f"pcap not found: {pcap}"
@@ -99,6 +112,7 @@ class LabService:
         self._runner = runner
         self._tz = tz
         self._year = year
+        self._lock = asyncio.Lock()
 
     async def run(self, job: LabJob) -> LabResult:
         """Run the rules against the pcap. User mistakes come back as data in the result."""
@@ -107,11 +121,13 @@ class LabService:
             return LabResult(False, problems=checked.problems)
         if (problem := _pcap_problem(job.pcap)) is not None:
             return LabResult(False, error=problem)
-        try:
-            with LabSandbox(self._paths, job.rules_text) as box:
-                return await self._run_in(box, checked.rules, job.pcap)
-        except (OSError, ValueError, SnortError) as exc:
-            return LabResult(False, error=f"could not run the lab: {exc}")
+        async with self._lock:  # one job at a time
+            try:
+                sweep_stale(self._paths.conf.parent)
+                with LabSandbox(self._paths, job.rules_text) as box:
+                    return await self._run_in(box, checked.rules, job.pcap)
+            except (OSError, ValueError, SnortError) as exc:
+                return LabResult(False, error=f"could not run the lab: {exc}")
 
     async def _run_in(self, box: LabSandbox, rules: Sequence[LabRule], pcap: Path) -> LabResult:
         interfaces = await list_interfaces(self._paths, self._runner)

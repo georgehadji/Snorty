@@ -1,5 +1,6 @@
 """Test doubles for the lab tests: a fake Snort that answers -W, -T and -r."""
 
+import asyncio
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -59,6 +60,8 @@ class FakeSnort:
         alert_text: str = "",
         run_code: int = 0,
         run_stderr: str = "",
+        run_delay: float = 0.0,
+        run_gate: asyncio.Event | None = None,
     ) -> None:
         self.interfaces = interfaces
         self.check_output = check_output
@@ -66,6 +69,10 @@ class FakeSnort:
         self.alert_text = alert_text
         self.run_code = run_code
         self.run_stderr = run_stderr
+        self.run_delay = run_delay
+        self.run_gate = run_gate
+        self.active = 0
+        self.max_active = 0
         self.calls: list[list[str]] = []
         self.conf_seen: list[str] = []  # the sandbox config's text at each -T / -r call
         self.conf_paths: list[Path] = []
@@ -87,6 +94,15 @@ class FakeSnort:
             self._note_conf(argv)
             log_dir = Path(argv[argv.index("-l") + 1])
             (log_dir / "alert.ids").write_text(self.alert_text)
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+            try:
+                if self.run_gate is not None:
+                    await self.run_gate.wait()
+                if self.run_delay:
+                    await asyncio.sleep(self.run_delay)
+            finally:
+                self.active -= 1
             return RunResult(self.run_code, "", self.run_stderr)
         raise AssertionError(f"unexpected snort call: {argv}")
 
