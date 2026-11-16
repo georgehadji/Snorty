@@ -94,10 +94,10 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. E
 
 ## Task 11: CLI and real tests (L)
 `__main__.py`, logging setup, `tests/dashboard/test_dash_real.py` (marker `snort`), `test_dash_cli.py`.
-- [ ] `python -m snorty.dashboard [--port --start-sensor --no-notify --no-journal --vault --interface-ip --data-dir]`: loads config, composes services, starts bus consumers, schedule task and `uvicorn` on `127.0.0.1` only; Ctrl+C stops sensor, journal, notify, schedule cleanly and closes the repo; exit codes 0, 1 (port in use or sensor failed), 2 (usage)
-- [ ] Rotating `snorty.log` in the data folder; token never logged; startup prints the URL
-- [ ] CLI tests with fake services (flag parsing, exit codes, shutdown order, a bind address other than loopback refused)
-- [ ] Real: temp data dir, real services, Start, wait RUNNING, the sensor integration test's attack traffic, alert visible via `/alerts/rows`, Stop; a lab run through HTTP matches the lab result; hashes of live `snort.conf`, `rules\`, `threshold.conf` unchanged; no `snort.exe` left
+- [x] `python -m snorty.dashboard [--port --start-sensor --no-notify --no-journal --vault --interface-ip --data-dir]`: loads config, composes services, starts bus consumers, schedule task and `uvicorn` on `127.0.0.1` only; Ctrl+C stops sensor, journal, notify, schedule cleanly and closes the repo; exit codes 0, 1 (port in use or sensor failed), 2 (usage)
+- [x] Rotating `snorty.log` in the data folder; token never logged; startup prints the URL
+- [x] CLI tests with fake services (flag parsing, exit codes, shutdown order, a bind address other than loopback refused)
+- [x] Real: temp data dir, real services, Start, wait RUNNING, the sensor integration test's attack traffic, alert visible via `/alerts/rows`, Stop; a lab run through HTTP matches the lab result; hashes of live `snort.conf`, `rules\`, `threshold.conf` unchanged; no `snort.exe` left
 - [ ] Verify: `uv run pytest tests/dashboard -q -m "not snort"`; `uv run pytest tests/dashboard -q -m snort`
 - Dependencies: Tasks 1-10 · Files: about 5
 

@@ -50,7 +50,7 @@ Build `snorty.dashboard`: the one local web app that runs Snorty. Foundations fi
 - [x] Spec criteria 1-12 covered by passing tests; unit suite still fast
 
 ### Phase 4: Run and close out
-- [ ] Task 11: `python -m snorty.dashboard` CLI, logging, shutdown; real Snort tests
+- [x] Task 11: `python -m snorty.dashboard` CLI, logging, shutdown; real Snort tests
 - [ ] Task 12: manual browser check, spec amendment, final verification
 
 ### Checkpoint: Complete

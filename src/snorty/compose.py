@@ -2,6 +2,7 @@
 
 import asyncio
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,7 +19,7 @@ from snorty.rules.config import RulesConfig
 from snorty.rules.ports import SnortValidator, UrllibDownloader
 from snorty.rules.service import RulesService
 from snorty.sensor import Sensor, SensorConfig, SnortAdapter
-from snorty.snort import SnortPaths, SubprocessRunner
+from snorty.snort import Interface, SnortPaths, SubprocessRunner
 
 
 @dataclass(slots=True)
@@ -54,6 +55,7 @@ def compose(
     notifier: Notifier | None = None,
     journal_store: NoteStore | None = None,
     paths: SnortPaths | None = None,
+    select_interface: Callable[[list[Interface]], Interface | None] | None = None,
 ) -> Runtime:
     """Wire every module together. The journal runs only when a note store is given."""
     paths = paths or SnortPaths()
@@ -70,6 +72,7 @@ def compose(
         clock=time.monotonic,
         sleep=asyncio.sleep,
         tz=tz,
+        select_interface=select_interface,
     )
     rules_config = RulesConfig(paths=paths)
     rules = RulesService(
