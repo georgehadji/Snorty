@@ -5,12 +5,12 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 1: lint (M)
 `src/snorty/lab/__init__.py`, `lint.py`; add `snorty.lab.*` to the strict mypy override.
-- [ ] `lint(text) -> LintResult(rules: tuple[LabRule(line, sid, msg)], problems: tuple[Problem(line, message)])`; line numbers are 1-based lines of the user's text; `ok` is true when there are no problems
-- [ ] Accepts `alert`/`log`/`pass` rules, blank lines, `#` comments, CRLF and LF; a rule may span lines ended with a trailing backslash (reported at its first line)
-- [ ] Refuses with a line number: any other line (`include`, `var`, `config`, `preprocessor`, `drop`, `reject`, free text), a rule with no `sid`, a duplicate `sid`, control characters or NUL
-- [ ] Refuses text over 64 KB and more than 200 rules, with one problem (line 0) saying why, without scanning the whole text first
-- [ ] `msg` is read from `msg:"..."` when present (for the result table), else empty
-- [ ] Verify: `uv run pytest tests/lab/test_lab_lint.py -q`
+- [x] `lint(text) -> LintResult(rules: tuple[LabRule(line, sid, msg)], problems: tuple[Problem(line, message)])`; line numbers are 1-based lines of the user's text; `ok` is true when there are no problems
+- [x] Accepts `alert`/`log`/`pass` rules, blank lines, `#` comments, CRLF and LF; a rule may span lines ended with a trailing backslash (reported at its first line)
+- [x] Refuses with a line number: any other line (`include`, `var`, `config`, `preprocessor`, `drop`, `reject`, free text), a rule with no `sid`, a duplicate `sid`, control characters or NUL
+- [x] Refuses text over 64 KB and more than 200 rules, with one problem (line 0) saying why, without scanning the whole text first
+- [x] `msg` is read from `msg:"..."` when present (for the result table), else empty
+- [x] Verify: `uv run pytest tests/lab/test_lab_lint.py -q`
 - Dependencies: none · Files: `lint.py`, `tests/lab/test_lab_lint.py`
 
 ## Task 2: build_lab_conf (S)
