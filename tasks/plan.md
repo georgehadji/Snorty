@@ -29,7 +29,7 @@ the manual run.
 
 ### Phase 1: Pure logic
 - [x] Task 1: `lint` (rules, problems, caps)
-- [ ] Task 2: `build_lab_conf`
+- [x] Task 2: `build_lab_conf`
 - [ ] Task 3: pcap generator (`build_pcap`, `tcp_packet`, `udp_packet`, handshake)
 
 ### Checkpoint: Pure logic

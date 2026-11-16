@@ -15,11 +15,11 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 2: build_lab_conf (S)
 `src/snorty/lab/conf.py`.
-- [ ] `build_lab_conf(live_conf_text, rules_path) -> str` removes every `include $RULE_PATH/<x>.rules`, `include $PREPROC_RULE_PATH/<x>.rules` and `include threshold.conf` line (any spacing, any case of the keyword) and appends `include <rules_path>` as the last line
-- [ ] Every other byte is kept, including line endings and comments; commented-out includes stay commented
-- [ ] A path with whitespace raises `ValueError` (assumption 8; the service turns it into `error`)
-- [ ] Golden test on a small sample conf; counts of removed lines asserted
-- [ ] Verify: `uv run pytest tests/lab/test_lab_conf.py -q`
+- [x] `build_lab_conf(live_conf_text, rules_path) -> str` removes every `include $RULE_PATH/<x>.rules`, `include $PREPROC_RULE_PATH/<x>.rules` and `include threshold.conf` line (any spacing, any case of the keyword) and appends `include <rules_path>` as the last line
+- [x] Every other byte is kept, including line endings and comments; commented-out includes stay commented
+- [x] A path with whitespace raises `ValueError` (assumption 8; the service turns it into `error`)
+- [x] Golden test on a small sample conf; counts of removed lines asserted
+- [x] Verify: `uv run pytest tests/lab/test_lab_conf.py -q`
 - Dependencies: none · Files: `conf.py`, `tests/lab/test_lab_conf.py`
 
 ## Task 3: pcap generator (M)
