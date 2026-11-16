@@ -5,10 +5,10 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. E
 
 ## Task 1: dependencies, package, config (S)
 `pyproject.toml`, `src/snorty/dashboard/__init__.py`, `config.py`, `tests/dashboard/test_dash_config.py`.
-- [ ] `uv add fastapi uvicorn jinja2` and `uv add --dev httpx`; add `snorty.dashboard.*` and `snorty.compose` to the strict mypy override; `uv.lock` updated
-- [ ] `DashConfig` frozen dataclass: `port=8765`, `interface_ip=None`, `vault=None`, `notify=True`, `journal=True`, `autostart_sensor=False`, `rules_update_at="03:00"`, `data_dir=%LOCALAPPDATA%\Snorty`
-- [ ] `load_config(data_dir, overrides) -> DashConfig` reads `snorty.toml` with `tomllib`; missing file gives defaults; unknown key, wrong type, port out of range, bad `HH:MM` give a clear `ConfigError`; empty `rules_update_at` disables; overrides win
-- [ ] Verify: `uv run pytest tests/dashboard/test_dash_config.py -q`; `uv run ruff check src tests`
+- [x] `uv add fastapi uvicorn jinja2` and `uv add --dev httpx`; add `snorty.dashboard.*` and `snorty.compose` to the strict mypy override; `uv.lock` updated
+- [x] `DashConfig` frozen dataclass: `port=8765`, `interface_ip=None`, `vault=None`, `notify=True`, `journal=True`, `autostart_sensor=False`, `rules_update_at="03:00"`, `data_dir=%LOCALAPPDATA%\Snorty`
+- [x] `load_config(data_dir, overrides) -> DashConfig` reads `snorty.toml` with `tomllib`; missing file gives defaults; unknown key, wrong type, port out of range, bad `HH:MM` give a clear `ConfigError`; empty `rules_update_at` disables; overrides win
+- [x] Verify: `uv run pytest tests/dashboard/test_dash_config.py -q`; `uv run ruff check src tests`
 - Dependencies: none · Files: `pyproject.toml`, `uv.lock`, `config.py`, test
 
 ## Task 2: security (M)

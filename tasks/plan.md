@@ -25,7 +25,7 @@ Build `snorty.dashboard`: the one local web app that runs Snorty. Foundations fi
 ## Task List
 
 ### Phase 1: Foundations
-- [ ] Task 1: dependencies, package, `config.py` (tomllib, defaults, CLI override)
+- [x] Task 1: dependencies, package, `config.py` (tomllib, defaults, CLI override)
 - [ ] Task 2: `security.py` (validators, Host/Origin/token, headers) as pure functions plus middleware
 - [ ] Task 3: shared `compose.py`, `Services`, sensor CLI moved onto it
 

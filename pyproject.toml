@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Local dashboard and tooling around a Snort 2.9 install"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.163.1",
+    "jinja2>=3.1.6",
+    "uvicorn>=0.54.0",
     "winotify>=1.1.0",
 ]
 
@@ -21,6 +24,7 @@ dev = [
     "pytest-cov>=5",
     "ruff>=0.6",
     "mypy>=1.11",
+    "httpx>=0.28.1",
 ]
 
 [tool.pytest.ini_options]
@@ -40,7 +44,7 @@ select = ["E", "F", "I", "B", "UP"]
 python_version = "3.12"
 
 [[tool.mypy.overrides]]
-module = ["snorty.core.*", "snorty.snort.*", "snorty.sensor.*", "snorty.rules.*", "snorty.notify.*", "snorty.journal.*", "snorty.lab.*"]
+module = ["snorty.core.*", "snorty.snort.*", "snorty.sensor.*", "snorty.rules.*", "snorty.notify.*", "snorty.journal.*", "snorty.lab.*", "snorty.dashboard.*", "snorty.compose"]
 strict = true
 
 [[tool.mypy.overrides]]
