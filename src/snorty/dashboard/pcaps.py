@@ -3,6 +3,7 @@
 import contextlib
 import os
 import tempfile
+import time
 from pathlib import Path
 
 from snorty.dashboard.security import valid_pcap_name
@@ -76,4 +77,4 @@ def generate_pcap(
     frames = make_frames(
         proto, src, sport, dst, dport, payload.encode("utf-8"), count=count, handshake=handshake
     )
-    return save_pcap(folder, name, build_pcap(frames))
+    return save_pcap(folder, name, build_pcap(frames, start=time.time()))

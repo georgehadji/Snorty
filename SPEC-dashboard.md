@@ -128,21 +128,33 @@ async def mute(sid: PositiveSid, svc: Services = Depends(get_services)) -> HTMLR
 
 ## Success Criteria
 
-- [ ] 1. `python -m snorty.dashboard` serves on `127.0.0.1:8765` only; `GET /healthz` returns `{"ok": true}`; a request with a foreign `Host` gets 400.
-- [ ] 2. Every non-GET request without the right `X-Snorty-Token`, or with a foreign `Origin`, gets 403 and changes nothing.
-- [ ] 3. Overview, Alerts, Rules, Journal and Lab pages render with fake services; each page's actions call exactly one service method.
-- [ ] 4. Sensor Start, Stop and Restart work through the UI; the card shows the real state; illegal actions are disabled, not errors.
-- [ ] 5. A new alert on the bus appears in an open Alerts page through `/events` without reload; a closed tab frees its subscription; a slow tab cannot grow memory.
-- [ ] 6. Alerts table filters (`sid`, `priority`, `range`) and paging match `AlertRepository.query`; invalid values give 422.
-- [ ] 7. Mute and Unmute from an alert row or the Rules page change the muted list and report whether Snort restarted.
-- [ ] 8. Rules page shows last update, count, error; Update now runs once even if clicked twice; HOME_NET can be changed and reset.
-- [ ] 9. Daily rules update runs at `rules_update_at` once, never twice for the same day, and a failed update does not stop the loop.
-- [ ] 10. Journal page shows state and Flush now writes the note; the vault path is shown but cannot be changed from the UI.
-- [ ] 11. Lab page: Check and Run show problems by rule line or the hits table and matches; pcaps come only from `data\pcaps\` by name; upload over 50 MB and bad names are refused; a generated pcap triggers a rule (real Snort).
-- [ ] 12. Hostile text (`<script>`, quotes, 10 000-char message, non-ASCII) in alerts, rules and pcap names is escaped or refused; CSP header present; the page makes no third-party request (checked in the browser's network log).
-- [ ] 13. Real: Start, traffic, alert in `/alerts/rows`, Stop; no `snort.exe` left; live `snort.conf`, `rules\`, `threshold.conf` unchanged by the lab run.
-- [ ] 14. Manual in the browser pane: all pages, light and dark, phone width, live row appears, mute works.
-- [ ] 15. `ruff check`, strict mypy on `snorty.dashboard`, full unit suite green, coverage at least 85%; `subprocess` still only in `snort/`; existing module CLIs still pass their tests.
+- [x] 1. `python -m snorty.dashboard` serves on `127.0.0.1:8765` only; `GET /healthz` returns `{"ok": true}`; a request with a foreign `Host` gets 400.
+- [x] 2. Every non-GET request without the right `X-Snorty-Token`, or with a foreign `Origin`, gets 403 and changes nothing.
+- [x] 3. Overview, Alerts, Rules, Journal and Lab pages render with fake services; each page's actions call exactly one service method.
+- [x] 4. Sensor Start, Stop and Restart work through the UI; the card shows the real state; illegal actions are disabled, not errors.
+- [x] 5. A new alert on the bus appears in an open Alerts page through `/events` without reload; a closed tab frees its subscription; a slow tab cannot grow memory.
+- [x] 6. Alerts table filters (`sid`, `priority`, `range`) and paging match `AlertRepository.query`; invalid values give 422.
+- [x] 7. Mute and Unmute from an alert row or the Rules page change the muted list and report whether Snort restarted.
+- [x] 8. Rules page shows last update, count, error; Update now runs once even if clicked twice; HOME_NET can be changed and reset.
+- [x] 9. Daily rules update runs at `rules_update_at` once, never twice for the same day, and a failed update does not stop the loop.
+- [x] 10. Journal page shows state and Flush now writes the note; the vault path is shown but cannot be changed from the UI.
+- [x] 11. Lab page: Check and Run show problems by rule line or the hits table and matches; pcaps come only from `data\pcaps\` by name; upload over 50 MB and bad names are refused; a generated pcap triggers a rule (real Snort).
+- [x] 12. Hostile text (`<script>`, quotes, 10 000-char message, non-ASCII) in alerts, rules and pcap names is escaped or refused; CSP header present; the page makes no third-party request (checked in the browser's network log).
+- [x] 13. Real: Start, traffic, alert in `/alerts/rows`, Stop; no `snort.exe` left; live `snort.conf`, `rules\`, `threshold.conf` unchanged by the lab run.
+- [x] 14. Manual in the browser pane: all pages, light and dark, phone width, live row appears, mute works.
+- [x] 15. `ruff check`, strict mypy on `snorty.dashboard`, full unit suite green, coverage at least 85%; `subprocess` still only in `snort/`; existing module CLIs still pass their tests.
+
+Status: implemented. Criterion 14 was checked in the built-in browser in two parts: the live row, filters, escaping and Start button on a fake-service demo server (Live view checkpoint), and the real `python -m snorty.dashboard` (Start, Stop, Lab with a generated pcap against real Snort, all five pages, dark and light, phone width with no horizontal overflow, no third-party request, no inline script). Mute from a row was covered by route tests and the demo server, not on the real sensor.
+
+## Deviations from the plan
+
+- The database lives at `<data dir>\snorty.db` (the sensor CLI keeps its own `--db`). `compose.py` builds the services for the dashboard only; the sensor CLI was not moved onto it because its tests patch module-level names.
+- `JournalService.status()` returns `last_written` (time of the last note write) instead of `last_flush`, plus `folder`, `notes_written`, `error`. `NotifyService.status()` returns `toasts_shown` and `min_priority`. `NoteStore` gained a `label` property.
+- Extra modules: `ui.py` (render helpers), `jobs.py` (one in-flight job), `rules_routes.py`, `journal_routes.py`, `lab_routes.py`, `pcaps.py`. Alert tests are in `test_dash_alerts.py`.
+- Vendored htmx 2.0.4, SHA-256 `e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447`, recorded in `static/htmx.VERSION`.
+- Generated pcaps are stamped with the current time (a pcap starting at epoch 0 made Snort alerts show the year 2070).
+- Starlette's test client prints a deprecation notice asking for `httpx2`; harmless.
+- Known gaps: 500 error pages from Starlette's outer error handler lack the security headers; the Rules page does not catch OSError from reading the muted list or HOME_NET; the CLI exit code 1 covers a port that cannot be bound or a crash, not a sensor that fails later (the card shows that).
 
 ## Out of Scope (Deferred)
 

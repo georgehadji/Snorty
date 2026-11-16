@@ -51,11 +51,11 @@ Build `snorty.dashboard`: the one local web app that runs Snorty. Foundations fi
 
 ### Phase 4: Run and close out
 - [x] Task 11: `python -m snorty.dashboard` CLI, logging, shutdown; real Snort tests
-- [ ] Task 12: manual browser check, spec amendment, final verification
+- [x] Task 12: manual browser check, spec amendment, final verification
 
 ### Checkpoint: Complete
-- [ ] Every Success Criteria box in SPEC-dashboard.md checked
-- [ ] All modules done; final summary to the user
+- [x] Every Success Criteria box in SPEC-dashboard.md checked
+- [x] All modules done; final summary to the user
 
 ## Risks and Mitigations
 

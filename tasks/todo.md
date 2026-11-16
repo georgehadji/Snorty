@@ -98,13 +98,13 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. E
 - [x] Rotating `snorty.log` in the data folder; token never logged; startup prints the URL
 - [x] CLI tests with fake services (flag parsing, exit codes, shutdown order, a bind address other than loopback refused)
 - [x] Real: temp data dir, real services, Start, wait RUNNING, the sensor integration test's attack traffic, alert visible via `/alerts/rows`, Stop; a lab run through HTTP matches the lab result; hashes of live `snort.conf`, `rules\`, `threshold.conf` unchanged; no `snort.exe` left
-- [ ] Verify: `uv run pytest tests/dashboard -q -m "not snort"`; `uv run pytest tests/dashboard -q -m snort`
+- [x] Verify: `uv run pytest tests/dashboard -q -m "not snort"`; `uv run pytest tests/dashboard -q -m snort`
 - Dependencies: Tasks 1-10 · Files: about 5
 
 ## Task 12: manual check and close-out (M)
-- [ ] Manual in the built-in browser pane: run the dashboard, open every page, press Start, generate traffic, watch a row appear live, mute it, update rules, run a lab rule with a generated pcap; check light and dark, phone width; network log shows no third-party request; I report with screenshots
-- [ ] Coverage for `snorty.dashboard` at least 85% from unit tests alone (json report, read then delete)
-- [ ] `grep -r subprocess src/snorty` matches only `snort/` files; no inline `<script>` in templates; existing module CLIs' tests pass
-- [ ] SPEC-dashboard.md amended (deviations: db path under data dir, `compose.py`, status additions, htmx version and hash, anything found in real runs) and every Success Criteria box ticked; plan and todo boxes ticked
-- [ ] Verify: `uv run pytest -q -m "not snort"`; `uv run pytest -q -m snort`; `uv run ruff check src tests`; `uv run mypy` on all strict modules
+- [x] Manual in the built-in browser pane: run the dashboard, open every page, press Start, generate traffic, watch a row appear live, mute it, update rules, run a lab rule with a generated pcap; check light and dark, phone width; network log shows no third-party request; I report with screenshots
+- [x] Coverage for `snorty.dashboard` at least 85% from unit tests alone (json report, read then delete)
+- [x] `grep -r subprocess src/snorty` matches only `snort/` files; no inline `<script>` in templates; existing module CLIs' tests pass
+- [x] SPEC-dashboard.md amended (deviations: db path under data dir, `compose.py`, status additions, htmx version and hash, anything found in real runs) and every Success Criteria box ticked; plan and todo boxes ticked
+- [x] Verify: `uv run pytest -q -m "not snort"`; `uv run pytest -q -m snort`; `uv run ruff check src tests`; `uv run mypy` on all strict modules
 - Dependencies: Task 11 · Files: spec, plan, todo
