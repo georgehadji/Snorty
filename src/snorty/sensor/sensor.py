@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, tzinfo
 from pathlib import Path
+from typing import Literal
 
 from snorty.core.bus import EventBus
 from snorty.core.events import AlertRaised, SensorStateChanged
@@ -11,6 +12,7 @@ from snorty.core.models import Alert
 from snorty.core.parser import parse_line
 from snorty.core.repository import AlertRepository
 from snorty.sensor.config import SensorConfig
+from snorty.sensor.policy import backoff_delay, should_give_up
 from snorty.sensor.port import RunningSnort, SnortPort
 from snorty.sensor.states import State, check_transition
 from snorty.sensor.tail import TailState, read_new_lines
@@ -18,6 +20,9 @@ from snorty.snort.interfaces import pick_interface
 from snorty.snort.models import Interface, SnortError
 
 log = logging.getLogger("snorty.sensor")
+
+type StartOutcome = tuple[Literal["ok", "retry", "fatal"], str | None]
+type MonitorEvent = Literal["stop", "restart", "network", "exited"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,10 +32,10 @@ class SensorStatus:
     interface: Interface | None
     pid: int | None
     started_at: datetime | None
-    alerts_seen: int
+    alerts_seen: int  # new alerts stored since the sensor object was created (backlog + live)
     last_alert_ts: datetime | None
     unparsed: int
-    restarts: int
+    restarts: int  # automatic or requested restarts of a running Snort
     last_error: str | None
 
 
@@ -53,7 +58,8 @@ def _remove_pid(path: Path) -> None:
 class Sensor:
     """Keeps Snort running and turns its output into events.
 
-    One supervisor task owns every state change. start() and stop() only signal it.
+    One supervisor task owns every state change. start(), stop() and restart() only
+    signal it.
     """
 
     def __init__(
@@ -97,6 +103,7 @@ class Sensor:
 
         self._supervisor: asyncio.Task[None] | None = None
         self._stop_requested = asyncio.Event()
+        self._restart_requested = asyncio.Event()
         self._settled = asyncio.Event()
         self._cmd_lock = asyncio.Lock()
 
@@ -120,12 +127,16 @@ class Sensor:
             last_error=self._last_error,
         )
 
+    def _active(self) -> bool:
+        return self._supervisor is not None and not self._supervisor.done()
+
     async def start(self) -> None:
         """Start Snort; returns once the sensor is RUNNING or FAILED. No-op if already active."""
         async with self._cmd_lock:
-            if self._supervisor is not None and not self._supervisor.done():
+            if self._active():
                 return
             self._stop_requested.clear()
+            self._restart_requested.clear()
             self._settled.clear()
             self._transition(State.STARTING, "start requested")
             self._supervisor = asyncio.create_task(self._run(), name="sensor-supervisor")
@@ -142,6 +153,18 @@ class Sensor:
             self._stop_requested.set()
         await sup
 
+    async def restart(self) -> None:
+        """Restart Snort; returns once the sensor is RUNNING or FAILED again."""
+        async with self._cmd_lock:
+            active = self._active()
+            if active and self._state is State.RUNNING:
+                self._settled.clear()
+                self._restart_requested.set()
+        if not active:
+            await self.start()
+        else:
+            await self._settled.wait()
+
     # --- state machine ----------------------------------------------------------------
 
     def _transition(self, new: State, reason: str | None) -> None:
@@ -157,30 +180,75 @@ class Sensor:
 
     async def _run(self) -> None:
         try:
-            failure = await self._start_once()
-            if failure is not None:
-                self._last_error = failure
-                self._transition(State.FAILED, failure)
-                return
-            if self._stop_requested.is_set():
-                await self._shutdown("stop requested")
-                return
-            self._transition(State.RUNNING, None)
-            self._ingest_task = asyncio.create_task(self._ingest_loop(), name="sensor-ingest")
-            await self._monitor()
+            await self._supervise()
         except Exception as e:  # keep the sensor object usable whatever goes wrong
             log.exception("sensor supervisor crashed")
             self._last_error = repr(e)
             await self._abort(f"internal error: {e!r}")
 
-    async def _start_once(self) -> str | None:
-        """Try to start Snort. Returns a failure reason, or None when it is up."""
+    async def _supervise(self) -> None:
+        cfg = self._config
+        failures = 0  # consecutive crashes and failed start attempts
+        while True:
+            kind, why = await self._start_once()
+            if kind == "fatal":
+                self._fail(why or "unknown failure")
+                return
+            if kind == "retry":
+                failures += 1
+                if should_give_up(failures, cfg.max_restarts):
+                    self._fail(f"{why} (gave up after {failures} attempts)")
+                    return
+                delay = backoff_delay(failures)
+                self._transition(
+                    State.STARTING, f"{why}; retry {failures}/{cfg.max_restarts} in {delay:g}s"
+                )
+                if await self._wait_or_stop(delay):
+                    await self._shutdown("stop requested")
+                    return
+                continue
+
+            if self._stop_requested.is_set():  # stop arrived while Snort was starting
+                await self._shutdown("stop requested")
+                return
+            self._transition(State.RUNNING, None)
+            started = self._clock()
+            self._ingest_task = asyncio.create_task(self._ingest_loop(), name="sensor-ingest")
+            event, detail = await self._monitor()
+            if event == "stop":
+                await self._shutdown("stop requested")
+                return
+
+            self._restarts += 1
+            if event == "exited":
+                if self._clock() - started >= cfg.stable_after:
+                    failures = 0
+                failures += 1
+                reason = detail
+            else:  # a requested restart or a network change is not a failure
+                failures = 0
+                reason = detail
+            giving_up = event == "exited" and should_give_up(failures, cfg.max_restarts)
+            delay = backoff_delay(failures) if event == "exited" and not giving_up else 0.0
+            if event == "exited" and not giving_up:
+                reason = f"{reason}; restart {failures}/{cfg.max_restarts} in {delay:g}s"
+            self._transition(State.STARTING, reason)
+            await self._stop_process()
+            if giving_up:
+                self._fail(f"{detail} (gave up after {failures} failures)")
+                return
+            if delay and await self._wait_or_stop(delay):
+                await self._shutdown("stop requested")
+                return
+
+    async def _start_once(self) -> StartOutcome:
+        """Try to start Snort. 'fatal' means retrying cannot help; 'retry' is worth a backoff."""
         stale = await asyncio.to_thread(_read_pid, self._pid_path)
         if stale is not None and await self._port.is_snort_running(stale):
-            return f"Snort already running (pid {stale})"
+            return "fatal", f"Snort already running (pid {stale})"
         chosen = await self._choose_interface()
         if isinstance(chosen, str):
-            return chosen
+            return "fatal", chosen
         if not self._backlog_done:
             # Read what is already in alert.ids *before* Snort can add to it, so an alert
             # written right after startup is never mistaken for backlog.
@@ -189,11 +257,12 @@ class Sensor:
         try:
             proc = await self._port.start(chosen)
         except SnortError as e:
-            return f"snort failed to start: {e}"
+            self._last_error = f"snort failed to start: {e}"
+            return "retry", self._last_error
         self._iface, self._proc = chosen, proc
         self._started_at = self._wall()
         await asyncio.to_thread(_write_pid, self._pid_path, proc.pid)
-        return None
+        return "ok", None
 
     async def _choose_interface(self) -> Interface | str:
         interfaces = await self._port.list_interfaces()
@@ -204,20 +273,65 @@ class Sensor:
             return "no network route found"
         return pick_interface(interfaces, ip) or f"no interface has IP {ip}"
 
-    async def _monitor(self) -> None:
+    async def _monitor(self) -> tuple[MonitorEvent, str | None]:
+        """Wait until Snort exits, the network changes, or stop/restart is requested."""
         proc = self._proc
         assert proc is not None
-        exited = asyncio.create_task(proc.wait())
-        stopped = asyncio.create_task(self._stop_requested.wait())
+        tasks: dict[MonitorEvent, asyncio.Task[object]] = {
+            "stop": asyncio.create_task(self._stop_requested.wait()),
+            "restart": asyncio.create_task(self._restart_requested.wait()),
+            "exited": asyncio.create_task(proc.wait()),
+        }
+        if self._config.interface_ip is None and self._select_interface is None:
+            tasks["network"] = asyncio.create_task(self._watch_network())
         try:
-            await asyncio.wait({exited, stopped}, return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait(set(tasks.values()), return_when=asyncio.FIRST_COMPLETED)
         finally:
-            for t in (exited, stopped):
+            for t in tasks.values():
                 t.cancel()
+            await asyncio.gather(*tasks.values(), return_exceptions=True)
         if self._stop_requested.is_set():
-            await self._shutdown("stop requested")
-        else:
-            await self._abort(f"snort exited unexpectedly (code {proc.returncode})")
+            return "stop", None
+        if self._restart_requested.is_set():
+            self._restart_requested.clear()
+            return "restart", "restart requested"
+        if "network" in tasks and tasks["network"].done() and not tasks["network"].cancelled():
+            return "network", str(tasks["network"].result())
+        return "exited", f"snort exited unexpectedly (code {proc.returncode})"
+
+    async def _watch_network(self) -> str:
+        """Returns once the PC's IP no longer matches the interface Snort is bound to."""
+        bound = self._iface.ip if self._iface is not None else None
+        while True:
+            await self._sleep(self._config.network_check_interval)
+            current = self._port.local_ip()
+            if current is not None and bound is not None and current != bound:
+                return f"network changed ({bound} -> {current})"
+
+    async def _wait_or_stop(self, delay: float) -> bool:
+        """Sleep `delay` seconds unless stop() arrives first. True if stop was requested."""
+        sleeper = asyncio.ensure_future(self._sleep(delay))
+        stopper = asyncio.create_task(self._stop_requested.wait())
+        try:
+            await asyncio.wait({sleeper, stopper}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            sleeper.cancel()
+            stopper.cancel()
+            await asyncio.gather(sleeper, stopper, return_exceptions=True)
+        return self._stop_requested.is_set()
+
+    def _fail(self, reason: str) -> None:
+        self._last_error = reason
+        self._transition(State.FAILED, reason)
+
+    async def _stop_process(self) -> None:
+        """Stop the Snort we own if it is still alive, drain its alerts, free the pid file."""
+        proc = self._proc
+        if proc is not None and proc.returncode is None:
+            await self._port.stop(proc, self._config.stop_timeout)
+        if proc is not None:
+            await self._stop_ingest()
+        await self._release_process()
 
     async def _shutdown(self, reason: str) -> None:
         self._transition(State.STOPPING, reason)

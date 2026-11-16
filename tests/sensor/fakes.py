@@ -41,6 +41,8 @@ class FakePort:
         self.stop_calls: list[FakeProc] = []
         self.procs: list[FakeProc] = []
         self.start_error: SnortError | None = None
+        self.start_failures = 0  # fail this many start() calls, then succeed
+        self.crash_on_start = False  # every started process exits at once with code 1
         self.start_gate: asyncio.Event | None = None  # set to hold start() until released
         self._pids = itertools.count(1000)
 
@@ -53,9 +55,14 @@ class FakePort:
             await self.start_gate.wait()
         if self.start_error is not None:
             raise self.start_error
+        if self.start_failures > 0:
+            self.start_failures -= 1
+            raise SnortError("snort exited early (code 1)")
         proc = FakeProc(next(self._pids))
         self.procs.append(proc)
         self.running_pids.add(proc.pid)
+        if self.crash_on_start:
+            asyncio.get_running_loop().call_later(0.005, proc.exit, 1)
         return proc
 
     async def stop(self, proc: FakeProc, timeout: float) -> StopResult:  # type: ignore[override]
@@ -68,6 +75,9 @@ class FakePort:
         return self.ip
 
     async def is_snort_running(self, pid: int) -> bool:
+        for proc in self.procs:
+            if proc.pid == pid:
+                return proc.returncode is None
         return pid in self.running_pids
 
 
