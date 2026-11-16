@@ -15,16 +15,16 @@ Pure functions in `src/snorty/rules/blocks.py`.
 
 ## Task 2: Archive handling (S)
 `src/snorty/rules/archive.py`.
-- [ ] `parse_md5(text)` accepts both `HEX` and `HEX  name` / `MD5 (name) = HEX` forms; garbage raises `ValueError`
-- [ ] `safe_members(names)` keeps only `*.rules` basenames from paths with no `..`, no absolute path, no drive letter, not on the protected list
-- [ ] `extract_rules(tar_bytes, dest) -> ExtractReport(written, skipped)` writes only regular files (symlinks, devices, hardlinks skipped and counted), flat into `dest`, nothing outside it; size cap per member
-- [ ] `count_rules(dir)` counts non-comment, non-blank lines in `*.rules` that start with `alert|drop|reject|pass|log`
-- [ ] `sanity_ok(new, old, ratio=0.5)`; old of 0 always passes
-- [ ] Verify: `uv run pytest tests/rules/test_archive.py -q` (hostile archives built in memory with `tarfile`)
+- [x] `parse_md5(text)` accepts both `HEX` and `HEX  name` / `MD5 (name) = HEX` forms; garbage raises `ValueError`
+- [x] `safe_members(names)` keeps only `*.rules` basenames from paths with no `..`, no absolute path, no drive letter, not on the protected list
+- [x] `extract_rules(tar_bytes, dest) -> ExtractReport(written, skipped)` writes only regular files (symlinks, devices, hardlinks skipped and counted), flat into `dest`, nothing outside it; size cap per member
+- [x] `count_rules(dir)` counts non-comment, non-blank lines in `*.rules` that start with `alert|drop|reject|pass|log`
+- [x] `sanity_ok(new, old, ratio=0.5)`; old of 0 always passes
+- [x] Verify: `uv run pytest tests/rules/test_archive.py -q` (hostile archives built in memory with `tarfile`)
 - Dependencies: none · Files: `archive.py`, `tests/rules/test_archive.py`
 
 ### Checkpoint: Tasks 1-2
-- [ ] Tests green; `uv run ruff check src tests`; `uv run mypy src/snorty/core src/snorty/snort src/snorty/sensor src/snorty/rules` clean
+- [x] Tests green; `uv run ruff check src tests`; `uv run mypy src/snorty/core src/snorty/snort src/snorty/sensor src/snorty/rules` clean
 
 ## Task 3: Ports, config, state (M)
 `ports.py`, `config.py`, `state.py`.

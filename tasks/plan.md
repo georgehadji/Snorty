@@ -28,10 +28,10 @@ mute/unmute/home-net, then the CLI and real-Snort checks. Stdlib only.
 
 ### Phase 1: Pure logic
 - [x] Task 1: managed block, `set_home_net`, conf rewrites (`blocks.py`)
-- [ ] Task 2: md5 parse, safe tar extraction, rule count, sanity check (`archive.py`)
+- [x] Task 2: md5 parse, safe tar extraction, rule count, sanity check (`archive.py`)
 
 ### Checkpoint: Pure logic
-- [ ] All unit tests green; ruff and strict mypy clean on `snorty.rules`
+- [x] All unit tests green; ruff and strict mypy clean on `snorty.rules`
 
 ### Phase 2: Ports and update
 - [ ] Task 3: ports, `UrllibDownloader`, `SnortValidator`, `RulesConfig`, state file
