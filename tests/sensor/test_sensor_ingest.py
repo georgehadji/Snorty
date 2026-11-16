@@ -8,7 +8,7 @@ import pytest
 from fakes import FakeClock, FakePort
 
 from snorty.core.bus import EventBus, Subscription
-from snorty.core.events import AlertRaised
+from snorty.core.events import AlertRaised, AlertsBackfilled, Event
 from snorty.core.repository import AlertRepository
 from snorty.sensor import tail
 from snorty.sensor.config import SensorConfig
@@ -53,14 +53,16 @@ class Rig:
         with self.alerts.open("a", newline="") as fh:
             fh.write("".join(ln + "\r\n" for ln in lines))
 
-    def raised(self) -> list[AlertRaised]:
-        out: list[AlertRaised] = []
+    def drain(self) -> list[Event]:
+        out: list[Event] = []
         while True:
             try:
-                ev = self.sub._queue.get_nowait()
+                out.append(self.sub._queue.get_nowait())
             except asyncio.QueueEmpty:
-                return [e for e in out if isinstance(e, AlertRaised)]
-            out.append(ev)  # type: ignore[arg-type]
+                return out
+
+    def raised(self) -> list[AlertRaised]:
+        return [e for e in self.drain() if isinstance(e, AlertRaised)]
 
     def stored(self) -> int:
         return len(self.repo.query(limit=100_000))
@@ -133,9 +135,9 @@ async def test_a_poll_that_is_cancelled_mid_write_still_finishes_and_announces(r
     rig.append(line(1))
     real = s._store_lines
 
-    def slow(lines: list[str], year: int, ties: list[int] = []) -> object:  # noqa: B006
+    def slow(lines: list[str], year: int, ties: list[int], checkpoint: str | None) -> object:
         time.sleep(0.2)  # the write is inside its worker thread when the cancel arrives
-        return real(lines, year, ties)
+        return real(lines, year, ties, checkpoint)
 
     s._store_lines = slow  # type: ignore[method-assign,assignment]
     s._ingest_task = asyncio.create_task(s._poll_once())
@@ -236,11 +238,11 @@ async def test_database_error_loses_nothing(rig: Rig, monkeypatch: pytest.Monkey
     real = rig.repo.add_new
     calls = {"n": 0}
 
-    def flaky(alerts: object) -> list:  # type: ignore[type-arg]
+    def flaky(alerts: object, checkpoint: str | None = None) -> list:  # type: ignore[type-arg]
         calls["n"] += 1
         if calls["n"] == 1:
             raise RuntimeError("disk full")
-        return real(alerts)  # type: ignore[arg-type]
+        return real(alerts, checkpoint)  # type: ignore[arg-type]
 
     monkeypatch.setattr(rig.repo, "add_new", flaky)
     rig.append(line(4))
@@ -258,12 +260,12 @@ async def test_a_failed_poll_is_reported_until_ingest_recovers(
     real = rig.repo.add_new
     reported: list[str | None] = []
 
-    def flaky(alerts: object) -> list:  # type: ignore[type-arg]
+    def flaky(alerts: object, checkpoint: str | None = None) -> list:  # type: ignore[type-arg]
         if not reported:
             reported.append(None)
             raise RuntimeError("disk full")
         reported.append(rig.sensor.status().last_error)  # what the card shows at the retry
-        return real(alerts)  # type: ignore[arg-type]
+        return real(alerts, checkpoint)  # type: ignore[arg-type]
 
     monkeypatch.setattr(rig.repo, "add_new", flaky)
     rig.append(line(4))
@@ -357,3 +359,55 @@ async def test_a_backlog_larger_than_one_chunk_is_stored_whole_and_not_announced
     rig.append(line(99))
     await eventually(lambda: len(rig.raised()) == 1)  # live alerts still announced
     await rig.sensor.stop()
+
+
+async def test_blank_stretch_longer_than_a_chunk_does_not_end_the_backlog_early(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(tail, "MAX_CHUNK", 16)  # every chunk of the blank stretch holds no line
+    rig.alerts.write_bytes(b"\r\n" * 40 + (line(1) + "\r\n").encode())
+    await rig.sensor.start()
+    assert rig.stored() == 1
+    assert rig.raised() == []  # old alert: stored, never toasted as if it were live
+    await rig.sensor.stop()
+
+
+async def test_backlog_is_announced_to_the_journal_as_a_span_of_days(rig: Rig) -> None:
+    old = line(1).replace("11/16/26", "11/02/26")
+    rig.append(old, line(2))
+    await rig.sensor.start()
+    spans = [e for e in rig.drain() if isinstance(e, AlertsBackfilled)]
+    assert len(spans) == 1
+    assert (spans[0].first.date().month, spans[0].first.date().day) == (11, 2)
+    assert spans[0].last.date().day == 16
+    await rig.sensor.stop()
+
+
+async def test_a_restart_resumes_from_the_saved_checkpoint(tmp_path: Path) -> None:
+    first = Rig(tmp_path)
+    first.append(line(1), line(2))
+    await first.sensor.start()
+    await first.sensor.stop()
+
+    first.append(line(3))  # written while Snorty was down
+    second = Rig(tmp_path, repo=first.repo)
+    assert second.sensor._tail.offset == len((line(1) + "\r\n" + line(2) + "\r\n").encode())
+    await second.sensor.start()
+    assert second.stored() == 3
+    assert second.sensor.status().alerts_seen == 1  # only the new line was read
+    await second.sensor.stop()
+    first.repo.close()
+
+
+async def test_a_damaged_checkpoint_falls_back_to_reading_the_whole_file(tmp_path: Path) -> None:
+    first = Rig(tmp_path)
+    first.append(line(1), line(2))
+    await first.sensor.start()
+    await first.sensor.stop()
+    first.repo._conn.execute("UPDATE meta SET value = 'garbage' WHERE key = 'tail'")
+
+    second = Rig(tmp_path, repo=first.repo)
+    await second.sensor.start()
+    assert second.stored() == 2  # re-read, nothing stored twice
+    await second.sensor.stop()
+    first.repo.close()

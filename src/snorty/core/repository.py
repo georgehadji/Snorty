@@ -1,7 +1,7 @@
 import sqlite3
 import threading
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import UTC, datetime, tzinfo
 from pathlib import Path
@@ -45,6 +45,8 @@ _COLUMNS = (
     "src_ip, src_port, dst_ip, dst_port, raw"
 )
 _FLOOR = "prune_floor"  # meta key: nothing older than this is stored again
+_VERSION = "schema_version"
+TAIL_KEY = "tail"  # meta key: the ingest checkpoint (opaque text to the repository)
 
 
 def _utc(dt: datetime) -> str:
@@ -78,6 +80,22 @@ def _range(since: datetime | None, until: datetime | None) -> tuple[str, list[An
     return (" WHERE " + " AND ".join(clauses) if clauses else ""), args
 
 
+def _rebuild_with_dup(conn: sqlite3.Connection) -> None:
+    """Databases from before `dup` held raw as UNIQUE, so identical alert lines collapsed into one
+    row. SQLite cannot change a constraint in place: rebuild the table, keeping every row and id.
+    The dropped alerts come back the next time Snort's file is read."""
+    if "dup" in {r[1] for r in conn.execute("PRAGMA table_info(alerts)")}:
+        return
+    conn.execute(_alerts_table("alerts_v2"))
+    conn.execute(f"INSERT INTO alerts_v2 (id, {_COLUMNS}) SELECT id, {_COLUMNS} FROM alerts")
+    conn.execute("DROP TABLE alerts")
+    conn.execute("ALTER TABLE alerts_v2 RENAME TO alerts")
+
+
+# Append only: a database's `schema_version` is how many of these it has had.
+MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [_rebuild_with_dup]
+
+
 class AlertRepository:
     """SQLite alert store. Synchronous: async callers use asyncio.to_thread."""
 
@@ -96,23 +114,33 @@ class AlertRepository:
             self._conn.execute("UPDATE alerts SET priority = 3 WHERE priority = 0")
 
     def _migrate(self) -> None:
-        """Databases from before `dup` held raw as UNIQUE, so identical alert lines collapsed
-        into one row. SQLite cannot change a constraint in place: rebuild the table, keeping every
-        row and id. The dropped alerts come back the next time Snort's file is read."""
-        if "dup" in {r[1] for r in self._conn.execute("PRAGMA table_info(alerts)")}:
-            return
-        self._conn.execute("BEGIN")
-        try:
-            self._conn.execute(_alerts_table("alerts_v2"))
-            self._conn.execute(
-                f"INSERT INTO alerts_v2 (id, {_COLUMNS}) SELECT id, {_COLUMNS} FROM alerts"
-            )
-            self._conn.execute("DROP TABLE alerts")
-            self._conn.execute("ALTER TABLE alerts_v2 RENAME TO alerts")
-        except BaseException:
-            self._conn.execute("ROLLBACK")
-            raise
-        self._conn.execute("COMMIT")
+        """Run the MIGRATIONS this database has not had yet, each in its own transaction."""
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+        )
+        row = self._conn.execute("SELECT value FROM meta WHERE key = ?", (_VERSION,)).fetchone()
+        done = int(row[0]) if row else 0
+        for n, step in enumerate(MIGRATIONS[done:], done + 1):
+            self._conn.execute("BEGIN")
+            try:
+                step(self._conn)
+                self._set_meta(_VERSION, str(n))
+            except BaseException:
+                self._conn.execute("ROLLBACK")
+                raise
+            self._conn.execute("COMMIT")
+
+    def _set_meta(self, key: str, value: str) -> None:
+        self._conn.execute(
+            "INSERT INTO meta (key, value) VALUES (?, ?) "
+            "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+
+    def meta_get(self, key: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        return row[0] if row else None
 
     def close(self) -> None:
         with self._lock:
@@ -126,8 +154,10 @@ class AlertRepository:
         """Store alerts in one transaction; returns how many were new."""
         return len(self.add_new(alerts))
 
-    def add_new(self, alerts: Iterable[Alert]) -> list[Alert]:
-        """Store alerts in one transaction; returns the ones that were new, in order."""
+    def add_new(self, alerts: Iterable[Alert], checkpoint: str | None = None) -> list[Alert]:
+        """Store alerts in one transaction; returns the ones that were new, in order.
+        `checkpoint` (where the reader got to) is saved in the same transaction, so a crash never
+        leaves rows without it or it without the rows."""
         sql = f"INSERT OR IGNORE INTO alerts ({_COLUMNS}, dup) VALUES ({', '.join('?' * 14)})"
         new: list[Alert] = []
         with self._lock:
@@ -141,6 +171,8 @@ class AlertRepository:
                     cur = self._conn.execute(sql, _row(alert))
                     if cur.rowcount == 1:
                         new.append(replace(alert, id=cur.lastrowid or 0))
+                if checkpoint is not None:
+                    self._set_meta(TAIL_KEY, checkpoint)
             except BaseException:
                 self._conn.execute("ROLLBACK")
                 raise

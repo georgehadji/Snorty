@@ -1,9 +1,13 @@
 import asyncio
 import csv
+import ctypes
+import logging
 import re
 import signal
 import subprocess
+import sys
 import tempfile
+from ctypes import wintypes
 from datetime import tzinfo
 from pathlib import Path
 from typing import Protocol
@@ -15,11 +19,14 @@ from snorty.snort.commands import (
     interfaces_command,
     live_command,
     pcap_command,
+    taskkill_command,
     tasklist_command,
 )
 from snorty.snort.interfaces import parse_interfaces
 from snorty.snort.models import ConfigCheck, Interface, SnortError, SnortPaths, StopResult
 from snorty.snort.runner import Runner
+
+log = logging.getLogger("snorty.snort")
 
 # Exit code Windows reports when a console control event ends a process normally.
 CTRL_C_EXIT = 0xC000013A
@@ -33,6 +40,70 @@ class LiveProcess(Protocol):
     def send_signal(self, sig: int) -> None: ...
     def kill(self) -> None: ...
     async def wait(self) -> int: ...
+
+
+_job: int | None = None  # one job for every Snort we start; Windows closes it when we die
+
+
+def _bind_to_job(pid: int) -> None:
+    """Make Windows kill Snort when this process ends, however it ends (a kill, a crash, a closed
+    console). Without it a dead dashboard leaves Snort running, and the next start is refused.
+    Best effort: a failure is logged and Snort simply runs unbound, as before."""
+    global _job
+    if sys.platform != "win32":
+        return
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateJobObjectW.restype = wintypes.HANDLE
+    k32.OpenProcess.restype = wintypes.HANDLE
+    k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    k32.SetInformationJobObject.argtypes = [
+        wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD
+    ]  # fmt: skip
+    if _job is None:
+        job = k32.CreateJobObjectW(None, None)
+        info = _ExtendedLimits()
+        info.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if not job or not k32.SetInformationJobObject(
+            job,
+            9,
+            ctypes.byref(info),
+            ctypes.sizeof(info),  # 9: JobObjectExtendedLimitInformation
+        ):
+            log.warning("cannot create a job object for Snort (error %s)", ctypes.get_last_error())
+            return
+        _job = job
+    process = k32.OpenProcess(0x0100 | 0x0001, False, pid)  # SET_QUOTA | TERMINATE
+    try:
+        if not process or not k32.AssignProcessToJobObject(_job, process):
+            log.warning("cannot bind Snort to the job object (error %s)", ctypes.get_last_error())
+    finally:
+        if process:
+            k32.CloseHandle(process)
+
+
+class _BasicLimits(ctypes.Structure):
+    _fields_ = [
+        ("PerProcessUserTimeLimit", ctypes.c_int64),
+        ("PerJobUserTimeLimit", ctypes.c_int64),
+        ("LimitFlags", wintypes.DWORD),
+        ("MinimumWorkingSetSize", ctypes.c_size_t),
+        ("MaximumWorkingSetSize", ctypes.c_size_t),
+        ("ActiveProcessLimit", wintypes.DWORD),
+        ("Affinity", ctypes.c_size_t),
+        ("PriorityClass", wintypes.DWORD),
+        ("SchedulingClass", wintypes.DWORD),
+    ]
+
+
+class _ExtendedLimits(ctypes.Structure):
+    _fields_ = [
+        ("BasicLimitInformation", _BasicLimits),
+        ("IoInfo", ctypes.c_uint64 * 6),  # IO_COUNTERS: six 64-bit counters, unused
+        ("ProcessMemoryLimit", ctypes.c_size_t),
+        ("JobMemoryLimit", ctypes.c_size_t),
+        ("PeakProcessMemoryUsed", ctypes.c_size_t),
+        ("PeakJobMemoryUsed", ctypes.c_size_t),
+    ]
 
 
 async def start_live(
@@ -56,6 +127,7 @@ async def start_live(
             )
         except OSError as e:
             raise SnortError(f"cannot start {paths.exe}: {e}") from e
+    _bind_to_job(proc.pid)
     loop = asyncio.get_running_loop()
     deadline = loop.time() + ready_timeout
     while True:
@@ -166,6 +238,14 @@ def _read_alerts(path: Path, year: int, tz: tzinfo) -> list[Alert]:
     lines = path.read_text(errors="replace").splitlines()
     parsed = (parse_line(ln, default_year=year, tz=tz) for ln in lines)
     return [a for a in parsed if a is not None]
+
+
+async def kill_snort(pid: int, runner: Runner) -> None:
+    """Force-stop `pid` and its children. Failure is not raised: the caller checks again."""
+    try:
+        await runner(taskkill_command(pid), timeout=15)
+    except SnortError:
+        pass
 
 
 async def is_snort_running(pid: int, runner: Runner) -> bool:

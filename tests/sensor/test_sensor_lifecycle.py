@@ -165,15 +165,27 @@ async def test_stale_pid_file_is_overwritten(rig: Rig) -> None:
     await rig.sensor.stop()
 
 
-async def test_live_snort_in_pid_file_refuses_to_start(rig: Rig) -> None:
+async def test_snort_left_behind_by_a_dead_snorty_is_stopped_and_replaced(rig: Rig) -> None:
     rig.log_dir.mkdir(parents=True)
     rig.pid_file.write_text("4242")
     rig.port.running_pids.add(4242)
     await rig.sensor.start()
+    assert rig.port.kills == [4242]
+    assert rig.sensor.state is State.RUNNING
+    assert rig.pid_file.read_text().strip() == str(rig.port.procs[0].pid)
+    await rig.sensor.stop()
+
+
+async def test_snort_that_cannot_be_stopped_still_refuses_to_start(rig: Rig) -> None:
+    rig.log_dir.mkdir(parents=True)
+    rig.pid_file.write_text("4242")
+    rig.port.running_pids.add(4242)
+    rig.port.unkillable = True
+    await rig.sensor.start()
     assert rig.sensor.state is State.FAILED
     assert "Snort already running (pid 4242)" in (rig.sensor.status().reason or "")
     assert rig.port.start_calls == []
-    assert rig.pid_file.read_text() == "4242"  # not ours: left alone
+    assert rig.pid_file.read_text() == "4242"
 
 
 async def test_start_error_from_snort_fails_with_reason(rig: Rig) -> None:

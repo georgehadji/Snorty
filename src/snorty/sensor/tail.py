@@ -1,3 +1,5 @@
+import base64
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -24,6 +26,35 @@ class TailResult:
     rotated: bool
     # Per line: 0 for the first of its kind, then 1, 2, ...
     ties: list[int] = field(default_factory=list)
+
+
+def encode_state(state: TailState) -> str:
+    """The state as text, to keep between runs. `seen` holds at most SEEN_MAX lines."""
+    return json.dumps(
+        {
+            "offset": state.offset,
+            "pending": base64.b64encode(state.pending).decode(),
+            "head": base64.b64encode(state.head).decode(),
+            "seen": [[line, n] for line, n in state.seen],
+        }
+    )
+
+
+def decode_state(text: str | None) -> TailState:
+    """Inverse of encode_state. Missing or damaged text gives a fresh state: the file is read
+    again from the start, which stores nothing twice."""
+    if text is None:
+        return TailState()
+    try:
+        d = json.loads(text)
+        return TailState(
+            int(d["offset"]),
+            base64.b64decode(d["pending"]),
+            base64.b64decode(d["head"]),
+            tuple((str(line), int(n)) for line, n in d["seen"]),
+        )
+    except (ValueError, KeyError, TypeError):
+        return TailState()
 
 
 def _tie_indexes(

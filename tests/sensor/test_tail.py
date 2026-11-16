@@ -137,3 +137,17 @@ def test_a_large_file_is_read_in_chunks_without_losing_or_splitting_lines(
         state, reads = result.state, reads + 1
     assert got == [f"line {i}" for i in range(50)]
     assert reads > 1
+
+
+def test_state_survives_encoding_and_a_damaged_one_starts_fresh() -> None:
+    state = tail.TailState(12, b"par\xff", b"head", (("a line", 2), ("another", 1)))
+    assert tail.decode_state(tail.encode_state(state)) == state
+    for bad in (None, "", "garbage", '{"offset": "x"}', "[]"):
+        assert tail.decode_state(bad) == tail.TailState()
+
+
+def test_the_encoded_state_stays_small_however_many_lines_were_read() -> None:
+    lines = [f"{n:06d} " + "x" * 120 for n in range(tail.SEEN_MAX * 2)]
+    _, seen = tail._tie_indexes(lines, ())
+    size = len(tail.encode_state(tail.TailState(1, b"", b"h" * 64, seen)))
+    assert len(seen) == tail.SEEN_MAX and size < 1_000_000

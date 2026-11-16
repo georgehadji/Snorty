@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 from journal_fakes import NOW, Rig, make_alert, settle
 
+from snorty.core.events import AlertsBackfilled
+
 TODAY, YESTERDAY = date(2026, 11, 16), date(2026, 11, 15)
 
 
@@ -121,3 +123,15 @@ async def test_your_text_in_an_existing_note_survives_regeneration(rig: Rig) -> 
     await rig.service.start()
     note = rig.store.notes[TODAY]
     assert note.startswith("# My day\nI wrote this.\n") and "rule 1" in note
+
+
+async def test_days_backfilled_while_ingest_was_down_are_written_on_the_next_tick(
+    rig: Rig,
+) -> None:
+    await rig.service.start()
+    old = NOW - timedelta(days=5)
+    rig.repo.add_many([make_alert(1, old), make_alert(2, old + timedelta(days=1))])
+    rig.bus.publish(AlertsBackfilled(old, old + timedelta(days=1)))
+    rig.ticks.tick()
+    await settle(lambda: len(rig.store.notes) == 2)
+    assert set(rig.store.notes) == {(old).date(), (old + timedelta(days=1)).date()}

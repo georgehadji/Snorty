@@ -7,15 +7,15 @@ from pathlib import Path
 from typing import Literal
 
 from snorty.core.bus import EventBus
-from snorty.core.events import AlertRaised, SensorStateChanged
+from snorty.core.events import AlertRaised, AlertsBackfilled, SensorStateChanged
 from snorty.core.models import Alert
 from snorty.core.parser import parse_line
-from snorty.core.repository import AlertRepository
+from snorty.core.repository import TAIL_KEY, AlertRepository
 from snorty.sensor.config import SensorConfig
 from snorty.sensor.policy import backoff_delay, should_give_up
 from snorty.sensor.port import RunningSnort, SnortPort
 from snorty.sensor.states import State, check_transition
-from snorty.sensor.tail import TailState, read_new_lines
+from snorty.sensor.tail import decode_state, encode_state, read_new_lines
 from snorty.snort.interfaces import pick_interface
 from snorty.snort.models import Interface, SnortError
 
@@ -101,7 +101,9 @@ class Sensor:
         self._wall = wall or (lambda: datetime.now(tz))
         self._pid_path = config.paths.log_dir / "snorty-sensor.pid"
         self._alert_path = config.paths.log_dir / "alert.ids"
-        self._tail = TailState()
+        # Resume where the last run stopped: each line is read once in its lifetime, so startup
+        # does not slow down as alert.ids grows, and old year-less lines are never read again.
+        self._tail = decode_state(repo.meta_get(TAIL_KEY))
         self._backlog_done = False
         self._ingest_task: asyncio.Task[None] | None = None
         self._last_instant: float | None = None  # newest alert time read so far, for _settle_fold
@@ -265,7 +267,12 @@ class Sensor:
         """Try to start Snort. 'fatal' means retrying cannot help; 'retry' is worth a backoff."""
         stale = await asyncio.to_thread(_read_pid, self._pid_path)
         if stale is not None and await self._port.is_snort_running(stale):
-            return "fatal", f"Snort already running (pid {stale})"
+            # The pid file is ours, so this is Snort left behind by an earlier Snorty that died.
+            # It holds the interface and alert.ids: stop it, or nothing could be ingested.
+            log.warning("stopping Snort (pid %s) left behind by an earlier run", stale)
+            await self._port.kill_snort(stale)
+            if await self._port.is_snort_running(stale):
+                return "fatal", f"Snort already running (pid {stale}) and could not be stopped"
         chosen = await self._choose_interface()
         if isinstance(chosen, str):
             return "fatal", chosen
@@ -438,9 +445,15 @@ class Sensor:
         if result.rotated:
             log.warning("alert file was rotated or replaced; reading it from the start")
             self._last_instant, self._second_pass = None, False
-        if result.lines:
+        moved = result.rotated or result.state.offset != self._tail.offset
+        if result.state != self._tail or result.rotated:
+            # Rows and checkpoint are stored together, so a restart resumes exactly here.
             new, bad = await asyncio.to_thread(
-                self._store_lines, result.lines, self._wall().year, result.ties
+                self._store_lines,
+                result.lines,
+                self._wall().year,
+                result.ties,
+                encode_state(result.state),
             )
             self._unparsed += bad
             self._alerts_seen += len(new)
@@ -448,14 +461,21 @@ class Sensor:
                 newest = max(a.ts for a in new)
                 if self._last_alert_ts is None or newest > self._last_alert_ts:
                     self._last_alert_ts = newest
-            if self._backlog_done or result.rotated:
-                for alert in new:
-                    self._bus.publish(AlertRaised(alert))
+                if self._backlog_done or result.rotated:
+                    for alert in new:
+                        self._bus.publish(AlertRaised(alert))
+                else:  # no toast for old alerts, but the journal must know which days changed
+                    self._bus.publish(AlertsBackfilled(min(a.ts for a in new), newest))
         self._tail = result.state
-        return bool(result.lines)
+        # A chunk of blank lines moves the offset without yielding a line: keep reading.
+        return moved
 
     def _store_lines(
-        self, lines: list[str], year: int, ties: Sequence[int] = ()
+        self,
+        lines: list[str],
+        year: int,
+        ties: Sequence[int] = (),
+        checkpoint: str | None = None,
     ) -> tuple[list[Alert], int]:
         """Runs in a worker thread: parse and store. Returns (new alerts, unparsed count).
         `ties[i]` says which of several identical lines `lines[i]` is (0 when not given)."""
@@ -475,6 +495,6 @@ class Sensor:
                 ts, last, second = _settle_fold(alert.ts, last, second)
                 alert = replace(alert, ts=ts)
                 alerts.append(replace(alert, dup=ties[i]) if i < len(ties) else alert)
-        new = self._repo.add_new(alerts)
+        new = self._repo.add_new(alerts, checkpoint)
         self._last_instant, self._second_pass = last, second  # only once the lines are stored
         return new, bad

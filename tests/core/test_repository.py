@@ -265,3 +265,26 @@ def test_add_new_gives_each_new_alert_its_id_and_the_id_is_not_part_of_equality(
     assert [a.id for a in new] == [1, 2]
     assert new == [make_alert(1), make_alert(2)]  # ids ignored when comparing
     assert repo.get(new[1].id) == new[1]
+
+
+def test_the_checkpoint_is_stored_with_the_rows_or_not_at_all(repo: AlertRepository) -> None:
+    repo.add_new([make_alert(1)], "cp1")
+    assert repo.meta_get("tail") == "cp1"
+    repo.add_new([], None)  # no checkpoint given: the saved one stays
+    assert repo.meta_get("tail") == "cp1"
+    bad = make_alert(2, ts=datetime(2026, 11, 15, 12))  # no timezone: refused mid-batch
+    with pytest.raises(ValueError):
+        repo.add_new([bad], "cp2")
+    assert repo.meta_get("tail") == "cp1"  # rolled back together
+
+
+def test_each_database_records_how_many_migrations_it_has_had(tmp_path: Path) -> None:
+    path = tmp_path / "old.db"
+    with closing(sqlite3.connect(path)) as conn:
+        conn.executescript(OLD_SCHEMA)
+    repo = AlertRepository(path)
+    assert repo.meta_get("schema_version") == "1"
+    repo.close()
+    fresh = AlertRepository(tmp_path / "fresh.db")
+    assert fresh.meta_get("schema_version") == "1"
+    fresh.close()

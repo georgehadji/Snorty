@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.gzip import GZipMiddleware
 
-from snorty.core.events import AlertRaised, Event, SensorStateChanged
+from snorty.core.events import AlertRaised, Event, RulesUpdated, SensorStateChanged
 from snorty.dashboard import views
 from snorty.dashboard.capture_routes import add_capture_routes
 from snorty.dashboard.journal_routes import add_journal_routes
@@ -182,8 +182,16 @@ def build_app(
             f = views.parse_alert_filters(request.query_params)
         except ValueError as exc:
             return PlainTextResponse(str(exc), status_code=422)
+
+        def wanted(event: Event) -> bool:  # what this tab shows, so others never fill its queue
+            if isinstance(event, AlertRaised):
+                return views.alert_matches(f, event.alert)
+            return isinstance(event, SensorStateChanged | RulesUpdated)
+
         return StreamingResponse(
-            sse_frames(lambda: svc.bus.subscribe(100), renderer(svc, f), heartbeat=heartbeat),
+            sse_frames(
+                lambda: svc.bus.subscribe(100, wanted), renderer(svc, f), heartbeat=heartbeat
+            ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
         )

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 
 from snorty.core.bus import EventBus, Subscription
-from snorty.core.events import AlertRaised, Event
+from snorty.core.events import AlertRaised, AlertsBackfilled, Event
 from snorty.core.models import Alert
 from snorty.core.repository import AlertRepository
 from snorty.journal.merge import merge
@@ -135,6 +135,12 @@ class JournalService:
         """Runs inside publish(): note the alert's day, and keep nothing in the queue."""
         if isinstance(event, AlertRaised):
             self._dirty.add(event.alert.ts.astimezone(self._config.tz).date())
+        elif isinstance(event, AlertsBackfilled):  # every day the old alerts span
+            day = event.first.astimezone(self._config.tz).date()
+            last = event.last.astimezone(self._config.tz).date()
+            while day <= last:
+                self._dirty.add(day)
+                day += timedelta(days=1)
         return False
 
     async def _ticker(self) -> None:

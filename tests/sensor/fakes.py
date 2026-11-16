@@ -37,6 +37,8 @@ class FakePort:
         self.interfaces = [WIFI, ETH, LOOP]
         self.ip = ip
         self.running_pids: set[int] = set()
+        self.kills: list[int] = []  # pids passed to kill_snort
+        self.unkillable = False  # kill_snort leaves the process running
         self.start_calls: list[Interface] = []
         self.stop_calls: list[FakeProc] = []
         self.procs: list[FakeProc] = []
@@ -73,6 +75,11 @@ class FakePort:
 
     def local_ip(self) -> str | None:
         return self.ip
+
+    async def kill_snort(self, pid: int) -> None:
+        self.kills.append(pid)
+        if not self.unkillable:
+            self.running_pids.discard(pid)
 
     async def is_snort_running(self, pid: int) -> bool:
         for proc in self.procs:

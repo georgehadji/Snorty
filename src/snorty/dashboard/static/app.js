@@ -135,9 +135,19 @@ document.addEventListener("htmx:beforeSwap", (event) => {
       const page = new DOMParser().parseFromString(await res.text(), "text/html");
       const fresh = page.getElementById("alert-rows");
       if (!fresh) return;
+      // Pages added with "Load more" are replaced by page 1 (accepted: a burst is rare).
       rows.innerHTML = fresh.innerHTML;
       activate(rows);
       refreshTimes();
+      // A sensor event may have been among the dropped ones: bring the status up to date too.
+      for (const id of ["top-status", "sensor-card"]) {
+        const now = page.getElementById(id);
+        const here = document.getElementById(id);
+        if (now && here) {
+          here.replaceWith(now);
+          activate(now);
+        }
+      }
     } catch {
       // the stream's own error handling shows that Snorty is unreachable
     } finally {

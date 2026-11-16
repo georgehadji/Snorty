@@ -8,6 +8,7 @@ from snorty.snort.runner import Runner, SubprocessRunner
 from snorty.snort.service import (
     LiveProcess,
     is_snort_running,
+    kill_snort,
     list_interfaces,
     start_live,
     stop_live,
@@ -25,6 +26,7 @@ class SnortPort(Protocol):
     async def stop(self, proc: RunningSnort, timeout: float) -> StopResult: ...
     def local_ip(self) -> str | None: ...
     async def is_snort_running(self, pid: int) -> bool: ...
+    async def kill_snort(self, pid: int) -> None: ...
 
 
 class SnortAdapter:
@@ -46,3 +48,6 @@ class SnortAdapter:
 
     async def is_snort_running(self, pid: int) -> bool:
         return await is_snort_running(pid, self._runner)
+
+    async def kill_snort(self, pid: int) -> None:
+        await kill_snort(pid, self._runner)

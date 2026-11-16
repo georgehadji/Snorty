@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 
 from snorty.core.models import Alert
 
@@ -23,4 +24,13 @@ class RulesUpdated:
     detail: str
 
 
-type Event = AlertRaised | SensorStateChanged | RulesUpdated
+@dataclass(frozen=True, slots=True)
+class AlertsBackfilled:
+    """Alerts stored without being announced one by one (those Snort wrote while Snorty was
+    down). The span tells the journal which days changed."""
+
+    first: datetime
+    last: datetime
+
+
+type Event = AlertRaised | AlertsBackfilled | SensorStateChanged | RulesUpdated
