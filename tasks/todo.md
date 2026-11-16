@@ -13,10 +13,10 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. E
 
 ## Task 2: security (M)
 `security.py`, `tests/dashboard/test_dash_security.py`.
-- [ ] Pure validators raising `ValueError` with a user-safe message: `valid_sid`, `valid_priority` (1-3), `valid_range` (1h/24h/7d/all), `valid_pcap_name` (`[A-Za-z0-9._-]{1,64}`, ends `.pcap`, no leading dot), `parse_form(body: bytes) -> dict[str, str]` (`parse_qs`, size cap, one value per key)
-- [ ] `host_allowed(host, port)`, `origin_allowed(origin, host)`, `token_ok(given, expected)` (constant-time compare); `new_token()` random 32 bytes hex
-- [ ] ASGI middleware class: 400 on bad Host; 403 on non-GET without the token or with a foreign Origin; `GET /healthz` token-exempt; adds CSP (`default-src 'self'; frame-ancestors 'none'`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` to every response, errors included
-- [ ] Verify: `uv run pytest tests/dashboard/test_dash_security.py -q`
+- [x] Pure validators raising `ValueError` with a user-safe message: `valid_sid`, `valid_priority` (1-3), `valid_range` (1h/24h/7d/all), `valid_pcap_name` (`[A-Za-z0-9._-]{1,64}`, ends `.pcap`, no leading dot), `parse_form(body: bytes) -> dict[str, str]` (`parse_qs`, size cap, one value per key)
+- [x] `host_allowed(host, port)`, `origin_allowed(origin, host)`, `token_ok(given, expected)` (constant-time compare); `new_token()` random 32 bytes hex
+- [x] ASGI middleware class: 400 on bad Host; 403 on non-GET without the token or with a foreign Origin; `GET /healthz` token-exempt; adds CSP (`default-src 'self'; frame-ancestors 'none'`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` to every response, errors included
+- [x] Verify: `uv run pytest tests/dashboard/test_dash_security.py -q`
 - Dependencies: Task 1 · Files: `security.py`, test
 
 ## Task 3: shared wiring and Services (M)
