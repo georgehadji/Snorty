@@ -1,79 +1,73 @@
-# Tasks: notify
+# Tasks: vault-journal
 
-Plan: [plan.md](plan.md) · Spec: [SPEC-notify.md](../SPEC-notify.md)
+Plan: [plan.md](plan.md) · Spec: [SPEC-vault-journal.md](../SPEC-vault-journal.md)
 Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one commit.
 
-## Task 1: Toast, sanitize, build_toast (S)
-`src/snorty/notify/toast.py`.
-- [x] `Toast(title, lines)` frozen dataclass
-- [x] `sanitize(text, limit)`: control characters and `" ' ` $ < > & ; | %` and backslash replaced by a space, whitespace collapsed, truncated to `limit`; non-ASCII letters kept
-- [x] `build_toast(alert, same_sid=0, other=0, tz)` gives title `Snort P{priority}: {msg}` (cap 80); lines `{proto} {src_ip}:{src_port} -> {dst_ip}:{dst_port}` (ports omitted when missing), `SID {gid}:{sid}  {HH:MM:SS}` in the given zone, then `+{n} more` and `+{m} other alerts` only when non-zero; each line capped at 120
-- [x] Hostile inputs in msg and addresses (`"; calc; "`, backticks, `$(...)`, `<b>`, newlines, 10,000 characters) produce sanitised, capped text
-- [x] Verify: `uv run pytest tests/notify/test_toast.py -q`
-- Dependencies: none · Files: `src/snorty/notify/__init__.py`, `toast.py`, `tests/notify/test_toast.py`
+## Task 1: sanitize_cell and render (M)
+`src/snorty/journal/__init__.py`, `render.py`.
+- [ ] `sanitize_cell(text, limit=120)`: printable only, whitespace collapsed; `|`, `[`, `]`, backtick, `<`, `>`, `%%` and a word-initial `#` neutralised; capped at `limit`
+- [ ] `render(day, alerts, tz, total=None)` gives the managed block: begin marker, `## Snort alerts`, count line (`N alerts · P1 a · P2 b · P3 c · updated HH:MM` in `tz`), `### Top rules` (10), `### Top addresses` (10 sources, 10 destinations), `### By hour` (24 rows, local hours), `### Priority 1 alerts` (50 rows newest first, then `…and N more`, or `None.`), end marker; ties ordered by key so output is stable
+- [ ] `total` larger than `len(alerts)` adds `truncated: N alerts not shown in tables`
+- [ ] Golden-text test for a fixed alert set, empty day, 60 P1 alerts cut at 50, ties, 23:59 vs 00:01 local hour buckets
+- [ ] Hostile text (pipe, brackets, backtick, `#tag`, `%% x %%`, an end marker, newlines, 10,000 chars, non-ASCII) cannot add a column, link, tag, comment, HTML or marker line
+- [ ] Verify: `uv run pytest tests/journal/test_journal_render.py -q`
+- Dependencies: none · Files: `render.py`, `tests/journal/test_journal_render.py`
 
-## Task 2: Throttle (S)
-`src/snorty/notify/throttle.py`.
-- [x] `Decision(show, same_sid, other)` frozen dataclass
-- [x] `Throttle(window=300, cap=6, cap_window=60, max_sids=1000)`; `decide(sid, now)`:
-  - SID shown less than `window` ago gives `show=False` and counts for that SID
-  - else if `cap` toasts were shown in the last `cap_window` seconds gives `show=False` and counts in the "other" tally
-  - else `show=True` with this SID's suppressed count and the "other" tally, then both reset
-- [x] A suppressed alert never extends the window (the window runs from the last shown toast)
-- [x] Expired SID entries are removed; at most `max_sids` kept, oldest dropped first (tested with 1,500 SIDs)
-- [x] 500 alerts of one SID inside the window give one show; the next one after the window reports `same_sid == 499`
-- [x] Verify: `uv run pytest tests/notify/test_throttle.py -q`
-- Dependencies: none · Files: `throttle.py`, `tests/notify/test_throttle.py`
+## Task 2: merge and NoteConflict (S)
+Same `render.py` (or `merge.py` if it grows).
+- [ ] `merge(existing, block, day)`: `None` gives frontmatter (`date`, `type: snort-journal`, `tags`, `ai-first: true`) + `# YYYY-MM-DD Snort journal` + block
+- [ ] One begin and one end marker in order: replace only between them; no markers: append after a blank line; broken markers (duplicate, one only, reversed): raise `NoteConflict`
+- [ ] User text and frontmatter byte for byte over 10 regenerations; identical result returns the same string
+- [ ] Verify: `uv run pytest tests/journal/test_journal_merge.py -q`
+- Dependencies: Task 1 · Files: `render.py`, `tests/journal/test_journal_merge.py`
 
 ### Checkpoint: Tasks 1-2
-- [x] Tests green; `uv run ruff check src tests`; `uv run mypy src/snorty/core src/snorty/snort src/snorty/sensor src/snorty/rules src/snorty/notify` clean (add `snorty.notify.*` to the strict override in `pyproject.toml`)
+- [ ] Tests green; `uv run ruff check src tests`; mypy clean (add `snorty.journal.*` to the strict override in `pyproject.toml`)
 
-## Task 3: Port and adapters, dependency (M)
-`ports.py`; `pyproject.toml` via `uv add winotify`.
-- [x] `Notifier` Protocol (`async show(toast)`)
-- [x] `ConsoleNotifier(out=print)` prints title and lines
-- [x] `WinotifyNotifier(app_id="Snorty", timeout=10.0, send=None)`: builds the library's `Notification` from a `Toast` and shows it in `asyncio.to_thread` under `asyncio.wait_for`; the library call is injectable (`send`) so tests never show a real toast
-- [x] Read the installed `winotify` source and record in a code comment what it does with title and message text (script, XML, or escaping); if text is interpolated unescaped, the sanitiser already guards it and a test pins that no sanitised character class reaches the library
-- [x] Unit tests: `send` called with the title and joined lines; timeout raises `TimeoutError`; library exception propagates (the service handles it in Task 5)
-- [x] Verify: `uv run pytest tests/notify/test_ports.py -q`
-- Dependencies: Task 1 · Files: `ports.py`, `pyproject.toml`, `uv.lock`, `tests/notify/test_ports.py`
+## Task 3: Port and adapters (M)
+`src/snorty/journal/ports.py`.
+- [ ] `NoteStore` Protocol: `read(day) -> str | None`, `write(day, text) -> None`
+- [ ] `MemoryNoteStore` (dict, records writes)
+- [ ] `VaultNoteStore(vault_root)`: path `<vault>/Security/Snort/YYYY-MM-DD.md`; creates `Security/Snort/` if missing; refuses a missing vault root; resolves the target and refuses anything outside the folder (`..`, absolute, symlink where the OS allows); writes a temp file in the same folder then `os.replace`; UTF-8, `\n` newlines
+- [ ] Tests on a real temp folder, including escape attempts, atomic write (no temp file left, old text intact if the write fails), missing root
+- [ ] Verify: `uv run pytest tests/journal/test_journal_store.py -q`
+- Dependencies: Task 2 · Files: `ports.py`, `tests/journal/test_journal_store.py`
 
-## Task 4: NotifyService, filter and throttle (M)
-`src/snorty/notify/service.py`: `NotifyConfig(min_priority=1, window=300, cap=6, cap_window=60, tz)`, `NotifyService(bus, notifier, config, *, clock)`.
-- [x] `start()` subscribes (maxsize 1000) before returning and spawns one consumer task
-- [x] Only `AlertRaised` events are considered; `alert.priority > min_priority` is ignored; changing `min_priority` changes the cut-off
-- [x] A live priority-1 alert gives one toast through the notifier with the built text
-- [x] Throttle integrated: 500 alerts of one SID give one toast, then `+499 more` after the window (fake clock); many SIDs hit the cap and the next toast says `+M other alerts`
-- [x] Verify: `uv run pytest tests/notify/test_service.py -q` (real `EventBus`, `RecordingNotifier`, fake clock)
-- Dependencies: Tasks 1-3 · Files: `service.py`, `tests/notify/notify_fakes.py`, `test_service.py`
+## Task 4: JournalService (M)
+`service.py`: `JournalConfig(flush_interval=300, tz)`, `JournalService(bus, repo, store, config, *, clock, sleep)`; `journal_fakes.py`.
+- [ ] `start()` subscribes before returning, regenerates today and yesterday from the repository, spawns the consumer task
+- [ ] `AlertRaised` marks the alert's local day dirty; a flush rebuilds each dirty day (`collect` pages the repository, builds `render`, `merge`s with `store.read`, writes) and clears the flag
+- [ ] At most one flush per interval; `stop()` flushes once then cancels and closes the subscription; `stop()` before `start()` and twice are harmless; `start()` twice does not double-subscribe
+- [ ] Alerts the sensor ingested without announcing appear after `start()`
+- [ ] Verify: `uv run pytest tests/journal/test_journal_service.py -q` (real `EventBus`, temp `AlertRepository`, `MemoryNoteStore`, fake clock and sleep)
+- Dependencies: Tasks 1-3 · Files: `service.py`, `tests/journal/journal_fakes.py`, `test_journal_service.py`
 
-## Task 5: Service resilience and lifecycle (M)
-Same `service.py`; new tests in `tests/notify/test_service_resilience.py`.
-- [x] A notifier that raises is logged; the next alert still gives a toast
-- [x] A notifier that exceeds its timeout (raises `TimeoutError`) is logged; the next alert still gives a toast
-- [x] A notifier that blocks forever does not slow `bus.publish` (1,000 publishes finish quickly) and the subscription queue drops oldest
-- [x] `stop()` cancels the consumer, closes the subscription, and no toast is shown after it returns; `stop()` before `start()` and twice are harmless
-- [x] `start()` twice does not double-subscribe (one toast per alert)
-- [x] Verify: `uv run pytest tests/notify -q`
-- Dependencies: Task 4 · Files: `service.py`, `test_service_resilience.py`
+## Task 5: Resilience and paging (M)
+Same `service.py`; `tests/journal/test_journal_resilience.py`.
+- [ ] A store that raises or a `NoteConflict` is logged, the day stays dirty and the next flush retries; nothing escapes the consumer
+- [ ] Unchanged merged text causes no write
+- [ ] A day over 100,000 rows (cap lowered by config in the test) gives the truncation line and the true total
+- [ ] A blocking store does not slow `bus.publish` (1,000 publishes finish quickly)
+- [ ] Verify: `uv run pytest tests/journal -q`
+- Dependencies: Task 4 · Files: `service.py`, `test_journal_resilience.py`
 
 ### Checkpoint: Tasks 3-5
-- [x] Spec criteria 1-9 each covered by a passing test; whole notify unit suite under 3 s; ruff and strict mypy clean
+- [ ] Spec criteria 1-10 each covered by a passing test; whole journal unit suite under 3 s; ruff and strict mypy clean
 
 ## Task 6: CLI and sensor wiring (M)
-`src/snorty/notify/__main__.py`; `src/snorty/sensor/__main__.py`.
-- [x] `python -m snorty.notify test [--priority N] [--msg TEXT]` builds a sample alert and shows it through `WinotifyNotifier` (`--dry-run` uses `ConsoleNotifier`); exit 0, or 1 with the error if the toast failed
-- [x] `python -m snorty.sensor --notify` creates a `NotifyService` on the same bus and starts it before the sensor, stops it after the sensor
-- [x] `snorty.sensor` package modules (not `__main__`) do not import `snorty.notify` (grep-checked)
-- [x] Unit tests with `--dry-run` and an injected notifier; the sensor CLI change is covered by a smoke test that builds the objects without starting Snort
-- [x] Verify: `uv run pytest tests/notify tests/sensor -q -m "not snort"`
-- Dependencies: Tasks 3-5 · Files: `notify/__main__.py`, `sensor/__main__.py`, `tests/notify/test_notify_cli.py`
+`src/snorty/journal/__main__.py`; `src/snorty/sensor/__main__.py`.
+- [ ] `python -m snorty.journal write [--date YYYY-MM-DD] [--db PATH] [--vault PATH] [--dry-run]`: vault from `--vault` or `OBSIDIAN_VAULT_PATH`, error with exit 2 if neither; writes one note (or prints it); exit 0, or 1 with the error
+- [ ] `python -m snorty.sensor --journal` composes a `JournalService` on the same bus and repository, started before the sensor and stopped after it; combines with `--notify`
+- [ ] `snorty.sensor` package modules (not `__main__`) do not import `snorty.journal` (grep-checked)
+- [ ] Unit tests with a temp DB and `MemoryNoteStore`; the sensor change covered by a smoke test with stubs like `test_cli_notify.py`
+- [ ] Verify: `uv run pytest tests/journal tests/sensor -q -m "not snort"`
+- Dependencies: Tasks 3-5 · Files: `journal/__main__.py`, `sensor/__main__.py`, `tests/journal/test_journal_cli.py`, `tests/sensor/test_cli_journal.py`
 
 ## Task 7: Real checks and close-out (S)
-- [x] Manual: `uv run python -m snorty.notify test` shows a toast on this PC (I report what appeared; Focus Assist state noted)
-- [x] Manual: `uv run python -m snorty.sensor --notify --db <tmp>` runs, a loopback payload with `uid=0(root)` raises an alert and a toast, and a cancelled run leaves no `snort.exe` (same method as the sensor check)
-- [x] Coverage for `snorty.notify` at least 90% from unit tests alone
-- [x] `grep -r subprocess src/snorty` matches only `snort/` files; `snorty.notify` imports only `snorty.core`, stdlib and `winotify`
-- [x] SPEC-notify.md Success Criteria boxes ticked; plan and todo boxes ticked except the "next module" one
-- [x] Verify: `uv run pytest -q -m "not snort" --cov=snorty.notify`; `uv run ruff check src tests`; mypy as above
+- [ ] Manual: `uv run python -m snorty.journal write --db <db with real alerts>` creates today's note in the vault; a line typed outside the markers survives a second run (report what I saw)
+- [ ] Manual: a real Snort loopback run with `JournalService` writes a note containing the alert, with no leftover `snort.exe`
+- [ ] Coverage for `snorty.journal` at least 90% from unit tests alone (read from the json report)
+- [ ] `grep -r subprocess src/snorty` matches only `snort/` files; `snorty.journal` imports only `snorty.core` and stdlib
+- [ ] SPEC-vault-journal.md Success Criteria and deviations amended and ticked; plan and todo boxes ticked except the "next module" one
+- [ ] Verify: `uv run pytest -q -m "not snort"`; `uv run ruff check src tests`; mypy as above
 - Dependencies: Task 6
