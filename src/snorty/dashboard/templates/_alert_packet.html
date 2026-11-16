@@ -4,6 +4,7 @@
 {% elif view.state == "error" %}
   <p class="error">{{ view.note }}</p>
 {% else %}
+  {% if view.hint %}<p class="hint">{{ view.hint }}</p>{% endif %}
   <p class="muted">{{ view.note }}</p>
   <p class="actions">
     <a class="button small" href="/alerts/{{ view.alert_id }}/packet.pcap" download>Download pcap</a>

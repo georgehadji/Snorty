@@ -26,6 +26,7 @@ from snorty.packets import (
     Unavailable,
     alert_filter,
     conversation_filter,
+    hint,
 )
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
@@ -414,6 +415,7 @@ class AlertPacketView:
     packet: PacketView | None = None  # the decoded frame, when tshark could decode it
     why: str = ""  # why there is no decoded view although the packet was found
     can_open: bool = False  # the Wireshark program is installed
+    hint: str = ""  # what the packet is for, e.g. "DNS lookup: example.com"
 
 
 def alert_packet_view(result: AlertPacketResult, alert_id: int, can_open: bool) -> AlertPacketView:
@@ -430,7 +432,8 @@ def alert_packet_view(result: AlertPacketResult, alert_id: int, can_open: bool) 
             }[how]
             match decoded:
                 case Decoded(packets=(first, *_)):
-                    return AlertPacketView("ok", note, alert_id, first, "", can_open)
+                    seen = hint(first) or ""
+                    return AlertPacketView("ok", note, alert_id, first, "", can_open, seen)
                 case Unavailable(reason=why) | Failed(message=why):
                     return AlertPacketView("ok", note, alert_id, None, why, can_open)
                 case _:

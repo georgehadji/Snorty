@@ -23,6 +23,7 @@ class PacketView:
     info: str
     layers: tuple[Layer, ...]
     hexdump: str
+    hints: tuple[tuple[str, str], ...] = ()  # names the packet carries: DNS, SNI, HTTP host
 
 
 @dataclass(frozen=True, slots=True)

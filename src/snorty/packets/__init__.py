@@ -1,5 +1,6 @@
 """Packets: what a pcap contains, as plain data. No processes here; tools plug in as ports."""
 
+from snorty.packets.enrich import hint
 from snorty.packets.filters import alert_filter, conversation_filter
 from snorty.packets.models import (
     AlertPacket,
@@ -48,4 +49,5 @@ __all__ = [
     "Viewer",
     "alert_filter",
     "conversation_filter",
+    "hint",
 ]

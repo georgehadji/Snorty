@@ -10,6 +10,15 @@ MAX_LAYERS = 20
 MAX_FIELDS = 60
 MAX_DEPTH = 3
 MAX_TEXT = 200
+MAX_HINT_NODES = 5000
+MAX_HINT_DEPTH = 12
+HINT_KEYS = (
+    "dns.qry.name",
+    "tls.handshake.extensions_server_name",
+    "http.host",
+    "http.request.method",
+    "http.request.uri",
+)
 MAX_HEX_BYTES = 2048
 
 
@@ -41,6 +50,24 @@ def _flatten(node: dict[str, Any], depth: int, out: list[tuple[str, str]]) -> No
                 _flatten(value, depth + 1, out)
         else:
             out.append((str(key)[:80], _text(value)))
+
+
+def _hints(layers: dict[str, Any]) -> tuple[tuple[str, str], ...]:
+    """The few fields that name what a packet is for, wherever they sit in the tree."""
+    found: dict[str, str] = {}
+    stack: list[tuple[dict[str, Any] | list[Any], int]] = [(layers, 0)]
+    for _ in range(MAX_HINT_NODES):
+        if not stack:
+            break
+        node, depth = stack.pop()
+        children = node.items() if isinstance(node, dict) else enumerate(node)
+        for key, value in children:
+            if key in HINT_KEYS:
+                found.setdefault(key, _text(value))
+            elif depth < MAX_HINT_DEPTH and isinstance(value, dict | list):
+                if not str(key).endswith("_raw"):
+                    stack.append((value, depth + 1))
+    return tuple((k, found[k]) for k in HINT_KEYS if k in found)
 
 
 def _endpoints(layers: dict[str, Any]) -> tuple[str, str]:
@@ -119,6 +146,7 @@ def _packet(item: object) -> PacketView:
         hexdump=hexdump(raw[0])
         if isinstance(raw, list) and raw and isinstance(raw[0], str)
         else "",
+        hints=_hints(layers),
     )
 
 

@@ -98,3 +98,45 @@ def test_hexdump_formats_rows_and_survives_bad_input() -> None:
     assert hexdump("48656c6c6f") == "0000  " + "48 65 6c 6c 6f".ljust(47) + "  Hello"
     assert hexdump("zz") == ""
     assert hexdump("") == ""
+
+
+def layers_json(**layers: object) -> str:
+    return json.dumps([{"_source": {"layers": {"frame": {"frame.number": "1"}, **layers}}}])
+
+
+def test_names_are_found_however_deep_they_sit_and_in_lists() -> None:
+    sni = {"a": {"b": {"c": {"d": {"tls.handshake.extensions_server_name": "deep.test"}}}}}
+    (p,) = parse_packets(layers_json(tls=[{"tls.record": {}}, {"tls.record": sni}]))
+    assert p.hints == (("tls.handshake.extensions_server_name", "deep.test"),)
+    dns = {"Queries": {"x: type A": {"dns.qry.name": "example.com"}}}
+    (p,) = parse_packets(layers_json(dns=dns))
+    assert p.hints == (("dns.qry.name", "example.com"),)
+    http = {
+        "GET / HTTP/1.1": {"http.request.method": "GET", "http.request.uri": "/"},
+        "http.host": "h",
+    }
+    (p,) = parse_packets(layers_json(http=http))
+    assert dict(p.hints) == {
+        "http.host": "h",
+        "http.request.method": "GET",
+        "http.request.uri": "/",
+    }
+
+
+def test_a_packet_that_names_nothing_has_no_hints_and_raw_blobs_are_not_searched() -> None:
+    (p,) = parse_packets(layers_json(ip={"ip.src": "1.1.1.1"}, x_raw={"dns.qry.name": "no"}))
+    assert p.hints == ()
+
+
+def test_the_name_search_is_bounded() -> None:
+    wide = {f"k{i}": {"n": 1} for i in range(20000)}
+    wide["dns.qry.name"] = "late.test"
+    (p,) = parse_packets(layers_json(x=wide))
+    assert len(p.hints) <= 1  # found or not, the search stopped
+    deep: dict = {}
+    node = deep
+    for _ in range(200):
+        node["n"] = {}
+        node = node["n"]
+    node["dns.qry.name"] = "too.deep"
+    assert parse_packets(layers_json(x=deep))[0].hints == ()

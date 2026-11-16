@@ -5,7 +5,15 @@ from pathlib import Path
 from dash_fakes import FakePackets, alert
 from test_dash_routes import POST, make
 
-from snorty.packets import AlertPacket, Decoded, Failed, Launched, NotFound, Unavailable
+from snorty.packets import (
+    AlertPacket,
+    Decoded,
+    Failed,
+    Launched,
+    NotFound,
+    PacketView,
+    Unavailable,
+)
 from snorty.services import Services
 
 
@@ -117,3 +125,24 @@ def test_each_alert_row_loads_its_packet_when_opened(tmp_path: Path) -> None:
     html = c.get("/alerts").text
     assert f'hx-get="/alerts/{aid}/packet"' in html and 'hx-trigger="toggle once"' in html
     assert "alert-packet" in html and " style=" not in html
+
+
+def named(*hints: tuple[str, str]) -> AlertPacket:
+    view = PacketView(1, "0", "DNS", "a", "b", 60, "", (), "", hints)
+    return AlertPacket("exact", 1, b"x", Decoded((view,), limit=1))
+
+
+def test_the_packet_line_names_what_it_is_for_and_is_escaped(tmp_path: Path) -> None:
+    c, s, aid = stored(tmp_path)
+    packets(s).packet = named(("dns.qry.name", "<b>x</b>.test"))
+    html = c.get(f"/alerts/{aid}/packet").text
+    assert '<p class="hint">DNS lookup: &lt;b&gt;x&lt;/b&gt;.test</p>' in html
+    packets(s).packet = named()
+    assert 'class="hint"' not in c.get(f"/alerts/{aid}/packet").text
+
+
+def test_listing_alerts_does_not_look_at_any_packet(tmp_path: Path) -> None:
+    c, s, _ = stored(tmp_path)
+    c.get("/alerts")
+    c.get("/")
+    assert packets(s).alert_calls == [] and packets(s).calls == []

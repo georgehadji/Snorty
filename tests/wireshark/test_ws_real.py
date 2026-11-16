@@ -106,3 +106,46 @@ async def test_real_alert_packet_is_found_in_a_snort_style_log_and_decoded(tmp_p
     assert result.decoded.packets[0].dst == "10.0.0.9"
     parsed = read_pcap(result.pcap)
     assert parsed is not None and [f.data for f in parsed.frames] == [hit]
+
+
+def _dns_query(name: str) -> bytes:
+    labels = b"".join(bytes([len(p)]) + p.encode() for p in name.split("."))
+    return b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00" + labels + b"\x00\x00\x01\x00\x01"
+
+
+def _client_hello(host: str) -> bytes:
+    name = host.encode()
+    sni = b"\x00" + len(name).to_bytes(2, "big") + name
+    sni = len(sni).to_bytes(2, "big") + sni
+    ext = b"\x00\x00" + len(sni).to_bytes(2, "big") + sni
+    body = b"\x03\x03" + bytes(32) + b"\x00" + b"\x00\x02\x13\x01" + b"\x01\x00"
+    body += len(ext).to_bytes(2, "big") + ext
+    hs = b"\x01" + len(body).to_bytes(3, "big") + body
+    return b"\x16\x03\x01" + len(hs).to_bytes(2, "big") + hs
+
+
+async def test_real_tshark_finds_dns_sni_and_http_names(tmp_path: Path) -> None:
+    from snorty.packets import hint
+
+    assert TSHARK is not None
+    cases = {
+        "DNS lookup: api.openai.com": udp_packet(
+            "10.0.0.5", 50000, "10.0.0.9", 53, payload=_dns_query("api.openai.com")
+        ),
+        "TLS to example.org": tcp_packet(
+            "10.0.0.5", 50001, "10.0.0.9", 443, payload=_client_hello("example.org")
+        ),
+        "GET example.test/a?b=1": tcp_packet(
+            "10.0.0.5",
+            50002,
+            "10.0.0.9",
+            80,
+            payload=b"GET /a?b=1 HTTP/1.1\r\nHost: example.test\r\n\r\n",
+        ),
+    }
+    for expected, frame in cases.items():
+        pcap = tmp_path / "n.pcap"
+        pcap.write_bytes(build_pcap([frame]))
+        result = await TsharkDecoder(TSHARK).decode(pcap, limit=1)
+        assert isinstance(result, Decoded)
+        assert hint(result.packets[0]) == expected

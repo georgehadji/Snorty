@@ -163,6 +163,8 @@ Task 4.5 Confidence in the UI: `Exact` quiet, `Near`/`Ambiguous` show "closest m
 
 - **Acceptance:** table-driven extractor tests per protocol; no tshark call happens until a row is opened; the INFO alerts in the current data show a hostname when the packet has one.
 
+> **Progress (2026-11-16):** done. Q4 decided: on demand only, no new column (nothing to migrate or keep in step with the packet). The parser collects five named fields (`dns.qry.name`, `tls.handshake.extensions_server_name`, `http.host`, `http.request.method`, `http.request.uri`) from anywhere in tshark's JSON tree, through lists and past the 3-level display cap (TLS SNI sits 5 levels deep), bounded at 5000 nodes / depth 12 and skipping `*_raw`. `PacketView.hints` carries them; `packets.enrich.hint` (pure) turns them into one line ("DNS lookup: x", "TLS to x", "GET host/path") with control characters replaced. The line is the first thing in the packet block when a row is opened; the table itself calls nothing (tested). Real tshark confirms all three protocols on hand-built packets; the stored alerts are all ICMP, so they show no line.
+
 ### Phase 6 — Time-boxed capture (M)
 
 `wireshark.dumpcap.DumpcapRecorder` and `POST /lab/capture` (interface from the sensor's current choice via the existing `select_interface` hook in `compose`; duration 5–120 s, size cap 50 MB through `-a duration:N -a filesize:KB`). An in-flight guard returns "already capturing"; a fragment polls until done; the result is saved into the pcap folder with the existing name rules and appears in the Lab picker, then flows through phases 1–2.
