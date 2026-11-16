@@ -21,10 +21,10 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. E
 
 ## Task 3: shared wiring and Services (M)
 `src/snorty/compose.py`, `src/snorty/dashboard/services.py`, `src/snorty/sensor/__main__.py`, `tests/dashboard/dash_fakes.py`.
-- [ ] `compose(...)` builds bus, repository, sensor, rules service, notify (optional), journal (optional), lab service from paths and config, returning the parts plus start/stop helpers; the sensor CLI `run` uses it and behaves exactly as before
-- [ ] `Services` frozen dataclass (`sensor`, `rules`, `journal`, `lab`, `repo`, `bus`, `tz`, `data_dir`, `pcap_dir`) and `get_services` dependency
-- [ ] `dash_fakes.py`: fake sensor (status, start/stop/restart recording), rules, journal, lab with scripted results, in-memory repo helpers
-- [ ] Verify: `uv run pytest -q -m "not snort"` (all earlier tests unchanged and green); mypy strict clean
+- [x] `compose(...)` builds bus, repository, sensor, rules service, notify (optional), journal (optional), lab service and returns a `Runtime` with start/stop. Deviation: the sensor CLI is NOT moved onto it (its tests patch names inside `sensor/__main__.py`); sensor CLI left unchanged
+- [x] `Services` frozen dataclass (`sensor`, `rules`, `journal`, `lab`, `repo`, `bus`, `tz`, `data_dir`, `pcap_dir`) and `get_services` dependency
+- [x] `dash_fakes.py`: fake sensor (status, start/stop/restart recording), rules, journal, lab with scripted results, in-memory repo helpers
+- [x] Verify: `uv run pytest -q -m "not snort"` (all earlier tests unchanged and green); mypy strict clean
 - Dependencies: Task 1 · Files: `compose.py`, `services.py`, `sensor/__main__.py`, `dash_fakes.py`
 
 ### Checkpoint: Tasks 1-3
