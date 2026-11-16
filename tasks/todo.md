@@ -14,19 +14,19 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 2: Throttle (S)
 `src/snorty/notify/throttle.py`.
-- [ ] `Decision(show, same_sid, other)` frozen dataclass
-- [ ] `Throttle(window=300, cap=6, cap_window=60, max_sids=1000)`; `decide(sid, now)`:
+- [x] `Decision(show, same_sid, other)` frozen dataclass
+- [x] `Throttle(window=300, cap=6, cap_window=60, max_sids=1000)`; `decide(sid, now)`:
   - SID shown less than `window` ago gives `show=False` and counts for that SID
   - else if `cap` toasts were shown in the last `cap_window` seconds gives `show=False` and counts in the "other" tally
   - else `show=True` with this SID's suppressed count and the "other" tally, then both reset
-- [ ] A suppressed alert never extends the window (the window runs from the last shown toast)
-- [ ] Expired SID entries are removed; at most `max_sids` kept, oldest dropped first (tested with 1,500 SIDs)
-- [ ] 500 alerts of one SID inside the window give one show; the next one after the window reports `same_sid == 499`
-- [ ] Verify: `uv run pytest tests/notify/test_throttle.py -q`
+- [x] A suppressed alert never extends the window (the window runs from the last shown toast)
+- [x] Expired SID entries are removed; at most `max_sids` kept, oldest dropped first (tested with 1,500 SIDs)
+- [x] 500 alerts of one SID inside the window give one show; the next one after the window reports `same_sid == 499`
+- [x] Verify: `uv run pytest tests/notify/test_throttle.py -q`
 - Dependencies: none · Files: `throttle.py`, `tests/notify/test_throttle.py`
 
 ### Checkpoint: Tasks 1-2
-- [ ] Tests green; `uv run ruff check src tests`; `uv run mypy src/snorty/core src/snorty/snort src/snorty/sensor src/snorty/rules src/snorty/notify` clean (add `snorty.notify.*` to the strict override in `pyproject.toml`)
+- [x] Tests green; `uv run ruff check src tests`; `uv run mypy src/snorty/core src/snorty/snort src/snorty/sensor src/snorty/rules src/snorty/notify` clean (add `snorty.notify.*` to the strict override in `pyproject.toml`)
 
 ## Task 3: Port and adapters, dependency (M)
 `ports.py`; `pyproject.toml` via `uv add winotify`.

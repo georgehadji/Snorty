@@ -28,10 +28,10 @@ check.
 
 ### Phase 1: Pure logic
 - [x] Task 1: `Toast`, `sanitize`, `build_toast`
-- [ ] Task 2: `Throttle` and `Decision`
+- [x] Task 2: `Throttle` and `Decision`
 
 ### Checkpoint: Pure logic
-- [ ] All unit tests green; ruff and strict mypy clean on `snorty.notify`
+- [x] All unit tests green; ruff and strict mypy clean on `snorty.notify`
 
 ### Phase 2: Port and service
 - [ ] Task 3: `Notifier` port, `ConsoleNotifier`, `WinotifyNotifier`, add `winotify`
