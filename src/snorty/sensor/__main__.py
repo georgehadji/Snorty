@@ -10,6 +10,8 @@ from pathlib import Path
 from snorty.core.bus import EventBus, Subscription
 from snorty.core.events import AlertRaised, SensorStateChanged
 from snorty.core.repository import AlertRepository
+from snorty.notify.ports import Notifier, WinotifyNotifier
+from snorty.notify.service import NotifyService
 from snorty.sensor import Sensor, SensorConfig, SnortAdapter
 from snorty.snort.models import SnortPaths
 
@@ -27,7 +29,9 @@ async def _print_events(events: Subscription) -> None:
             )
 
 
-async def run(db: Path, interface_ip: str | None) -> int:
+async def run(
+    db: Path, interface_ip: str | None, *, notify: bool = False, notifier: Notifier | None = None
+) -> int:
     bus = EventBus()
     repo = AlertRepository(db)
     config = SensorConfig(paths=SnortPaths(), interface_ip=interface_ip)
@@ -40,8 +44,11 @@ async def run(db: Path, interface_ip: str | None) -> int:
         sleep=asyncio.sleep,
         tz=datetime.now().astimezone().tzinfo or UTC,
     )
+    toasts = NotifyService(bus, notifier or WinotifyNotifier()) if notify else None
     printer = asyncio.create_task(_print_events(bus.subscribe()))
     try:
+        if toasts:
+            await toasts.start()
         await sensor.start()
         print("sensor running; Ctrl+C to stop", flush=True)
         while sensor.state.name not in ("FAILED", "STOPPED"):
@@ -49,6 +56,8 @@ async def run(db: Path, interface_ip: str | None) -> int:
         return 1 if sensor.state.name == "FAILED" else 0
     finally:
         await asyncio.shield(sensor.stop())
+        if toasts:
+            await toasts.stop()
         await asyncio.sleep(0)  # let the printer show the final transitions
         printer.cancel()
         repo.close()
@@ -58,9 +67,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(prog="python -m snorty.sensor")
     parser.add_argument("--db", type=Path, default=Path("snorty.db"))
     parser.add_argument("--interface-ip", default=None, help="pin the capture interface by IP")
+    parser.add_argument("--notify", action="store_true", help="toast on priority-1 alerts")
     args = parser.parse_args()
     with contextlib.suppress(KeyboardInterrupt):
-        return asyncio.run(run(args.db, args.interface_ip))
+        return asyncio.run(run(args.db, args.interface_ip, notify=args.notify))
     return 0
 
 

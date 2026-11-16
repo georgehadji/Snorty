@@ -36,13 +36,13 @@ check.
 ### Phase 2: Port and service
 - [x] Task 3: `Notifier` port, `ConsoleNotifier`, `WinotifyNotifier`, add `winotify`
 - [x] Task 4: `NotifyService` (filter, throttle, build, show, counters)
-- [ ] Task 5: service resilience (notifier errors and timeouts, blocking notifier, stop, double start)
+- [x] Task 5: service resilience (notifier errors and timeouts, blocking notifier, stop, double start)
 
 ### Checkpoint: Service
-- [ ] Spec criteria 1-9 each covered by a passing test; unit suite under 3 s
+- [x] Spec criteria 1-9 each covered by a passing test; unit suite under 3 s
 
 ### Phase 3: CLI and real checks
-- [ ] Task 6: `python -m snorty.notify test`, `--notify` on the sensor CLI
+- [x] Task 6: `python -m snorty.notify test`, `--notify` on the sensor CLI
 - [ ] Task 7: manual real toast and real `--notify` run, close-out
 
 ### Checkpoint: Complete

@@ -49,24 +49,24 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 5: Service resilience and lifecycle (M)
 Same `service.py`; new tests in `tests/notify/test_service_resilience.py`.
-- [ ] A notifier that raises is logged; the next alert still gives a toast
-- [ ] A notifier that exceeds its timeout (raises `TimeoutError`) is logged; the next alert still gives a toast
-- [ ] A notifier that blocks forever does not slow `bus.publish` (1,000 publishes finish quickly) and the subscription queue drops oldest
-- [ ] `stop()` cancels the consumer, closes the subscription, and no toast is shown after it returns; `stop()` before `start()` and twice are harmless
-- [ ] `start()` twice does not double-subscribe (one toast per alert)
-- [ ] Verify: `uv run pytest tests/notify -q`
+- [x] A notifier that raises is logged; the next alert still gives a toast
+- [x] A notifier that exceeds its timeout (raises `TimeoutError`) is logged; the next alert still gives a toast
+- [x] A notifier that blocks forever does not slow `bus.publish` (1,000 publishes finish quickly) and the subscription queue drops oldest
+- [x] `stop()` cancels the consumer, closes the subscription, and no toast is shown after it returns; `stop()` before `start()` and twice are harmless
+- [x] `start()` twice does not double-subscribe (one toast per alert)
+- [x] Verify: `uv run pytest tests/notify -q`
 - Dependencies: Task 4 · Files: `service.py`, `test_service_resilience.py`
 
 ### Checkpoint: Tasks 3-5
-- [ ] Spec criteria 1-9 each covered by a passing test; whole notify unit suite under 3 s; ruff and strict mypy clean
+- [x] Spec criteria 1-9 each covered by a passing test; whole notify unit suite under 3 s; ruff and strict mypy clean
 
 ## Task 6: CLI and sensor wiring (M)
 `src/snorty/notify/__main__.py`; `src/snorty/sensor/__main__.py`.
-- [ ] `python -m snorty.notify test [--priority N] [--msg TEXT]` builds a sample alert and shows it through `WinotifyNotifier` (`--dry-run` uses `ConsoleNotifier`); exit 0, or 1 with the error if the toast failed
-- [ ] `python -m snorty.sensor --notify` creates a `NotifyService` on the same bus and starts it before the sensor, stops it after the sensor
-- [ ] `snorty.sensor` package modules (not `__main__`) do not import `snorty.notify` (grep-checked)
-- [ ] Unit tests with `--dry-run` and an injected notifier; the sensor CLI change is covered by a smoke test that builds the objects without starting Snort
-- [ ] Verify: `uv run pytest tests/notify tests/sensor -q -m "not snort"`
+- [x] `python -m snorty.notify test [--priority N] [--msg TEXT]` builds a sample alert and shows it through `WinotifyNotifier` (`--dry-run` uses `ConsoleNotifier`); exit 0, or 1 with the error if the toast failed
+- [x] `python -m snorty.sensor --notify` creates a `NotifyService` on the same bus and starts it before the sensor, stops it after the sensor
+- [x] `snorty.sensor` package modules (not `__main__`) do not import `snorty.notify` (grep-checked)
+- [x] Unit tests with `--dry-run` and an injected notifier; the sensor CLI change is covered by a smoke test that builds the objects without starting Snort
+- [x] Verify: `uv run pytest tests/notify tests/sensor -q -m "not snort"`
 - Dependencies: Tasks 3-5 · Files: `notify/__main__.py`, `sensor/__main__.py`, `tests/notify/test_notify_cli.py`
 
 ## Task 7: Real checks and close-out (S)
