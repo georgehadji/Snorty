@@ -145,3 +145,9 @@ def test_bad_input_is_refused(kwargs: dict[str, object]) -> None:
     args |= kwargs
     with pytest.raises(ValueError):
         make_frames(**args)  # type: ignore[arg-type]
+
+
+def test_a_pcap_over_50_mb_is_refused_before_any_packet_is_built() -> None:
+    """Each limit alone allows 10,000 x 60,000 bytes; the product must be capped too."""
+    with pytest.raises(ValueError, match="50 MB"):
+        make_frames("tcp", "10.0.0.1", 1, "10.0.0.2", 80, b"x" * 60_000, count=10_000)

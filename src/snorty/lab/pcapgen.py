@@ -7,6 +7,8 @@ from collections.abc import Sequence
 SYN, ACK, PSH = 0x02, 0x10, 0x08
 MAX_PAYLOAD = 60_000
 MAX_COUNT = 10_000
+MAX_TOTAL_BYTES = 50 * 1024 * 1024  # the same cap an uploaded pcap has
+_PER_PACKET_OVERHEAD = 70  # Ethernet, IPv4 and TCP headers plus the 16-byte record header
 
 _MAC_SRC = bytes([0, 0, 0, 0, 0, 1])
 _MAC_DST = bytes([0, 0, 0, 0, 0, 2])
@@ -109,6 +111,8 @@ def make_frames(
     """`count` data packets from src to dst, optionally after a TCP three-way handshake."""
     if not 1 <= count <= MAX_COUNT:
         raise ValueError(f"count must be 1 to {MAX_COUNT}")
+    if count * (len(payload) + _PER_PACKET_OVERHEAD) > MAX_TOTAL_BYTES:  # before any work is done
+        raise ValueError("the pcap would be over 50 MB: use fewer packets or a smaller payload")
     if proto == "udp":
         return [udp_packet(src, sport, dst, dport, payload) for _ in range(count)]
     if proto != "tcp":

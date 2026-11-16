@@ -1,5 +1,7 @@
 """Lab page: try rules against a pcap from data\\pcaps, without touching the live sensor."""
 
+import asyncio
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 
@@ -107,7 +109,8 @@ def add_lab_routes(app: FastAPI, ui: Ui) -> None:
             proto = form.get("proto", "")
             if proto not in _PROTOS:
                 raise ValueError("protocol must be tcp or udp")
-            name = pcaps.generate_pcap(
+            name = await asyncio.to_thread(  # building a big pcap is CPU work: keep it off the loop
+                pcaps.generate_pcap,
                 svc.pcap_dir,
                 form.get("name", ""),
                 proto=proto,
