@@ -184,3 +184,26 @@ async def test_database_error_loses_nothing(rig: Rig, monkeypatch: pytest.Monkey
     assert rig.sensor.state.name == "RUNNING"
     assert len(rig.raised()) == 1
     await rig.sensor.stop()
+
+
+def yearless(month_day: str) -> str:
+    """A line as Snort writes it: no year in the stamp."""
+    return (
+        f"{month_day}-23:30:12.000001  [**] [1:1000002:1] test rule [**] [Priority: 1] "
+        "{TCP} 10.0.0.1:1000 -> 10.0.0.2:80"
+    )
+
+
+def test_december_lines_read_in_january_belong_to_last_year(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    rig.sensor._wall = lambda: datetime(2027, 1, 2, 9, 0, tzinfo=UTC)
+    new, bad = rig.sensor._store_lines([yearless("12/30"), yearless("01/02")], 2027)
+    assert bad == 0
+    assert [a.ts.year for a in new] == [2026, 2027]
+
+
+def test_a_line_from_today_keeps_the_current_year(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    rig.sensor._wall = lambda: datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
+    new, _ = rig.sensor._store_lines([yearless("11/16"), yearless("11/15")], 2026)
+    assert [a.ts.year for a in new] == [2026, 2026]

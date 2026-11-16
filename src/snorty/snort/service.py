@@ -74,7 +74,14 @@ async def stop_live(proc: LiveProcess, *, timeout: float = 15) -> StopResult:
     """Ask Snort to stop with Ctrl+Break; kill only if it ignores that for `timeout` seconds."""
     if proc.returncode is not None:
         return StopResult("already_exited", proc.returncode)
-    proc.send_signal(signal.CTRL_BREAK_EVENT)
+    try:
+        proc.send_signal(signal.CTRL_BREAK_EVENT)
+    except OSError:
+        # No console to send Ctrl+Break from (pythonw, a service), or Snort just exited.
+        if proc.returncode is not None:
+            return StopResult("already_exited", proc.returncode)
+        proc.kill()
+        return StopResult("killed", await proc.wait())
     try:
         code = await asyncio.wait_for(proc.wait(), timeout)
     except TimeoutError:

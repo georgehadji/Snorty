@@ -16,7 +16,16 @@ from snorty.snort.service import CTRL_C_EXIT, start_live, stop_live
 
 
 class FakeProc:
-    def __init__(self, *, exits_on_signal: bool, returncode: int | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        exits_on_signal: bool,
+        returncode: int | None = None,
+        no_console: bool = False,
+        exit_during_signal: int | None = None,
+    ) -> None:
+        self.no_console = no_console
+        self.exit_during_signal = exit_during_signal
         self.returncode = returncode
         self.exits_on_signal = exits_on_signal
         self.signals: list[int] = []
@@ -25,6 +34,9 @@ class FakeProc:
 
     def send_signal(self, sig: int) -> None:
         self.signals.append(sig)
+        if self.no_console:
+            self.returncode = self.exit_during_signal
+            raise OSError(6, "The handle is invalid")
         if self.exits_on_signal:
             self.returncode = CTRL_C_EXIT
             self._done.set()
@@ -51,6 +63,19 @@ async def test_stop_kills_only_after_timeout() -> None:
     proc = FakeProc(exits_on_signal=False)
     result = await stop_live(proc, timeout=0.05)
     assert result.how == "killed" and proc.killed
+
+
+async def test_stop_without_a_console_falls_back_to_kill() -> None:
+    """pythonw has no console, so Ctrl+Break fails with WinError 6; Snort must still stop."""
+    proc = FakeProc(exits_on_signal=False, no_console=True)
+    result = await stop_live(proc, timeout=1)
+    assert result.how == "killed" and proc.killed
+
+
+async def test_stop_signal_error_after_snort_already_exited_is_not_a_kill() -> None:
+    proc = FakeProc(exits_on_signal=False, no_console=True, exit_during_signal=0)
+    result = await stop_live(proc, timeout=1)
+    assert result.how == "already_exited" and result.returncode == 0 and not proc.killed
 
 
 async def test_stop_already_exited_sends_nothing() -> None:

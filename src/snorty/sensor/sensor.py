@@ -2,7 +2,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, tzinfo
+from datetime import datetime, timedelta, tzinfo
 from pathlib import Path
 from typing import Literal
 
@@ -415,8 +415,12 @@ class Sensor:
         """Runs in a worker thread: parse and store. Returns (new alerts, unparsed count)."""
         alerts: list[Alert] = []
         bad = 0
+        now = self._wall()
         for text in lines:
             alert = parse_line(text, default_year=year, tz=self._tz)
+            if alert is not None and alert.ts > now + timedelta(days=1):
+                # Snort writes no year: a December line read in January is from last year.
+                alert = parse_line(text, default_year=year - 1, tz=self._tz)
             if alert is None:
                 bad += 1
                 log.warning("unparsed alert line: %.120s", text)
