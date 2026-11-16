@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 
 from snorty.dashboard import views
-from snorty.dashboard.jobs import Job
+from snorty.dashboard.jobs import Done, Errored, Idle, Job, Running
 from snorty.dashboard.security import valid_home_net, valid_sid
 from snorty.dashboard.services import Svc
 from snorty.dashboard.ui import Ui
@@ -48,14 +48,15 @@ def add_rules_routes(app: FastAPI, ui: Ui) -> None:
 
     @app.get("/rules/update/status", response_class=HTMLResponse)
     async def update_status(request: Request, svc: Svc) -> HTMLResponse:
-        if update_job.running:
-            return running(request)
-        if update_job.error:
-            msg = views.Message(False, update_job.error)
-        elif update_job.result is not None:
-            msg = views.update_message(update_job.result)
-        else:
-            return ui.page(request, "_update_status.html", state="idle")
+        match update_job.state:
+            case Running():
+                return running(request)
+            case Idle():
+                return ui.page(request, "_update_status.html", state="idle")
+            case Errored(message=why):
+                msg = views.Message(False, why)
+            case Done(result=report):
+                msg = views.update_message(report)
         summary = views.rules_summary(await svc.rules.status())
         return ui.page(
             request, "_update_status.html", state="done", msg=msg, rules=summary, oob=True

@@ -1,6 +1,6 @@
 import asyncio
 
-from snorty.dashboard.jobs import Job
+from snorty.dashboard.jobs import Done, Errored, Idle, Job, Running
 
 
 async def test_start_runs_the_work_and_keeps_the_result() -> None:
@@ -78,3 +78,31 @@ async def test_cancel_stops_a_running_job_and_is_safe_when_idle() -> None:
     await started.wait()
     await job.cancel()
     assert not job.running and job.result is None
+
+
+async def test_the_state_is_one_value_that_carries_its_own_payload() -> None:
+    job: Job[int] = Job()
+    assert job.state == Idle()
+    gate = asyncio.Event()
+
+    async def slow() -> int:
+        await gate.wait()
+        return 7
+
+    job.start(slow)
+    assert job.state == Running()
+    gate.set()
+    await job.wait()
+    assert job.state == Done(7)
+
+    async def boom() -> int:
+        raise RuntimeError("x")
+
+    job.start(boom)
+    await job.wait()
+    assert isinstance(job.state, Errored) and job.state.message
+
+    job.start(slow)
+    gate.clear()
+    await job.cancel()
+    assert job.state == Idle()  # a cancelled job has neither a result nor an error

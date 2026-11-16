@@ -4,8 +4,29 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class Idle:
+    """Never started, or cancelled before it finished."""
+
+
+@dataclass(frozen=True, slots=True)
+class Running:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class Errored:
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
+class Done[T]:
+    result: T
 
 
 class Job[T]:
@@ -17,6 +38,15 @@ class Job[T]:
     @property
     def running(self) -> bool:
         return self._task is not None and not self._task.done()
+
+    @property
+    def state(self) -> Idle | Running | Errored | Done[T]:
+        """Where the job is, as one value that carries its own message or result."""
+        if self.running:
+            return Running()
+        if self.error is not None:
+            return Errored(self.error)
+        return Idle() if self.result is None else Done(self.result)
 
     def start(self, work: Callable[[], Awaitable[T]]) -> bool:
         """Begin `work` unless one is already running; False means nothing was started."""
