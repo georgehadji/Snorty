@@ -2,5 +2,6 @@
 
 from snorty.wireshark.discover import Tools, find_tools
 from snorty.wireshark.tshark import TsharkDecoder
+from snorty.wireshark.viewer import WiresharkViewer
 
-__all__ = ["Tools", "TsharkDecoder", "find_tools"]
+__all__ = ["Tools", "TsharkDecoder", "WiresharkViewer", "find_tools"]

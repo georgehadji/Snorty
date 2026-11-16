@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Protocol
 
-from snorty.packets.models import DecodeResult, SummaryResult, Unavailable
+from snorty.packets.models import DecodeResult, LaunchResult, SummaryResult, Unavailable
 
 NOT_FOUND = (
     "Wireshark (tshark) was not found. Install Wireshark, or set wireshark_dir in snorty.toml."
@@ -26,3 +26,21 @@ class NoDecoder:
 
     async def summarize(self, pcap: Path) -> SummaryResult:
         return Unavailable(NOT_FOUND)
+
+
+NOT_FOUND_VIEWER = (
+    "The Wireshark program was not found. Install Wireshark, or set wireshark_dir in snorty.toml."
+)
+
+
+class Viewer(Protocol):
+    """Opens a pcap in a viewer that outlives the request."""
+
+    async def open(self, pcap: Path) -> LaunchResult: ...
+
+
+class NoViewer:
+    """Used when the viewer is not installed."""
+
+    async def open(self, pcap: Path) -> LaunchResult:
+        return Unavailable(NOT_FOUND_VIEWER)

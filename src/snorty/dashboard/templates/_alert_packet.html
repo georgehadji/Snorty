@@ -1,0 +1,15 @@
+<div class="alert-packet">
+{% if view.state == "missing" %}
+  <p class="note">{{ view.note }}</p>
+{% elif view.state == "error" %}
+  <p class="error">{{ view.note }}</p>
+{% else %}
+  <p class="muted">{{ view.note }}</p>
+  <p class="actions">
+    <a class="button small" href="/alerts/{{ view.alert_id }}/packet.pcap" download>Download pcap</a>
+    {% if view.can_open %}<button type="button" class="small" hx-post="/alerts/{{ view.alert_id }}/open" hx-target="#flash" hx-swap="outerHTML">Open in Wireshark</button>{% endif %}
+  </p>
+  {% if view.packet %}{% set p = view.packet %}{% include "_packet_body.html" %}
+  {% elif view.why %}<p class="note">{{ view.why }}</p>{% endif %}
+{% endif %}
+</div>

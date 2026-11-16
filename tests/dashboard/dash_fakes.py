@@ -11,10 +11,14 @@ from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabJob, LabResult
 from snorty.notify.service import NotifyStatus
 from snorty.packets import (
+    AlertPacket,
+    AlertPacketResult,
     Capabilities,
     Conversation,
     Decoded,
     DecodeResult,
+    Launched,
+    LaunchResult,
     Layer,
     PacketView,
     ProtocolRow,
@@ -184,6 +188,10 @@ class FakePackets:
     def __init__(self) -> None:
         self.calls: list[tuple[Path, int]] = []
         self.summaries: list[Path] = []
+        self.alert_calls: list[Alert] = []
+        self.open_calls: list[Alert] = []
+        self.can_open = True
+        self.launch: LaunchResult = Launched()
         self.summary: SummaryResult = Summary(
             (ProtocolRow("frame", 0, 3, 229), ProtocolRow("tcp", 1, 2, 154)),
             (Conversation("TCP", "10.0.0.5:40000", "10.0.0.9:80", 2, "154 bytes", "0.0010"),),
@@ -204,9 +212,18 @@ class FakePackets:
             ),
             limit=200,
         )
+        self.packet: AlertPacketResult = AlertPacket("exact", 1, b"PCAPDATA", self.result)
 
     def capabilities(self) -> Capabilities:
-        return Capabilities(decode=True)
+        return Capabilities(decode=True, open=self.can_open)
+
+    async def alert_packet(self, alert: Alert) -> AlertPacketResult:
+        self.alert_calls.append(alert)
+        return self.packet
+
+    async def open_alert_packet(self, alert: Alert) -> LaunchResult:
+        self.open_calls.append(alert)
+        return self.launch
 
     async def decode(self, pcap: Path, limit: int = 200) -> DecodeResult:
         self.calls.append((pcap, limit))

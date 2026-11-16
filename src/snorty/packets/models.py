@@ -1,6 +1,7 @@
 """What the packets module hands to the UI: plain frozen data, no tool types."""
 
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,5 +85,34 @@ SummaryResult = Summary | Unavailable | Failed
 
 
 @dataclass(frozen=True, slots=True)
+class AlertPacket:
+    """The packet behind an alert, found in Snort's own packet log."""
+
+    confidence: Literal["exact", "near", "ambiguous"]
+    candidates: int  # how many frames fitted; more than one means the choice was a guess
+    pcap: bytes  # a classic pcap holding just this frame: what Download serves
+    decoded: DecodeResult  # the frame decoded; Unavailable or Failed when tshark cannot
+
+
+@dataclass(frozen=True, slots=True)
+class NotFound:
+    """The packet is not in the logs; `reason` says why in words."""
+
+    reason: str
+
+
+AlertPacketResult = AlertPacket | NotFound | Failed
+
+
+@dataclass(frozen=True, slots=True)
+class Launched:
+    """The viewer was started; it runs on its own from here."""
+
+
+LaunchResult = Launched | Unavailable | Failed
+
+
+@dataclass(frozen=True, slots=True)
 class Capabilities:
     decode: bool
+    open: bool = False

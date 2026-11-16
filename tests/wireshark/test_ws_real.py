@@ -84,3 +84,25 @@ async def test_real_tshark_accepts_and_applies_the_alert_filters(tmp_path: Path)
         out, err = await proc.communicate()
         assert proc.returncode == 0, err.decode()
         assert len(out.split()) == count, expression
+
+
+async def test_real_alert_packet_is_found_in_a_snort_style_log_and_decoded(tmp_path: Path) -> None:
+    from snorty.packets import AlertPacket, PacketService
+    from snorty.packets.match import alert_us
+    from snorty.packets.pcapfile import Frame, read_pcap, write_pcap
+
+    assert TSHARK is not None
+    when = datetime(2026, 11, 16, 20, 19, 15, 169220, tzinfo=UTC)
+    alert = Alert(when, 1, 1000, 1, "m", None, 1, "TCP", "10.0.0.5", 40000, "10.0.0.9", 80, "raw")
+    ns = alert_us(alert) * 1000
+    hit = tcp_packet("10.0.0.5", 40000, "10.0.0.9", 80, payload=b"GET / HTTP/1.1")
+    other = udp_packet("10.0.0.5", 5353, "10.0.0.9", 9999, payload=b"hi")
+    frames = [Frame(ns - 3_000_000_000, len(other), other), Frame(ns, len(hit), hit)]
+    (tmp_path / f"snort.log.{int(when.timestamp()) - 30}").write_bytes(write_pcap(frames))
+    service = PacketService(TsharkDecoder(TSHARK), snort_logs=tmp_path)
+    result = await service.alert_packet(alert)
+    assert isinstance(result, AlertPacket) and result.confidence == "exact"
+    assert isinstance(result.decoded, Decoded) and len(result.decoded.packets) == 1
+    assert result.decoded.packets[0].dst == "10.0.0.9"
+    parsed = read_pcap(result.pcap)
+    assert parsed is not None and [f.data for f in parsed.frames] == [hit]

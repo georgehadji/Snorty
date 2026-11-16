@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
@@ -18,6 +18,7 @@ class Alert:
     dst_ip: str
     dst_port: int | None
     raw: str  # original line, the idempotency key
+    id: int = field(default=0, compare=False)  # database row id; 0 until the alert is stored
 
 
 @dataclass(frozen=True, slots=True)

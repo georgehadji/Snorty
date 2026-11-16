@@ -185,3 +185,22 @@ def test_old_priority_zero_rows_are_moved_to_the_lowest_level(tmp_path: Path) ->
         conn.commit()
     with closing(AlertRepository(db)) as repo:
         assert [a.priority for a in repo.query()] == [3]
+
+
+def test_stored_alerts_carry_the_row_id_and_get_finds_one(repo: AlertRepository) -> None:
+    repo.add(make_alert(1))
+    repo.add(make_alert(2))
+    stored = repo.query()
+    assert sorted(a.id for a in stored) == [1, 2]
+    for alert in stored:
+        assert repo.get(alert.id) == alert and repo.get(alert.id).raw == alert.raw  # type: ignore[union-attr]
+    assert repo.get(999) is None
+
+
+def test_add_new_gives_each_new_alert_its_id_and_the_id_is_not_part_of_equality(
+    repo: AlertRepository,
+) -> None:
+    new = repo.add_new([make_alert(1), make_alert(2)])
+    assert [a.id for a in new] == [1, 2]
+    assert new == [make_alert(1), make_alert(2)]  # ids ignored when comparing
+    assert repo.get(new[1].id) == new[1]

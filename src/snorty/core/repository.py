@@ -2,6 +2,7 @@ import sqlite3
 import threading
 from collections import Counter
 from collections.abc import Iterable
+from dataclasses import replace
 from datetime import UTC, datetime, tzinfo
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,7 @@ CREATE TABLE IF NOT EXISTS alerts (
 CREATE INDEX IF NOT EXISTS alerts_ts ON alerts (ts);
 CREATE INDEX IF NOT EXISTS alerts_sid ON alerts (sid);
 """
+_SELECT = "id, "
 _COLUMNS = (
     "ts, gid, sid, rev, msg, classification, priority, proto, "
     "src_ip, src_port, dst_ip, dst_port, raw"
@@ -49,7 +51,8 @@ def _row(a: Alert) -> tuple[Any, ...]:
 
 
 def _alert(r: tuple[Any, ...]) -> Alert:
-    return Alert(datetime.fromisoformat(r[0]).astimezone(), *r[1:])
+    alert = Alert(datetime.fromisoformat(r[1]).astimezone(), *r[2:])
+    return replace(alert, id=r[0])
 
 
 def _range(since: datetime | None, until: datetime | None) -> tuple[str, list[Any]]:
@@ -99,8 +102,9 @@ class AlertRepository:
             self._conn.execute("BEGIN")
             try:
                 for alert in alerts:
-                    if self._conn.execute(sql, _row(alert)).rowcount == 1:
-                        new.append(alert)
+                    cur = self._conn.execute(sql, _row(alert))
+                    if cur.rowcount == 1:
+                        new.append(replace(alert, id=cur.lastrowid or 0))
             except BaseException:
                 self._conn.execute("ROLLBACK")
                 raise
@@ -129,10 +133,18 @@ class AlertRepository:
             args.append(min_priority)
         if extra:
             where += (" AND " if where else " WHERE ") + " AND ".join(extra)
-        sql = f"SELECT {_COLUMNS} FROM alerts{where} ORDER BY ts DESC, id DESC LIMIT ? OFFSET ?"
+        order = "ORDER BY ts DESC, id DESC LIMIT ? OFFSET ?"
+        sql = f"SELECT {_SELECT}{_COLUMNS} FROM alerts{where} {order}"
         with self._lock:
             rows = self._conn.execute(sql, [*args, limit, offset]).fetchall()
         return [_alert(r) for r in rows]
+
+    def get(self, alert_id: int) -> Alert | None:
+        """One stored alert by its row id, or None."""
+        sql = f"SELECT {_SELECT}{_COLUMNS} FROM alerts WHERE id = ?"
+        with self._lock:
+            row = self._conn.execute(sql, [alert_id]).fetchone()
+        return _alert(row) if row else None
 
     def count(
         self,

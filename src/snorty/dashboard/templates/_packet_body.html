@@ -1,0 +1,3 @@
+{% for layer in p.layers %}<h3>{{ layer.name }}</h3>
+<dl class="detail">{% for k, v in layer.fields %}<dt class="mono">{{ k }}</dt><dd>{{ v }}</dd>{% endfor %}</dl>{% endfor %}
+{% if p.hexdump %}<h3>Bytes</h3><pre class="hex mono">{{ p.hexdump }}</pre>{% endif %}

@@ -12,10 +12,13 @@ from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabResult
 from snorty.notify.service import NotifyStatus
 from snorty.packets import (
+    AlertPacket,
+    AlertPacketResult,
     Conversation,
     Decoded,
     DecodeResult,
     Failed,
+    NotFound,
     PacketView,
     ProtocolRow,
     Summary,
@@ -120,6 +123,7 @@ class AlertRow:
     first_time: str = ""  # time of the oldest alert in a group
     first_epoch: int = 0  # the oldest alert of a group, in seconds
     raw: str = ""  # the alert line as Snort wrote it
+    id: int = 0  # database row id; 0 when the alert is not stored
     packet_filter: str = ""  # Wireshark display filter for this packet; empty if none
     conversation_filter: str = ""  # the same for both directions
     span: str = ""  # how long the group lasted, e.g. "12 min"; empty under a minute
@@ -138,6 +142,7 @@ def alert_row(a: Alert, tz: tzinfo) -> AlertRow:
         dst=endpoint(a.dst_ip, a.dst_port),
         classification=a.classification or "",
         raw=a.raw,
+        id=a.id,
         packet_filter=alert_filter(a) or "",
         conversation_filter=conversation_filter(a) or "",
         iso=a.ts.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -399,3 +404,34 @@ def summary_view(result: SummaryResult) -> SummaryView:
             return SummaryView("unavailable", why)
         case Failed(message=why):
             return SummaryView("error", why)
+
+
+@dataclass(frozen=True, slots=True)
+class AlertPacketView:
+    state: Literal["ok", "missing", "error"]
+    note: str  # how sure the match is, or why there is no packet
+    alert_id: int = 0
+    packet: PacketView | None = None  # the decoded frame, when tshark could decode it
+    why: str = ""  # why there is no decoded view although the packet was found
+    can_open: bool = False  # the Wireshark program is installed
+
+
+def alert_packet_view(result: AlertPacketResult, alert_id: int, can_open: bool) -> AlertPacketView:
+    match result:
+        case NotFound(reason=why):
+            return AlertPacketView("missing", why)
+        case Failed(message=why):
+            return AlertPacketView("error", why)
+        case AlertPacket(confidence=how, candidates=n, decoded=decoded):
+            note = {
+                "exact": "The packet Snort logged for this alert.",
+                "near": f"Closest packet in the Snort log ({_plural(n, 'candidate')} within 2 s).",
+                "ambiguous": f"{n} different packets share this moment; showing the closest.",
+            }[how]
+            match decoded:
+                case Decoded(packets=(first, *_)):
+                    return AlertPacketView("ok", note, alert_id, first, "", can_open)
+                case Unavailable(reason=why) | Failed(message=why):
+                    return AlertPacketView("ok", note, alert_id, None, why, can_open)
+                case _:
+                    return AlertPacketView("ok", note, alert_id, None, "", can_open)

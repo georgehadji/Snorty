@@ -116,6 +116,7 @@ Snorty is built for a trusted single-user PC, and it keeps its exposure small:
 - The lab only allows `alert`, `log` and `pass` rules, runs them in a temporary copy of the config, and takes pcaps by name from one folder, never by path.
 - Rule archives are read safely: only `*.rules` files are taken, and your local rule files are never overwritten.
 - The journal writes only under `Security/Snort/` and refuses links that point outside the vault.
+- Wireshark and tshark are started with a fixed argument list, never through a shell. "Open in Wireshark" opens a one-packet file Snorty wrote itself, never a path from the browser, and the button only appears when Wireshark is installed.
 
 Do not expose the dashboard to a network.
 

@@ -23,7 +23,7 @@ from snorty.rules.service import RulesService
 from snorty.sensor import Sensor, SensorConfig, SnortAdapter
 from snorty.services import Services
 from snorty.snort import Interface, SnortPaths, SubprocessRunner
-from snorty.wireshark import TsharkDecoder, find_tools
+from snorty.wireshark import TsharkDecoder, WiresharkViewer, find_tools
 
 
 @dataclass(slots=True)
@@ -95,6 +95,11 @@ def compose(
         JournalService(bus, repo, journal_store, JournalConfig(tz=tz)) if journal_store else None
     )
     tools = find_tools(configured=wireshark_dir, env=os.environ)
-    packets = PacketService(TsharkDecoder(tools.tshark) if tools.tshark else NoDecoder())
+    packets = PacketService(
+        TsharkDecoder(tools.tshark) if tools.tshark else NoDecoder(),
+        WiresharkViewer(tools.wireshark) if tools.wireshark else None,
+        snort_logs=paths.log_dir,
+        scratch=data_dir / "opened",
+    )
     services = Services(sensor, rules, journal, toasts, lab, repo, bus, tz, data_dir, packets)
     return Runtime(services, toasts, journal)

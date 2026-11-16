@@ -9,6 +9,7 @@ from pathlib import Path
 @dataclass(frozen=True, slots=True)
 class Tools:
     tshark: Path | None = None
+    wireshark: Path | None = None  # the program with a window, next to tshark
 
 
 def find_tools(
@@ -30,6 +31,13 @@ def find_tools(
             folders.append(Path(base) / "Wireshark")
     for folder in folders:
         if is_file(folder / "tshark.exe"):
-            return Tools(tshark=folder / "tshark.exe")
+            return Tools(folder / "tshark.exe", _gui(folder, is_file))
     found = which("tshark")
-    return Tools(tshark=Path(found) if found else None)
+    if not found:
+        return Tools()
+    return Tools(Path(found), _gui(Path(found).parent, is_file))
+
+
+def _gui(folder: Path, is_file: Callable[[Path], bool]) -> Path | None:
+    exe = folder / "Wireshark.exe"
+    return exe if is_file(exe) else None

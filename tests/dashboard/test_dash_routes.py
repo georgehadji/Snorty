@@ -107,7 +107,7 @@ def test_alert_rows_open_to_show_detail_and_the_page_has_a_theme_button(tmp_path
     c, s = make(tmp_path)
     s.repo.add(alert(2001, ts=T0 + timedelta(minutes=10)))
     html = c.get("/alerts").text
-    assert "<details><summary" in html and "Alert line" in html and "Protocol" in html
+    assert "<details" in html and "<summary" in html and "Alert line" in html
     assert 'id="theme"' in html
 
 
