@@ -9,6 +9,10 @@ def interfaces_command(paths: SnortPaths) -> list[str]:
     return [str(paths.exe), "-W"]
 
 
+def tasklist_command(pid: int) -> list[str]:
+    return ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"]
+
+
 def check_command(paths: SnortPaths, iface: Interface, *, conf: Path | None = None) -> list[str]:
     # -T fails without -i on this Snort build ("Active response: can't open ip!").
     return [str(paths.exe), "-T", "-i", str(iface.index), "-c", str(conf or paths.conf)]

@@ -1,4 +1,5 @@
 import asyncio
+import csv
 import re
 import signal
 import subprocess
@@ -9,7 +10,13 @@ from typing import Protocol
 
 from snorty.core.models import Alert
 from snorty.core.parser import parse_line
-from snorty.snort.commands import check_command, interfaces_command, live_command, pcap_command
+from snorty.snort.commands import (
+    check_command,
+    interfaces_command,
+    live_command,
+    pcap_command,
+    tasklist_command,
+)
 from snorty.snort.interfaces import parse_interfaces
 from snorty.snort.models import ConfigCheck, Interface, SnortError, SnortPaths, StopResult
 from snorty.snort.runner import Runner
@@ -148,3 +155,15 @@ async def _run_pcap_in(
     lines = alert_file.read_text(errors="replace").splitlines()
     parsed = (parse_line(ln, default_year=year, tz=tz) for ln in lines)
     return [a for a in parsed if a is not None]
+
+
+async def is_snort_running(pid: int, runner: Runner) -> bool:
+    """True if `pid` is a live snort.exe. Anything unexpected counts as not running."""
+    try:
+        result = await runner(tasklist_command(pid), timeout=15)
+    except SnortError:
+        return False
+    for row in csv.reader(result.stdout.splitlines()):
+        if len(row) >= 2 and row[0].lower() == "snort.exe" and row[1] == str(pid):
+            return True
+    return False
