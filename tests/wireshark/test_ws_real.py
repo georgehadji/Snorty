@@ -1,12 +1,15 @@
 """Runs the real tshark on a generated pcap. Skipped when Wireshark is not installed."""
 
+import asyncio
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from snorty.core.models import Alert
 from snorty.lab.pcapgen import build_pcap, tcp_packet, udp_packet
-from snorty.packets import Decoded, Summary
+from snorty.packets import Decoded, Summary, alert_filter, conversation_filter
 from snorty.wireshark import TsharkDecoder, find_tools
 
 TSHARK = find_tools(env=os.environ).tshark
@@ -50,3 +53,34 @@ async def test_real_tshark_reports_a_file_it_cannot_read(tmp_path: Path) -> None
     junk.write_bytes(b"this is not a capture file" * 4)
     result = await TsharkDecoder(TSHARK).summarize(junk)
     assert not isinstance(result, Summary) or not result.protocols
+
+
+async def test_real_tshark_accepts_and_applies_the_alert_filters(tmp_path: Path) -> None:
+    assert TSHARK is not None
+    hit = tcp_packet("10.0.0.5", 40000, "10.0.0.9", 80, payload=b"x")
+    reply = tcp_packet("10.0.0.9", 80, "10.0.0.5", 40000, payload=b"y")
+    other = tcp_packet("10.0.0.7", 1, "10.0.0.8", 2, payload=b"z")
+    pcap = tmp_path / "f.pcap"
+    pcap.write_bytes(build_pcap([hit, reply, other]))
+    when = datetime(2026, 11, 16, tzinfo=UTC)
+    alert = Alert(when, 1, 1, 1, "m", None, 1, "TCP", "10.0.0.5", 40000, "10.0.0.9", 80, "")
+    expected = {alert_filter(alert): 1, conversation_filter(alert): 2}
+    for expression, count in expected.items():
+        assert expression is not None
+        proc = await asyncio.create_subprocess_exec(
+            str(TSHARK),
+            "-r",
+            str(pcap),
+            "-n",
+            "-Y",
+            expression,
+            "-T",
+            "fields",
+            "-e",
+            "frame.number",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        out, err = await proc.communicate()
+        assert proc.returncode == 0, err.decode()
+        assert len(out.split()) == count, expression

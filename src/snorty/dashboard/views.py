@@ -21,6 +21,8 @@ from snorty.packets import (
     Summary,
     SummaryResult,
     Unavailable,
+    alert_filter,
+    conversation_filter,
 )
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
@@ -118,6 +120,8 @@ class AlertRow:
     first_time: str = ""  # time of the oldest alert in a group
     first_epoch: int = 0  # the oldest alert of a group, in seconds
     raw: str = ""  # the alert line as Snort wrote it
+    packet_filter: str = ""  # Wireshark display filter for this packet; empty if none
+    conversation_filter: str = ""  # the same for both directions
     span: str = ""  # how long the group lasted, e.g. "12 min"; empty under a minute
 
 
@@ -134,6 +138,8 @@ def alert_row(a: Alert, tz: tzinfo) -> AlertRow:
         dst=endpoint(a.dst_ip, a.dst_port),
         classification=a.classification or "",
         raw=a.raw,
+        packet_filter=alert_filter(a) or "",
+        conversation_filter=conversation_filter(a) or "",
         iso=a.ts.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         epoch=int(a.ts.timestamp()),
         first_epoch=int(a.ts.timestamp()),

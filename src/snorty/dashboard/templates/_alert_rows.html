@@ -6,7 +6,7 @@
   <td class="when"><time class="rel" datetime="{{ r.iso }}" title="{{ r.time }}">{{ r.time }}</time></td>
   <td><span class="badge p{{ r.priority }}">P{{ r.priority }}</span></td>
   <td><details><summary title="{{ r.msg }}">{{ r.msg_short }}{% if r.count > 1 %} <span class="count" title="first seen {{ r.first_time }}">×{{ r.count }}{% if r.span %} over {{ r.span }}{% endif %}</span>{% endif %}</summary>
-    <dl class="detail"><dt>Rule</dt><dd>{{ r.msg }}</dd><dt>Protocol</dt><dd>{{ r.proto }}</dd>{% if r.classification %}<dt>Class</dt><dd>{{ r.classification }}</dd>{% endif %}<dt>Alert line</dt><dd class="mono">{{ r.raw }}</dd></dl></details></td>
+    <dl class="detail"><dt>Rule</dt><dd>{{ r.msg }}</dd><dt>Protocol</dt><dd>{{ r.proto }}</dd>{% if r.classification %}<dt>Class</dt><dd>{{ r.classification }}</dd>{% endif %}<dt>Alert line</dt><dd class="mono">{{ r.raw }}</dd>{% if r.packet_filter %}<dt>Packet filter</dt><dd class="filter"><code class="mono">{{ r.packet_filter }}</code> <button type="button" class="small" data-copy="{{ r.packet_filter }}" aria-label="Copy the packet filter">Copy</button></dd><dt>Conversation filter</dt><dd class="filter"><code class="mono">{{ r.conversation_filter }}</code> <button type="button" class="small" data-copy="{{ r.conversation_filter }}" aria-label="Copy the conversation filter">Copy</button></dd>{% endif %}</dl></details></td>
   <td class="mono">{{ r.src }}</td>
   <td class="mono">{{ r.dst }}</td>
   <td class="mono">{{ r.sid }}</td>

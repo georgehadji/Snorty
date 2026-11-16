@@ -173,6 +173,21 @@ document.addEventListener("htmx:beforeSwap", (event) => {
     });
   }
 
+  // Copy buttons (data-copy): put the text on the clipboard, say so on the button.
+  document.addEventListener("click", async (e) => {
+    const btn = e.target instanceof Element ? e.target.closest("button[data-copy]") : null;
+    if (!btn) return;
+    const label = btn.textContent;
+    let ok = true;
+    try { await navigator.clipboard.writeText(btn.dataset.copy || ""); } catch (_) { ok = false; }
+    if (!ok) {
+      const code = btn.parentElement && btn.parentElement.querySelector("code");
+      if (code) window.getSelection().selectAllChildren(code);
+    }
+    btn.textContent = ok ? "Copied" : "Press Ctrl+C";
+    setTimeout(() => { btn.textContent = label; }, 1500);
+  });
+
   refreshTimes();
   setInterval(refreshTimes, 30000);
   if (window.EventSource) connect();

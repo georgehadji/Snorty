@@ -111,6 +111,16 @@ def test_alert_rows_open_to_show_detail_and_the_page_has_a_theme_button(tmp_path
     assert 'id="theme"' in html
 
 
+def test_alert_detail_offers_copyable_wireshark_filters(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    s.repo.add(alert(2001, ts=T0 + timedelta(minutes=10)))
+    html = c.get("/alerts").text
+    packet = "ip.src == 10.0.0.1 &amp;&amp; ip.dst == 10.0.0.2 &amp;&amp; tcp.srcport == 4444"
+    assert packet in html and "Conversation filter" in html and "ip.addr == 10.0.0.1" in html
+    assert html.count("data-copy=") == 2 and 'aria-label="Copy the packet filter"' in html
+    assert "Copy the conversation filter" in html
+
+
 def test_templates_use_no_inline_style_attributes() -> None:
     """The CSP (default-src 'self') blocks them, so they would silently do nothing."""
     root = Path("src/snorty/dashboard/templates")

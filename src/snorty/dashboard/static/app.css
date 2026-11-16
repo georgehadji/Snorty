@@ -156,8 +156,12 @@ dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 /* Alert detail: a row opens to show what the table leaves out. */
 summary { cursor: pointer; }
 details[open] > summary { margin-bottom: var(--s2); }
-dl.detail { margin: 0 0 var(--s1); font-size: 13px; }
-dl.detail dd { margin: 0; }
+/* Stacked (label above value): the table cell is narrow, a side-by-side grid squeezes the value. */
+dl.detail { grid-template-columns: 1fr; gap: 0; margin: 0 0 var(--s1); font-size: 13px; }
+dl.detail dt { margin-top: var(--s2); font-size: 12px; }
+dl.detail dd { margin: 0; overflow-wrap: anywhere; }
+dl.detail dd.filter { display: flex; gap: var(--s2); align-items: baseline; flex-wrap: wrap; }
+dl.detail dd.filter code { overflow-wrap: anywhere; }
 
 /* The sensor card keeps its buttons on the bottom edge when the row makes it taller. */
 .sensor { display: flex; flex-direction: column; }

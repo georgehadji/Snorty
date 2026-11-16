@@ -137,6 +137,8 @@ Reuses Phase 1. After **Check/Run**, the Lab result gains "What the pcap contain
 
 ### Phase 3 — Display-filter helper (S, no external tool)
 
+> **Progress (2026-11-16):** done. `alert_filter` and `conversation_filter` return `str | None` (None for an unparseable or mixed-family address). Addresses go through `ipaddress` (an IPv6 `%scope` is dropped), ports are range-checked, protocols come from a fixed table, so no alert text is ever pasted into a filter; a seeded fuzz test checks that. A real-tshark test confirms both filters compile and select 1 packet and 2 packets. Alert detail shows both with Copy buttons (`data-copy`, one delegated handler in `app.js`; falls back to selecting the text). The alert detail list is now stacked (label above value) because the table cell is narrow.
+
 `packets.filters`: `alert_filter(alert)`, `conversation_filter(alert)` (both directions), proto-aware (`tcp.port`, `udp.port`, `icmp`). Rendered in the alert detail as a copyable code line (copy button uses existing JS, no inline script). Works even when Wireshark is absent.
 
 - **Acceptance:** property tests show IPv4/IPv6 and port edge cases never yield a malformed or injectable filter; the string equals what the launcher passes in phase 4.
