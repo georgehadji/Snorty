@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import pytest
+
+from snorty.sensor import tail
 from snorty.sensor.tail import TailState, read_new_lines
 
 
@@ -59,3 +62,18 @@ def test_rotation_drops_a_stale_partial_line(tmp_path: Path) -> None:
     assert state.pending != b""
     f.write_bytes(b"x\n")
     assert read_new_lines(f, state).lines == ["x"]
+
+
+def test_a_large_file_is_read_in_chunks_without_losing_or_splitting_lines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Memory is bounded by MAX_CHUNK, not by the size of alert.ids."""
+    monkeypatch.setattr(tail, "MAX_CHUNK", 64)
+    f = tmp_path / "a.ids"
+    f.write_bytes(b"".join(f"line {i}\n".encode() for i in range(50)))
+    state, got, reads = TailState(), [], 0
+    while (result := read_new_lines(f, state)).lines:
+        got += result.lines
+        state, reads = result.state, reads + 1
+    assert got == [f"line {i}" for i in range(50)]
+    assert reads > 1

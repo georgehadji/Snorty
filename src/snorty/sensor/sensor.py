@@ -252,7 +252,8 @@ class Sensor:
         if not self._backlog_done:
             # Read what is already in alert.ids *before* Snort can add to it, so an alert
             # written right after startup is never mistaken for backlog.
-            await self._poll_once()
+            while await self._poll_once():  # one chunk at a time: bounded memory, lock released
+                pass
             self._backlog_done = True
         try:
             proc = await self._port.start(chosen)
@@ -392,9 +393,10 @@ class Sensor:
             log.exception("final alert pass failed")
             self._last_error = repr(e)
 
-    async def _poll_once(self) -> None:
-        """Read new lines, store them, announce the new ones. The tail position only
-        advances after a successful store, so a database error loses no lines."""
+    async def _poll_once(self) -> bool:
+        """Read one chunk of new lines, store them, announce the new ones. The tail position
+        only advances after a successful store, so a database error loses no lines.
+        Returns whether any lines were read, so a caller can loop until the file is consumed."""
         result = await asyncio.to_thread(read_new_lines, self._alert_path, self._tail)
         if result.rotated:
             log.warning("alert file was rotated or truncated; reading it from the start")
@@ -410,6 +412,7 @@ class Sensor:
                 for alert in new:
                     self._bus.publish(AlertRaised(alert))
         self._tail = result.state
+        return bool(result.lines)
 
     def _store_lines(self, lines: list[str], year: int) -> tuple[list[Alert], int]:
         """Runs in a worker thread: parse and store. Returns (new alerts, unparsed count)."""

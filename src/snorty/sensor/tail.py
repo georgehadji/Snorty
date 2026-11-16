@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+MAX_CHUNK = 8 * 1024 * 1024  # bytes read per call, so a huge backlog is never held in memory
+
 
 @dataclass(frozen=True, slots=True)
 class TailState:
@@ -16,7 +18,8 @@ class TailResult:
 
 
 def read_new_lines(path: Path, state: TailState) -> TailResult:
-    """Return the complete lines added since `state`.
+    """Return the complete lines added since `state`, at most MAX_CHUNK bytes' worth.
+    Call again until it returns no lines to read the rest.
 
     A file shorter than our offset counts as rotated or truncated and is re-read from 0.
     A rotated file that has already grown past the old offset is not detected (V1 limit).
@@ -30,7 +33,7 @@ def read_new_lines(path: Path, state: TailState) -> TailResult:
         state = TailState()
     with path.open("rb") as fh:
         fh.seek(state.offset)
-        data = fh.read()
+        data = fh.read(MAX_CHUNK)
     parts = (state.pending + data).split(b"\n")
     lines = [p.decode("utf-8", errors="replace").rstrip("\r") for p in parts[:-1]]
     return TailResult(

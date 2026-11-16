@@ -10,6 +10,7 @@ from fakes import FakeClock, FakePort
 from snorty.core.bus import EventBus, Subscription
 from snorty.core.events import AlertRaised
 from snorty.core.repository import AlertRepository
+from snorty.sensor import tail
 from snorty.sensor.config import SensorConfig
 from snorty.sensor.sensor import Sensor
 from snorty.snort.models import SnortPaths
@@ -207,3 +208,15 @@ def test_a_line_from_today_keeps_the_current_year(tmp_path: Path) -> None:
     rig.sensor._wall = lambda: datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
     new, _ = rig.sensor._store_lines([yearless("11/16"), yearless("11/15")], 2026)
     assert [a.ts.year for a in new] == [2026, 2026]
+
+
+async def test_a_backlog_larger_than_one_chunk_is_stored_whole_and_not_announced(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(tail, "MAX_CHUNK", 500)  # a few lines per read
+    rig.append(*(line(n) for n in range(40)))
+    await rig.sensor.start()
+    assert rig.stored() == 40 and rig.raised() == []
+    rig.append(line(99))
+    await eventually(lambda: len(rig.raised()) == 1)  # live alerts still announced
+    await rig.sensor.stop()
