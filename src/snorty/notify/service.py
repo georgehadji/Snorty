@@ -57,7 +57,14 @@ class NotifyService:
         """Subscribe, then start consuming. Events published after this returns are seen."""
         if self._task is not None:
             return
-        self._sub = self._bus.subscribe(maxsize=1000)
+        # Only toast-worthy alerts enter the queue, so a flood of low-priority ones cannot
+        # push a priority-1 alert out of it before the consumer reads it.
+        self._sub = self._bus.subscribe(
+            maxsize=1000,
+            accept=lambda e: (
+                isinstance(e, AlertRaised) and e.alert.priority <= self._config.min_priority
+            ),
+        )
         self._task = asyncio.create_task(self._consume(self._sub), name="notify-consumer")
 
     async def stop(self) -> None:

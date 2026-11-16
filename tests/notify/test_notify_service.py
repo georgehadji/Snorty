@@ -101,3 +101,12 @@ async def test_start_subscribes_before_it_returns() -> None:
     raise_alert(rig.bus, make_alert())  # published immediately after start()
     await settle(lambda: len(rig.notifier.toasts) == 1)
     await rig.service.stop()
+
+
+async def test_a_flood_of_low_priority_alerts_cannot_evict_a_priority_one_alert(rig: Rig) -> None:
+    """The queue holds 1000: a priority-1 alert published first must survive 1200 others."""
+    raise_alert(rig.bus, make_alert(1000002, priority=1))
+    for n in range(1200):
+        raise_alert(rig.bus, make_alert(2000000 + n, priority=2))
+    await settle(lambda: len(rig.notifier.toasts) == 1)
+    assert rig.notifier.toasts[0].title.endswith("rule 1000002")

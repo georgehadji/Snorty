@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from snorty.core.bus import EventBus, Subscription
 from snorty.core.events import Event, RulesUpdated, SensorStateChanged
 
@@ -84,3 +86,23 @@ async def test_close_twice_is_harmless() -> None:
     sub.close()
     sub.close()
     assert [e async for e in sub] == []
+
+
+async def test_rejected_events_never_enter_the_queue_or_push_others_out() -> None:
+    bus = EventBus()
+    sub = bus.subscribe(
+        maxsize=2, accept=lambda e: isinstance(e, RulesUpdated) and e.rule_count == 0
+    )
+    bus.publish(ev(0))
+    for i in range(1, 100):
+        bus.publish(ev(i))  # rejected: must not evict the first event
+    assert sub.dropped == 0
+    assert await take(sub, 1) == [ev(0)]
+
+
+async def test_the_first_drop_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    bus = EventBus()
+    bus.subscribe(maxsize=1)
+    for i in range(5):
+        bus.publish(ev(i))
+    assert [r.levelname for r in caplog.records if r.name == "snorty.bus"] == ["WARNING"]
