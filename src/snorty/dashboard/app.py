@@ -1,25 +1,27 @@
 """The FastAPI app: routes are thin, each calls one service and renders a template."""
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from snorty.core.events import AlertRaised, Event, SensorStateChanged
 from snorty.dashboard import views
+from snorty.dashboard.rules_routes import add_rules_routes
 from snorty.dashboard.security import SecurityMiddleware
-from snorty.dashboard.services import Services, get_services
+from snorty.dashboard.services import Services, Svc
 from snorty.dashboard.sse import HEARTBEAT_SECONDS, Render, sse_frames
+from snorty.dashboard.ui import Ui
 
 _HERE = Path(__file__).parent
-Svc = Annotated[Services, Depends(get_services)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,18 +70,24 @@ def build_app(
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     heartbeat: float = HEARTBEAT_SECONDS,
 ) -> FastAPI:
-    app = FastAPI(title="Snorty", docs_url=None, redoc_url=None, openapi_url=None)
+    ui: Ui
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        yield
+        for cleanup in ui.cleanups:
+            await cleanup()
+
+    app = FastAPI(
+        title="Snorty", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
+    )
     app.state.services = services
     app.add_middleware(SecurityMiddleware, token=token, port=port)
     app.mount("/static", StaticFiles(directory=_HERE / "static"), name="static")
     templates = Jinja2Templates(directory=_HERE / "templates")
     templates.env.globals["token"] = token
-
-    def page(request: Request, name: str, *, status: int = 200, **context: object) -> HTMLResponse:
-        return templates.TemplateResponse(request, name, context, status_code=status)
-
-    def fragment(name: str, **context: object) -> str:
-        return templates.get_template(name).render(context)
+    ui = Ui(templates)
+    page, fragment = ui.page, ui.fragment
 
     def renderer(svc: Services, f: views.AlertFilters) -> Render:
         async def render(event: Event) -> tuple[str, str] | None:
@@ -154,4 +162,5 @@ def build_app(
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
         )
 
+    add_rules_routes(app, ui)
     return app

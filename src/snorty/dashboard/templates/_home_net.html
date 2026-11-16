@@ -1,0 +1,13 @@
+<section id="home-net-card" class="card"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <h2>HOME_NET</h2>
+  <dl>
+    <dt>Current</dt><dd class="mono">{{ home[0] }}</dd>
+    <dt>Default</dt><dd class="mono">{{ home[1] }}</dd>
+  </dl>
+  <form class="filters" hx-post="/rules/home-net" hx-target="#flash" hx-swap="outerHTML">
+    <label>New value
+      <input name="value" placeholder="empty = default" autocomplete="off" maxlength="200">
+    </label>
+    <button type="submit">Apply</button>
+  </form>
+</section>

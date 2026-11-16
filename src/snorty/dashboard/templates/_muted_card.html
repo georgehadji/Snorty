@@ -1,0 +1,19 @@
+<section id="muted-card" class="card"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <h2>Muted rules</h2>
+  {% if muted %}
+  <table>
+    <thead><tr><th>SID</th><th>Note</th><th></th></tr></thead>
+    <tbody>
+      {% for m in muted %}
+      <tr>
+        <td class="mono">{{ m.sid }}</td>
+        <td>{{ m.note }}</td>
+        <td><button class="small" hx-post="/rules/unmute/{{ m.sid }}?view=rules" hx-target="#flash" hx-swap="outerHTML">Unmute</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No muted rules.</p>
+  {% endif %}
+</section>

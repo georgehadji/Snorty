@@ -3,9 +3,9 @@
 from dataclasses import dataclass
 from datetime import tzinfo
 from pathlib import Path
-from typing import Protocol
+from typing import Annotated, Protocol
 
-from fastapi import Request
+from fastapi import Depends, Request
 
 from snorty.core.bus import EventBus
 from snorty.core.repository import AlertRepository
@@ -76,3 +76,6 @@ class Services:
 def get_services(request: Request) -> Services:
     services: Services = request.app.state.services
     return services
+
+
+Svc = Annotated[Services, Depends(get_services)]

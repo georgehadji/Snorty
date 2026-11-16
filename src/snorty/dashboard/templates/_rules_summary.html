@@ -1,4 +1,4 @@
-<dl id="rules-summary">
+<dl id="rules-summary"{% if oob %} hx-swap-oob="true"{% endif %}>
   <dt>Last update</dt><dd>{{ rules.updated }}</dd>
   <dt>Rule count</dt><dd>{{ rules.count }}</dd>
   {% if rules.result %}<dt>Result</dt><dd>{{ rules.result }}</dd>{% endif %}

@@ -11,6 +11,7 @@ TOKEN_HEADER = "x-snorty-token"
 MAX_FORM_BYTES = 256 * 1024
 _MAX_SID = 2**31 - 1
 _RANGES = ("1h", "24h", "7d", "all")
+_HOME_NET = re.compile(r"[A-Za-z0-9_.:/,!$\[\] ]{1,200}")
 _PCAP_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,58}\.pcap")
 _RESERVED = {
     "con",
@@ -45,6 +46,16 @@ def valid_priority(text: str) -> int:
 def valid_range(text: str) -> str:
     if text not in _RANGES:
         raise ValueError("range must be one of 1h, 24h, 7d, all")
+    return text
+
+
+def valid_home_net(text: str) -> str:
+    """A Snort address list such as `[10.0.0.0/8,192.168.0.0/16]` or `any`; no line breaks."""
+    text = text.strip()
+    if not _HOME_NET.fullmatch(text):
+        raise ValueError(
+            "HOME_NET: letters, digits and . : / , ! $ [ ] only, at most 200 characters"
+        )
     return text
 
 

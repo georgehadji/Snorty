@@ -1,5 +1,5 @@
 {% if error %}
-<tr class="empty"><td colspan="6" class="error">{{ error }}</td></tr>
+<tr class="empty"><td colspan="7" class="error">{{ error }}</td></tr>
 {% else %}
 {% for r in rows %}
 <tr class="p{{ r.priority }}" data-alert>
@@ -9,11 +9,12 @@
   <td class="mono">{{ r.src }}</td>
   <td class="mono">{{ r.dst }}</td>
   <td class="mono">{{ r.sid }}</td>
+  <td><button class="small" hx-post="/rules/mute/{{ r.sid }}" hx-target="#flash" hx-swap="outerHTML" title="Mute rule {{ r.sid }}">Mute</button></td>
 </tr>
 {% else %}
-{% if not paged %}<tr class="empty none"><td colspan="6">No alerts yet.</td></tr>{% endif %}
+{% if not paged %}<tr class="empty none"><td colspan="7">No alerts yet.</td></tr>{% endif %}
 {% endfor %}
 {% if more %}
-<tr id="more" class="empty"><td colspan="6"><button hx-get="/alerts/rows?{{ more }}" hx-target="#more" hx-swap="outerHTML">Load more</button></td></tr>
+<tr id="more" class="empty"><td colspan="7"><button hx-get="/alerts/rows?{{ more }}" hx-target="#more" hx-swap="outerHTML">Load more</button></td></tr>
 {% endif %}
 {% endif %}

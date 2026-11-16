@@ -1,5 +1,6 @@
 """Test doubles for the dashboard: fake services that record calls and return scripted data."""
 
+import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -96,9 +97,15 @@ class FakeRules:
         self.home = ("[10.0.0.0/8]", "default")
         self.update_report = UpdateReport("updated", 1234, "abc", 0, "1234 rules")
         self.edit_report = EditReport(True, True, "done")
+        self.delay = 0.0
+        self.update_error = False
 
     async def update(self, *, force: bool = False) -> UpdateReport:
         self.calls.append(("update", force))
+        if self.delay:
+            await asyncio.sleep(self.delay)
+        if self.update_error:
+            raise RuntimeError("secret internals")
         return self.update_report
 
     async def status(self) -> RulesState:

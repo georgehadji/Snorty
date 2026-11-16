@@ -12,6 +12,7 @@ from snorty.dashboard.security import (
     origin_allowed,
     parse_form,
     token_ok,
+    valid_home_net,
     valid_pcap_name,
     valid_priority,
     valid_range,
@@ -226,3 +227,19 @@ def test_token_in_the_query_string_does_not_count() -> None:
 def test_post_to_healthz_still_needs_the_token() -> None:
     with make_client() as c:
         assert c.post("/healthz").status_code == 403
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["any", "[10.0.0.0/8,192.168.0.0/16]", "$EXTERNAL_NET", "![10.0.0.0/8]", "fe80::/10", " any "],
+)
+def test_good_home_net(text: str) -> None:
+    assert valid_home_net(text) == text.strip()
+
+
+@pytest.mark.parametrize(
+    "text", ["", "   ", "any\ninclude /x", "a\ry", "a;b", "x" * 201, "$(calc)", "any #c", "é"]
+)
+def test_bad_home_net(text: str) -> None:
+    with pytest.raises(ValueError):
+        valid_home_net(text)

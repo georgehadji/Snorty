@@ -122,3 +122,8 @@ input, select, textarea {
   background: var(--surface);
   color: var(--text);
 }
+.flash { padding: 8px 12px; border-radius: 6px; margin: 0 0 12px; border: 1px solid var(--line); background: var(--surface); }
+.flash.ok { color: var(--ok); border-color: var(--ok); }
+.flash.bad { color: var(--bad); border-color: var(--bad); }
+button.small { padding: 1px 10px; font-size: 13px; }
+label.check { flex-direction: row; align-items: center; gap: 6px; }

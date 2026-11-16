@@ -1,0 +1,8 @@
+{% if state == "running" %}
+<div id="update-status" class="flash" role="status" hx-get="/rules/update/status" hx-trigger="every 1s" hx-swap="outerHTML">{% if already %}An update is already running. {% endif %}Updating: download, check with Snort, swap in. This can take a few minutes.</div>
+{% elif state == "done" %}
+<div id="update-status" class="flash {{ 'ok' if msg.ok else 'bad' }}" role="status">{{ msg.text }}</div>
+{% if rules %}{% include "_rules_summary.html" %}{% endif %}
+{% else %}
+<div id="update-status" role="status"></div>
+{% endif %}

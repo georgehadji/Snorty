@@ -3,7 +3,16 @@ from datetime import UTC, timedelta, timezone
 import pytest
 from dash_fakes import T0, alert, status
 
-from snorty.dashboard.views import alert_row, endpoint, fmt_time, rules_summary, sensor_card
+from snorty.dashboard.views import (
+    alert_row,
+    edit_message,
+    endpoint,
+    fmt_time,
+    rules_summary,
+    sensor_card,
+    update_message,
+)
+from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
 from snorty.sensor import State
 from snorty.snort.models import Interface
@@ -84,3 +93,23 @@ def test_rules_summary() -> None:
     assert (s.updated, s.count, s.result) == ("2026-11-16 03:00:00", "42", "ok")
     never = rules_summary(RulesState())
     assert (never.updated, never.count, never.result) == ("never", "unknown", "")
+
+
+def test_edit_message_says_whether_snort_restarted() -> None:
+    done = EditReport(True, True, "muted 2001")
+    assert edit_message(done, sensor_was_running=True).text == (
+        "Done: muted 2001. The sensor was restarted to load it."
+    )
+    assert "next time the sensor starts" in edit_message(done, sensor_was_running=False).text
+    same = edit_message(EditReport(True, False, "no change"), sensor_was_running=True)
+    assert (same.ok, same.text) == (True, "Nothing to change.")
+    bad = edit_message(EditReport(False, False, "snort -T failed"), sensor_was_running=True)
+    assert (bad.ok, bad.text) == (False, "Failed: snort -T failed")
+
+
+def test_update_message_per_outcome() -> None:
+    assert update_message(UpdateReport("updated", 5, "x", 0, "5 rules")).text.startswith("Updated:")
+    assert "Restart the sensor" in update_message(UpdateReport("updated", 5, "x", 0, "d")).text
+    assert update_message(UpdateReport("up_to_date", 5, "x", 0, "same md5")).ok
+    failed = update_message(UpdateReport("failed", None, None, 0, "no network"))
+    assert (failed.ok, failed.text) == (False, "Update failed: no network")

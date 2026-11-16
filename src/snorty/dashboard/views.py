@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 
 from snorty.core.models import Alert
 from snorty.dashboard.security import valid_priority, valid_range, valid_sid
+from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
 from snorty.sensor import SensorStatus, State
 
@@ -157,3 +158,31 @@ def rules_summary(state: RulesState) -> RulesSummary:
         count=str(state.rule_count) if state.rule_count is not None else "unknown",
         result=state.result or "",
     )
+
+
+@dataclass(frozen=True, slots=True)
+class Message:
+    ok: bool
+    text: str
+
+
+def edit_message(report: EditReport, *, sensor_was_running: bool) -> Message:
+    """Say what a mute, unmute or HOME_NET change did, including whether Snort was restarted."""
+    if not report.ok:
+        return Message(False, f"Failed: {report.detail}")
+    if not report.changed:
+        return Message(True, "Nothing to change.")
+    tail = (
+        "The sensor was restarted to load it."
+        if sensor_was_running
+        else "It takes effect the next time the sensor starts."
+    )
+    return Message(True, f"Done: {report.detail}. {tail}")
+
+
+def update_message(report: UpdateReport) -> Message:
+    if report.outcome == "failed":
+        return Message(False, f"Update failed: {report.detail}")
+    if report.outcome == "up_to_date":
+        return Message(True, f"Already up to date: {report.detail}")
+    return Message(True, f"Updated: {report.detail}. Restart the sensor to load the new rules.")

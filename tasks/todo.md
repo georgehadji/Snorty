@@ -61,10 +61,10 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. E
 
 ## Task 7: Rules page and Mute (M)
 `templates/rules.html`, `_rules_card.html`, `views.py`, `app.py`, tests.
-- [ ] `GET /rules`: last update, rule count, last error, muted list with Unmute, HOME_NET with form
-- [ ] `POST /rules/update` (`force` checkbox): returns a running fragment at once and polls until done; a second click while running returns "already running" and calls the service once
-- [ ] `POST /rules/mute/{sid}`, `/unmute/{sid}`, `POST /rules/home-net` (set or reset): show the `EditReport` including whether Snort restarted; bad sid or bad HOME_NET gives an inline message; Mute button on Alerts rows works
-- [ ] Verify: `uv run pytest tests/dashboard -q`
+- [x] `GET /rules`: last update, rule count, last error, muted list with Unmute, HOME_NET with form
+- [x] `POST /rules/update` (`force` checkbox): returns a running fragment at once and polls until done; a second click while running returns "already running" and calls the service once
+- [x] `POST /rules/mute/{sid}`, `/unmute/{sid}`, `POST /rules/home-net` (set or reset): show the `EditReport` including whether Snort restarted; bad sid or bad HOME_NET gives an inline message; Mute button on Alerts rows works
+- [x] Verify: `uv run pytest tests/dashboard -q`
 - Dependencies: Tasks 4, 5 · Files: 4-5
 
 ## Task 8: daily rules update (S)
