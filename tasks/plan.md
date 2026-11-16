@@ -35,7 +35,7 @@ flag on the sensor CLI, then the manual real-vault check.
 - [x] All unit tests green; ruff and strict mypy clean on `snorty.journal`
 
 ### Phase 2: Port and service
-- [ ] Task 3: `NoteStore`, `VaultNoteStore`, `MemoryNoteStore`
+- [x] Task 3: `NoteStore`, `VaultNoteStore`, `MemoryNoteStore`
 - [ ] Task 4: `JournalService` (dirty days, flush, start regeneration, stop flush)
 - [ ] Task 5: resilience and paging (failed write retry, no-write when unchanged, cap, non-blocking publish)
 

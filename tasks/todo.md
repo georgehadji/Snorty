@@ -26,11 +26,11 @@ Same `render.py` (or `merge.py` if it grows).
 
 ## Task 3: Port and adapters (M)
 `src/snorty/journal/ports.py`.
-- [ ] `NoteStore` Protocol: `read(day) -> str | None`, `write(day, text) -> None`
-- [ ] `MemoryNoteStore` (dict, records writes)
-- [ ] `VaultNoteStore(vault_root)`: path `<vault>/Security/Snort/YYYY-MM-DD.md`; creates `Security/Snort/` if missing; refuses a missing vault root; resolves the target and refuses anything outside the folder (`..`, absolute, symlink where the OS allows); writes a temp file in the same folder then `os.replace`; UTF-8, `\n` newlines
-- [ ] Tests on a real temp folder, including escape attempts, atomic write (no temp file left, old text intact if the write fails), missing root
-- [ ] Verify: `uv run pytest tests/journal/test_journal_store.py -q`
+- [x] `NoteStore` Protocol: `read(day) -> str | None`, `write(day, text) -> None`
+- [x] `MemoryNoteStore` (dict, records writes)
+- [x] `VaultNoteStore(vault_root)`: path `<vault>/Security/Snort/YYYY-MM-DD.md`; creates `Security/Snort/` if missing; refuses a missing vault root; resolves the target and refuses anything outside the folder (`..`, absolute, symlink where the OS allows); writes a temp file in the same folder then `os.replace`; UTF-8, `\n` newlines
+- [x] Tests on a real temp folder, including escape attempts, atomic write (no temp file left, old text intact if the write fails), missing root
+- [x] Verify: `uv run pytest tests/journal/test_journal_store.py -q`
 - Dependencies: Task 2 · Files: `ports.py`, `tests/journal/test_journal_store.py`
 
 ## Task 4: JournalService (M)
