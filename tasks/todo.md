@@ -1,83 +1,110 @@
-# Tasks: rule-lab
+# Tasks: dashboard
 
-Plan: [plan.md](plan.md) · Spec: [SPEC-rule-lab.md](../SPEC-rule-lab.md)
-Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one commit.
+Plan: [plan.md](plan.md) · Spec: [SPEC-dashboard.md](../SPEC-dashboard.md)
+Order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. Each task is one TDD cycle and one commit.
 
-## Task 1: lint (M)
-`src/snorty/lab/__init__.py`, `lint.py`; add `snorty.lab.*` to the strict mypy override.
-- [x] `lint(text) -> LintResult(rules: tuple[LabRule(line, sid, msg)], problems: tuple[Problem(line, message)])`; line numbers are 1-based lines of the user's text; `ok` is true when there are no problems
-- [x] Accepts `alert`/`log`/`pass` rules, blank lines, `#` comments, CRLF and LF; a rule may span lines ended with a trailing backslash (reported at its first line)
-- [x] Refuses with a line number: any other line (`include`, `var`, `config`, `preprocessor`, `drop`, `reject`, free text), a rule with no `sid`, a duplicate `sid`, control characters or NUL
-- [x] Refuses text over 64 KB and more than 200 rules, with one problem (line 0) saying why, without scanning the whole text first
-- [x] `msg` is read from `msg:"..."` when present (for the result table), else empty
-- [x] Verify: `uv run pytest tests/lab/test_lab_lint.py -q`
-- Dependencies: none · Files: `lint.py`, `tests/lab/test_lab_lint.py`
+## Task 1: dependencies, package, config (S)
+`pyproject.toml`, `src/snorty/dashboard/__init__.py`, `config.py`, `tests/dashboard/test_dash_config.py`.
+- [ ] `uv add fastapi uvicorn jinja2` and `uv add --dev httpx`; add `snorty.dashboard.*` and `snorty.compose` to the strict mypy override; `uv.lock` updated
+- [ ] `DashConfig` frozen dataclass: `port=8765`, `interface_ip=None`, `vault=None`, `notify=True`, `journal=True`, `autostart_sensor=False`, `rules_update_at="03:00"`, `data_dir=%LOCALAPPDATA%\Snorty`
+- [ ] `load_config(data_dir, overrides) -> DashConfig` reads `snorty.toml` with `tomllib`; missing file gives defaults; unknown key, wrong type, port out of range, bad `HH:MM` give a clear `ConfigError`; empty `rules_update_at` disables; overrides win
+- [ ] Verify: `uv run pytest tests/dashboard/test_dash_config.py -q`; `uv run ruff check src tests`
+- Dependencies: none · Files: `pyproject.toml`, `uv.lock`, `config.py`, test
 
-## Task 2: build_lab_conf (S)
-`src/snorty/lab/conf.py`.
-- [x] `build_lab_conf(live_conf_text, rules_path) -> str` removes every `include $RULE_PATH/<x>.rules`, `include $PREPROC_RULE_PATH/<x>.rules` and `include threshold.conf` line (any spacing, any case of the keyword) and appends `include <rules_path>` as the last line
-- [x] Every other byte is kept, including line endings and comments; commented-out includes stay commented
-- [x] A path with whitespace raises `ValueError` (assumption 8; the service turns it into `error`)
-- [x] Golden test on a small sample conf; counts of removed lines asserted
-- [x] Verify: `uv run pytest tests/lab/test_lab_conf.py -q`
-- Dependencies: none · Files: `conf.py`, `tests/lab/test_lab_conf.py`
+## Task 2: security (M)
+`security.py`, `tests/dashboard/test_dash_security.py`.
+- [ ] Pure validators raising `ValueError` with a user-safe message: `valid_sid`, `valid_priority` (1-3), `valid_range` (1h/24h/7d/all), `valid_pcap_name` (`[A-Za-z0-9._-]{1,64}`, ends `.pcap`, no leading dot), `parse_form(body: bytes) -> dict[str, str]` (`parse_qs`, size cap, one value per key)
+- [ ] `host_allowed(host, port)`, `origin_allowed(origin, host)`, `token_ok(given, expected)` (constant-time compare); `new_token()` random 32 bytes hex
+- [ ] ASGI middleware class: 400 on bad Host; 403 on non-GET without the token or with a foreign Origin; `GET /healthz` token-exempt; adds CSP (`default-src 'self'; frame-ancestors 'none'`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` to every response, errors included
+- [ ] Verify: `uv run pytest tests/dashboard/test_dash_security.py -q`
+- Dependencies: Task 1 · Files: `security.py`, test
 
-## Task 3: pcap generator (M)
-`src/snorty/lab/pcapgen.py`.
-- [x] `build_pcap(frames: Sequence[bytes], start: float = 0.0, step: float = 0.001) -> bytes`: classic libpcap, little-endian, Ethernet link type, snaplen 65535
-- [x] `tcp_packet(src, sport, dst, dport, payload, *, seq, ack, flags)` and `udp_packet(...)`: Ethernet + IPv4 + TCP/UDP frames; IP header checksum correct; payload kept byte for byte
-- [x] `tcp_session(src, sport, dst, dport, payload, handshake)` gives the frame list: payload only, or SYN, SYN-ACK, ACK, then data; `count` copies option on the data packet
-- [x] Tests read the result back with a small reader in the test file (global header, record headers, frame lengths, IP/TCP/UDP fields, payload)
-- [x] Rejects invalid IPs and ports with `ValueError`
-- [x] Verify: `uv run pytest tests/lab/test_lab_pcapgen.py -q`
-- Dependencies: none · Files: `pcapgen.py`, `tests/lab/test_lab_pcapgen.py`
+## Task 3: shared wiring and Services (M)
+`src/snorty/compose.py`, `src/snorty/dashboard/services.py`, `src/snorty/sensor/__main__.py`, `tests/dashboard/dash_fakes.py`.
+- [ ] `compose(...)` builds bus, repository, sensor, rules service, notify (optional), journal (optional), lab service from paths and config, returning the parts plus start/stop helpers; the sensor CLI `run` uses it and behaves exactly as before
+- [ ] `Services` frozen dataclass (`sensor`, `rules`, `journal`, `lab`, `repo`, `bus`, `tz`, `data_dir`, `pcap_dir`) and `get_services` dependency
+- [ ] `dash_fakes.py`: fake sensor (status, start/stop/restart recording), rules, journal, lab with scripted results, in-memory repo helpers
+- [ ] Verify: `uv run pytest -q -m "not snort"` (all earlier tests unchanged and green); mypy strict clean
+- Dependencies: Task 1 · Files: `compose.py`, `services.py`, `sensor/__main__.py`, `dash_fakes.py`
 
 ### Checkpoint: Tasks 1-3
-- [x] Tests green; `uv run ruff check src tests`; `uv run mypy src/snorty/core src/snorty/snort src/snorty/sensor src/snorty/rules src/snorty/notify src/snorty/journal src/snorty/lab` clean
+- [ ] Unit suite green; `uv run ruff check src tests`; mypy on all strict modules clean; sensor CLI test file passes without edits
 
-## Task 4: Models, summarize, pipeline (L)
-`models.py`, `service.py`, `tests/lab/lab_fakes.py`. Read `snorty.snort.service.check_config`, `run_pcap`, `pick_interface` first; adapt only if needed (with a test in `tests/snort`).
-- [x] `LabJob(rules_text, pcap)`, `RuleHit(sid, msg, line, count)`, `LabResult(ok, problems, error, hits, matches)` frozen dataclasses
-- [x] `summarize(rules, alerts) -> tuple[RuleHit, ...]` (one hit per lab rule in rule order, zero counts included); matches sorted by time then sid
-- [x] `LabService(paths, runner, *, tz, year)`; `run(job)`: lint stop, then pcap checks (missing, not a file, over 50 MB), then sandbox, `check_config` stop, `run_pcap`, summarize
-- [x] Snort rule errors naming `lab.rules(N)` become `Problem(N, text)`; other `-T` errors become `error`
-- [x] `run_pcap` failures and `SnortError` become `error` with Snort's last lines
-- [x] Fake `Runner` scripts the `-T` and `-r` calls and writes a fixture `alert.ids` into the `-l` folder
-- [x] Verify: `uv run pytest tests/lab/test_lab_service.py -q`
-- Dependencies: Tasks 1-2 · Files: `models.py`, `service.py`, `lab_fakes.py`, `test_lab_service.py`
+## Task 4: app skeleton and Overview (L)
+`app.py`, `views.py`, `templates/base.html`, `overview.html`, `_sensor_card.html`, `static/htmx.min.js`, `static/app.css`, tests `test_dash_views.py`, `test_dash_routes.py`.
+- [ ] `build_app(services, *, token, port) -> FastAPI`: security middleware, Jinja2 env (autoescape on), static mount, `GET /healthz`, `GET /`, `POST /sensor/start|stop|restart`
+- [ ] htmx downloaded once from its official release, version pinned, SHA-256 recorded in a comment file `static/htmx.VERSION`; token set once on `<body hx-headers>`
+- [ ] `views.sensor_card(status)`: state, since, restarts, last error, which buttons are enabled per state (no `IllegalTransition` path reachable from the UI)
+- [ ] Overview: sensor card, counts last hour and today, top 5 rules today, last 10 alerts, placeholders for rules and journal summary
+- [ ] Tests: page 200 with content; each POST calls the service once; disabled buttons per state; missing token 403; bad Host 400
+- [ ] Verify: `uv run pytest tests/dashboard -q`
+- Dependencies: Tasks 2, 3 · Files: about 8 (templates and static count as one group), tests
 
-## Task 5: Sandbox safety (M)
-`service.py` (the `LabSandbox` context manager), `tests/lab/test_lab_sandbox.py`.
-- [x] `LabSandbox` creates the temp folder, writes `lab.rules` (the user's text, normalized to LF) and the temp config beside `snort.conf`; removes both in `finally`
-- [x] Cleanup verified after success, lint failure, `-T` failure, `-r` failure, `TimeoutError` and `asyncio.CancelledError`
-- [x] Hashes of a fake live tree (`snort.conf`, `rules\`, `threshold.conf`, `log\`) are identical before and after each of those paths
-- [x] Stale `snorty-lab-*.conf` older than 1 hour are removed at job start; younger ones and unrelated files are left alone
-- [x] Two jobs started together run one after the other (the lock), and a cancelled waiter does not block later jobs
-- [x] A temp path with spaces gives `error`, not a Snort run
-- [x] Verify: `uv run pytest tests/lab -q`
-- Dependencies: Task 4 · Files: `service.py`, `test_lab_sandbox.py`
+## Task 5: Alerts page (M)
+`templates/alerts.html`, `_alert_rows.html`, `views.py`, `app.py`, `test_dash_routes.py`.
+- [ ] `GET /alerts` and `GET /alerts/rows` with `sid`, `priority`, `range`, `page`; results match `AlertRepository.query` (page size 50, offset); invalid values give 422 with an inline message
+- [ ] Rows show local time `YYYY-MM-DD HH:MM:SS`, priority badge, message, src and dst, sid; each row has a Mute button slot (wired in Task 7)
+- [ ] Hostile text (`<script>`, quotes, 10 000-char message, non-ASCII) is escaped or truncated with the full text in a `title`
+- [ ] Verify: `uv run pytest tests/dashboard/test_dash_routes.py -q`
+- Dependencies: Task 4 · Files: 4-5
 
-### Checkpoint: Tasks 4-5
-- [x] Spec criteria 1-8 and 10 each covered by a passing test; whole lab unit suite under 3 s; ruff and strict mypy clean
+## Task 6: live SSE (M)
+`sse.py` (or in `app.py`), `static/app.js`, `test_dash_sse.py`.
+- [ ] `GET /events`: one `bus.subscribe()` per client; `AlertRaised` renders a row fragment, `SensorStateChanged` renders the sensor card, `RulesUpdated` the rules card; 15 s comment heartbeat; subscription closed in `finally` on disconnect
+- [ ] `app.js` (CSP-clean, external file): EventSource that prepends rows to the Alerts table (cap 200 rows) and swaps cards by id; reconnects on drop
+- [ ] Tests on the async generator directly: publish gives fragment; disconnect closes the subscription; slow consumer keeps only the newest N and memory stays bounded; heartbeat with injected sleep
+- [ ] Verify: `uv run pytest tests/dashboard/test_dash_sse.py -q`
+- Dependencies: Tasks 4, 5 · Files: 3-4
 
-## Task 6: CLI (M)
-`src/snorty/lab/__main__.py`.
-- [x] `check RULES_FILE`: lint and `snort -T` on the lab config; prints problems with line numbers; exit 0, or 1
-- [x] `run RULES_FILE PCAP [--json]`: prints a hit table (SID, message, count) then matches (time, SID, message, source to destination), or the problems or error; `--json` prints the `LabResult` as JSON; exit 0 on `ok`, 1 otherwise
-- [x] `make-pcap --out FILE --payload TEXT [--proto tcp|udp] [--src] [--sport] [--dst] [--dport] [--count] [--handshake]` writes a pcap and prints its path; exit 2 on bad arguments
-- [x] Console output is encoding-safe (as in `notify` and `journal`)
-- [x] Tests inject a fake `Runner` and use temp files; `make-pcap` output is read back by the test reader
-- [x] Verify: `uv run pytest tests/lab -q`
-- Dependencies: Tasks 3-5 · Files: `__main__.py`, `tests/lab/test_lab_cli.py`
+### Checkpoint: Tasks 4-6
+- [ ] Criteria 1-6 covered by tests; unit suite green; open the app against fakes in the built-in browser pane and see the Overview and Alerts pages render (screenshot, no console errors)
 
-## Task 7: Real checks and close-out (M)
-`tests/lab/test_lab_real.py` (marked `snort`).
-- [x] Real: the lab config built from the real `snort.conf` passes `snort -T`
-- [x] Real: a generated pcap triggers a lab rule on its payload; an unrelated rule shows 0; a deliberately broken rule gives an error on its line; `--handshake` makes a `flow:established` rule match
-- [x] Real: hashes of live `snort.conf`, `rules\`, `threshold.conf` and `log\` unchanged; no `snorty-lab-*.conf` left; no `snort.exe` left
-- [x] Manual: `uv run python -m snorty.lab run` on a rule you could have written and a generated pcap (I report the table and the run time)
-- [x] Coverage for `snorty.lab` at least 90% from unit tests alone (read from the json report)
-- [x] `grep -r subprocess src/snorty` matches only `snort/` files; `snorty.lab` imports only `snorty.core`, `snorty.snort` and stdlib
-- [x] SPEC-rule-lab.md Success Criteria and deviations amended and ticked; plan and todo boxes ticked except the "next module" one
-- [x] Verify: `uv run pytest -q -m "not snort"`; `uv run pytest tests/lab -q -m snort`; `uv run ruff check src tests`; mypy as above
-- Dependencies: Task 6
+## Task 7: Rules page and Mute (M)
+`templates/rules.html`, `_rules_card.html`, `views.py`, `app.py`, tests.
+- [ ] `GET /rules`: last update, rule count, last error, muted list with Unmute, HOME_NET with form
+- [ ] `POST /rules/update` (`force` checkbox): returns a running fragment at once and polls until done; a second click while running returns "already running" and calls the service once
+- [ ] `POST /rules/mute/{sid}`, `/unmute/{sid}`, `POST /rules/home-net` (set or reset): show the `EditReport` including whether Snort restarted; bad sid or bad HOME_NET gives an inline message; Mute button on Alerts rows works
+- [ ] Verify: `uv run pytest tests/dashboard -q`
+- Dependencies: Tasks 4, 5 · Files: 4-5
+
+## Task 8: daily rules update (S)
+`schedule.py`, `test_dash_schedule.py`.
+- [ ] `run_daily(update, at, *, now, sleep)` fires once per local day at `HH:MM`; disabled when empty; never twice the same day (restart of the loop included); a failing update is logged and the loop continues; cancel exits cleanly
+- [ ] Verify: `uv run pytest tests/dashboard/test_dash_schedule.py -q`
+- Dependencies: Task 1 · Files: `schedule.py`, test
+
+## Task 9: Journal page (S)
+`templates/journal.html`, small `status()` on `JournalService` and `NotifyService`, tests.
+- [ ] `JournalService.status()` returns frozen `JournalStatus(vault, last_flush, notes_written, error)`; `NotifyService.status()` returns on/off and toast count; both with tests in their own module test folders
+- [ ] `GET /journal` shows vault path (read-only) and state; `POST /journal/flush` calls flush once and shows the result; the Overview journal summary uses the same data
+- [ ] Verify: `uv run pytest tests/journal tests/notify tests/dashboard -q`
+- Dependencies: Task 4 · Files: about 5
+
+## Task 10: Lab page (L)
+`templates/lab.html`, `_lab_result.html`, `views.py`, `app.py`, `pcaps.py`, `test_dash_lab.py`.
+- [ ] `pcaps.py`: `list_pcaps(dir)`, `save_pcap(dir, name, data)` (name regex, resolved path must stay inside `dir`, junction and symlink refused, 50 MB cap, atomic write), `generate_pcap(dir, name, params)` using `make_frames` and `build_pcap`
+- [ ] `GET /lab`: textarea, pcap picker (names only), Check and Run buttons, generator form, upload control
+- [ ] `POST /lab/check`, `/lab/run`: text capped at 64 KB; problems shown as "rule line N: ..."; hits table with zero-hit rules; matches list; running guard
+- [ ] `POST /lab/pcaps?name=` raw upload; `POST /lab/pcaps/generate`; refusals for `..`, absolute names, over 50 MB, wrong extension
+- [ ] Verify: `uv run pytest tests/dashboard/test_dash_lab.py -q`
+- Dependencies: Task 4 · Files: 5
+
+### Checkpoint: Tasks 7-10
+- [ ] Criteria 1-12 covered; full unit suite green and under 15 s; ruff and strict mypy clean
+
+## Task 11: CLI and real tests (L)
+`__main__.py`, logging setup, `tests/dashboard/test_dash_real.py` (marker `snort`), `test_dash_cli.py`.
+- [ ] `python -m snorty.dashboard [--port --start-sensor --no-notify --no-journal --vault --interface-ip --data-dir]`: loads config, composes services, starts bus consumers, schedule task and `uvicorn` on `127.0.0.1` only; Ctrl+C stops sensor, journal, notify, schedule cleanly and closes the repo; exit codes 0, 1 (port in use or sensor failed), 2 (usage)
+- [ ] Rotating `snorty.log` in the data folder; token never logged; startup prints the URL
+- [ ] CLI tests with fake services (flag parsing, exit codes, shutdown order, a bind address other than loopback refused)
+- [ ] Real: temp data dir, real services, Start, wait RUNNING, the sensor integration test's attack traffic, alert visible via `/alerts/rows`, Stop; a lab run through HTTP matches the lab result; hashes of live `snort.conf`, `rules\`, `threshold.conf` unchanged; no `snort.exe` left
+- [ ] Verify: `uv run pytest tests/dashboard -q -m "not snort"`; `uv run pytest tests/dashboard -q -m snort`
+- Dependencies: Tasks 1-10 · Files: about 5
+
+## Task 12: manual check and close-out (M)
+- [ ] Manual in the built-in browser pane: run the dashboard, open every page, press Start, generate traffic, watch a row appear live, mute it, update rules, run a lab rule with a generated pcap; check light and dark, phone width; network log shows no third-party request; I report with screenshots
+- [ ] Coverage for `snorty.dashboard` at least 85% from unit tests alone (json report, read then delete)
+- [ ] `grep -r subprocess src/snorty` matches only `snort/` files; no inline `<script>` in templates; existing module CLIs' tests pass
+- [ ] SPEC-dashboard.md amended (deviations: db path under data dir, `compose.py`, status additions, htmx version and hash, anything found in real runs) and every Success Criteria box ticked; plan and todo boxes ticked
+- [ ] Verify: `uv run pytest -q -m "not snort"`; `uv run pytest -q -m snort`; `uv run ruff check src tests`; `uv run mypy` on all strict modules
+- Dependencies: Task 11 · Files: spec, plan, todo

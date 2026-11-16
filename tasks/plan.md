@@ -1,68 +1,77 @@
-# Implementation Plan: rule-lab
+# Implementation Plan: dashboard
 
-Source spec: [SPEC-rule-lab.md](../SPEC-rule-lab.md) · Module map: [CAPABILITY-MAP.md](../CAPABILITY-MAP.md)
+Source spec: [SPEC-dashboard.md](../SPEC-dashboard.md) · Module map: [CAPABILITY-MAP.md](../CAPABILITY-MAP.md)
 Task list: [tasks/todo.md](todo.md)
-Previous modules: alert-core, snort-adapter, sensor, rules, notify, vault-journal, done (their plans and tasks are in git history; vault-journal's last at `1a5a933`).
+Previous modules: alert-core, snort-adapter, sensor, rules, notify, vault-journal, rule-lab, all done (their plans and tasks are in git history; rule-lab's last at `32519b3`). The rule-lab plan was finished (every box ticked, its "next module spec" box satisfied by SPEC-dashboard.md) before this file replaced it.
 
 ## Overview
 
-Build `snorty.lab`: test a user-written Snort rule against a pcap in a sandbox that never
-touches the live Snort files. Pure logic first (lint the rules, rewrite the config, build
-test pcaps), then the service pipeline (lint, sandbox, `snort -T`, `snort -r`, summarize)
-with a fake `Runner`, then the sandbox-safety guarantees (cleanup on every exit path, stale
-files, one job at a time, live files untouched), then the CLI, then real Snort checks and
-the manual run.
+Build `snorty.dashboard`: the one local web app that runs Snorty. Foundations first (dependencies, config, security checks, shared service wiring), then a walking skeleton (app, base page, Overview with sensor controls), then one vertical slice per page (Alerts, live SSE, Rules, scheduled update, Journal, Lab), then the CLI, real-Snort tests, the manual browser check and close-out.
 
 ## Architecture Decisions
 
-- **Pipeline as data.** `LabService.run(job) -> LabResult`; every user mistake (bad rule, bad pcap, Snort rule error) is a field of the result, never an exception. Only programming errors raise.
-- **Pure core, imperative sandbox.** `lint`, `build_lab_conf`, `build_pcap`, `summarize` are pure. `LabSandbox` is the only code that writes files: a temp folder (rules file, logs) and `snorty-lab-<id>.conf` beside `snort.conf`; both removed in `finally`, also on cancel.
-- **Reuse the adapter.** `check_config`, `run_pcap`, `list_interfaces`, `pick_interface`, `Runner` from `snorty.snort`. No new Snort command line, no `subprocess` in `lab`. If `run_pcap` or `check_config` need a small change (for example a different `-T` interface choice), it goes in `snort/` with its own test.
-- **Realistic config.** Derive from the live `snort.conf`: drop rules, preprocessor-rules and `threshold.conf` includes, add one lab include. Preprocessors stay so `flow:` and `http_*` behave as live.
-- **Error mapping.** Snort names `lab.rules(N)`; results report "rule line N" using the user's own line numbers (the lab file is the user's text unchanged).
-- **One job at a time** via `asyncio.Lock`. Stale `snorty-lab-*.conf` (older than 1 hour) are removed at job start.
-- **`lab` imports only `snorty.core`, `snorty.snort` and stdlib.** CLI is the only composition point.
-- **No new dependency.** `snorty.lab.*` added to the strict mypy override.
-- Test file basenames unique: `test_lab_lint.py`, `test_lab_conf.py`, `test_lab_pcapgen.py`, `test_lab_service.py`, `test_lab_sandbox.py`, `test_lab_cli.py`, `test_lab_real.py`, `lab_fakes.py`.
+- **Thin controllers over services.** `Services` frozen dataclass (sensor, rules, journal, lab, repo, bus, tz, data_dir) injected with `Depends(get_services)`; tests inject fakes. All logic stays in the module services; controllers parse, call, render.
+- **Pure view-models.** `views.py` turns domain objects into plain dataclasses; templates only loop and print. Unit-tested without HTTP.
+- **Composition once.** The wiring in `snorty.sensor.__main__.run` moves to `snorty/compose.py` (`compose(config) -> Services`-shaped parts) and both the sensor CLI and the dashboard use it. Sensor CLI tests must stay green unchanged.
+- **Security shell as middleware.** Host allow-list (`127.0.0.1:<port>`, `localhost:<port>`), per-process token header on every non-GET, Origin check, CSP and other headers on every response. No inline scripts. Autoescape on, nothing marked safe.
+- **SSE over the existing bus.** One `bus.subscribe()` per tab; drop-oldest `Subscription` already bounds memory; close on disconnect; 15 s heartbeat. The generator is a plain async function tested without a server.
+- **Long jobs as in-flight guards.** Rules update, lab run, restart: one in-flight per kind, a second click gets "already running"; htmx polls a fragment until done.
+- **Form parsing with stdlib.** `urllib.parse.parse_qs` on the raw body; no `python-multipart`. Config with `tomllib`; no `pydantic-settings`. Lab upload is a raw body capped at 50 MB.
+- **Static assets local.** `htmx.min.js` vendored once (version pinned, SHA-256 recorded in the spec deviations); `app.css` and a few lines of `app.js`.
+- **Deviation noted up front:** the spec says the dashboard uses the sensor's default db path; the sensor CLI defaults to `snorty.db` in the current folder, so the dashboard uses `<data-dir>\snorty.db` and `--data-dir` can point at an existing folder. Recorded in the spec's deviations at close-out.
+- **Typing and tests.** `snorty.dashboard.*` and `snorty.compose` join the strict mypy override. Test basenames unique: `test_dash_views.py`, `_security`, `_config`, `_schedule`, `_routes`, `_sse`, `_lab`, `_real`, `dash_fakes.py`. `httpx` and the TestClient are dev-only.
+- **Dependencies:** `fastapi`, `uvicorn`, `jinja2` runtime; `httpx` dev (approved with the spec). Nothing else.
 
 ## Task List
 
-### Phase 1: Pure logic
-- [x] Task 1: `lint` (rules, problems, caps)
-- [x] Task 2: `build_lab_conf`
-- [x] Task 3: pcap generator (`build_pcap`, `tcp_packet`, `udp_packet`, handshake)
+### Phase 1: Foundations
+- [ ] Task 1: dependencies, package, `config.py` (tomllib, defaults, CLI override)
+- [ ] Task 2: `security.py` (validators, Host/Origin/token, headers) as pure functions plus middleware
+- [ ] Task 3: shared `compose.py`, `Services`, sensor CLI moved onto it
 
-### Checkpoint: Pure logic
-- [x] All unit tests green; ruff and strict mypy clean on `snorty.lab`
+### Checkpoint: Foundations
+- [ ] Full unit suite green (sensor CLI included); ruff and strict mypy clean
 
-### Phase 2: Pipeline and sandbox
-- [x] Task 4: models, `summarize`, `LabService` pipeline with a fake `Runner`
-- [x] Task 5: sandbox safety (cleanup on every exit, stale files, lock, live files untouched)
+### Phase 2: Skeleton and first pages
+- [ ] Task 4: `build_app`, base template, vendored htmx, `/healthz`, Overview with sensor card and Start/Stop/Restart
+- [ ] Task 5: Alerts page, rows fragment, filters, paging, hostile-text escaping
+- [ ] Task 6: live SSE (`/events`) for alert, sensor and rules fragments
 
-### Checkpoint: Service
-- [x] Spec criteria 1-8 and 10 each covered by a passing test; unit suite under 3 s
+### Checkpoint: Live view
+- [ ] Spec criteria 1-6 covered by passing tests; page works in the browser pane against fake services
 
-### Phase 3: CLI and real checks
-- [x] Task 6: `python -m snorty.lab check | run | make-pcap`
-- [x] Task 7: real Snort tests, manual run, close-out
+### Phase 3: Remaining slices
+- [ ] Task 7: Rules page (status, update now, mute/unmute, HOME_NET) with in-flight guard; Alerts-row Mute button
+- [ ] Task 8: daily rules-update schedule
+- [ ] Task 9: Journal page (small read-only `status()` on journal and notify services)
+- [ ] Task 10: Lab page (check, run, pcap list, upload, generate)
+
+### Checkpoint: All pages
+- [ ] Spec criteria 1-12 covered by passing tests; unit suite still fast
+
+### Phase 4: Run and close out
+- [ ] Task 11: `python -m snorty.dashboard` CLI, logging, shutdown; real Snort tests
+- [ ] Task 12: manual browser check, spec amendment, final verification
 
 ### Checkpoint: Complete
-- [x] Every Success Criteria box in SPEC-rule-lab.md checked
-- [ ] Then the next module spec (dashboard)
+- [ ] Every Success Criteria box in SPEC-dashboard.md checked
+- [ ] All modules done; final summary to the user
 
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| A lab run changes live Snort files | High | Lab writes only a temp folder and one `snorty-lab-*.conf`; hash tests on every exit path; real-Snort test repeats the check |
-| User rule text smuggles config directives | High | Lint allows only `alert`/`log`/`pass` rule lines; refuses `include`, `var`, `config`, `preprocessor`; refused before Snort runs |
-| Hostile or huge pcap | Med | 50 MB cap, read only, Snort timeout, temp log folder |
-| Temp config left behind after a crash | Med | `finally` cleanup plus stale-file sweep at the next job |
-| Preprocessors make `-T` slow (seconds per run) | Low | One `-T` and one `-r` per job; timeouts; measured in Task 7 |
-| Temp path with spaces breaks Snort `include` | Low | Detect and report; assumption 8 |
-| Generated packets do not reach `flow:established` rules | Med | `--handshake` option; real Snort test in Task 7 |
-| Windows interface choice for `-T` | Low | Reuse `pick_interface`; same method the rules module uses |
+| Another website drives the local dashboard (CSRF, DNS rebinding) | High | Loopback bind, Host and Origin checks, per-process token on non-GET, tests for each refusal |
+| Third-party alert or rule text injects script into a page | High | Autoescape, nothing `|safe`, CSP without inline script; hostile-text tests on every page |
+| Lab upload or name reaches outside the pcaps folder | High | Name regex, resolve-and-confine check, size cap, tests for `..`, absolute paths, junctions |
+| Refactoring the sensor wiring breaks the sensor CLI | Med | Task 3 changes nothing else; sensor CLI tests run before and after |
+| Sensor, rules update and lab run overlap | Med | Each service already locks; dashboard adds an in-flight guard; two-click tests |
+| SSE tab leak or memory growth | Med | Close subscription in `finally`; drop-oldest bound; disconnect test |
+| Scheduler double-fires or dies on a failed update | Med | Injected clock and sleep, per-day marker, try/except around the update; unit tests |
+| New dependencies bring surprises | Low | Only three runtime packages, pinned by `uv.lock`; no CDN; htmx hash recorded |
+| htmx download unavailable | Low | Fall back to ~60 lines of own JS (spec Q2 alternative), noted as a deviation |
+| Windows event-loop quirks with uvicorn plus subprocesses | Med | Real test in Task 11 starts Snort through the dashboard; fix in `compose`/`__main__` only |
 
 ## Open Questions
 
-None blocking. Defaults taken (approved): own pcaps plus generator, no downloads or recording; `alert`/`log`/`pass` only; live mutes ignored and preprocessors kept; promote-to-live deferred.
+None blocking. Defaults taken (approved): add `fastapi`, `uvicorn`, `jinja2`, dev `httpx`; vendor htmx; sensor starts only on the Start button; rules update daily at 03:00 local while the dashboard runs; port 8765.
