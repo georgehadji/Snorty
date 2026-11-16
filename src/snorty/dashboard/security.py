@@ -1,12 +1,14 @@
 """Input checks and the local-only security shell (Host, Origin, token, headers)."""
 
 import hmac
+import logging
 import re
 import secrets
 from urllib.parse import parse_qs
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+log = logging.getLogger(__name__)
 TOKEN_HEADER = "x-snorty-token"
 MAX_FORM_BYTES = 256 * 1024
 _MAX_SID = 2**31 - 1
@@ -110,8 +112,12 @@ class SecurityMiddleware:
             await self._app(scope, receive, send)
             return
 
+        started = False
+
         async def secure_send(message: Message) -> None:
+            nonlocal started
             if message["type"] == "http.response.start":
+                started = True
                 message = {**message, "headers": [*message.get("headers", []), *_SECURITY_HEADERS]}
             await send(message)
 
@@ -125,7 +131,15 @@ class SecurityMiddleware:
         ):
             await self._refuse(403, "forbidden", secure_send)
         else:
-            await self._app(scope, receive, secure_send)
+            try:
+                await self._app(scope, receive, secure_send)
+            except Exception:
+                # Answer here so the 500 carries the security headers; Starlette's own error
+                # handler sits outside this middleware and would not add them.
+                log.exception("unhandled error in %s %s", scope["method"], scope["path"])
+                if started:
+                    raise
+                await self._refuse(500, "internal error", secure_send)
 
     @staticmethod
     async def _refuse(status: int, text: str, send: Send) -> None:

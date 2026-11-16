@@ -12,7 +12,11 @@
     </form>
     <div id="update-status" role="status"></div>
   </section>
+  {% if load_error %}
+  <section class="card"><h2>Snort settings</h2><p class="error" role="alert">{{ load_error }}</p></section>
+  {% else %}
   {% include "_home_net.html" %}
+  {% endif %}
 </div>
-<div style="margin-top: 16px">{% include "_muted_card.html" %}</div>
+{% if not load_error %}<div style="margin-top: 16px">{% include "_muted_card.html" %}</div>{% endif %}
 {% endblock %}

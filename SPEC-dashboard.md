@@ -154,7 +154,7 @@ Status: implemented. Criterion 14 was checked in the built-in browser in two par
 - Vendored htmx 2.0.4, SHA-256 `e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447`, recorded in `static/htmx.VERSION`.
 - Generated pcaps are stamped with the current time (a pcap starting at epoch 0 made Snort alerts show the year 2070).
 - Starlette's test client prints a deprecation notice asking for `httpx2`; harmless.
-- Known gaps: 500 error pages from Starlette's outer error handler lack the security headers; the Rules page does not catch OSError from reading the muted list or HOME_NET; the CLI exit code 1 covers a port that cannot be bound or a crash, not a sensor that fails later (the card shows that).
+- Known gap: the CLI exit code 1 covers a port that cannot be bound or a crash, not a sensor that fails later (the card shows that). Fixed after close-out: unhandled errors now return a 500 with the security headers, and the Rules page shows a message when the Snort files cannot be read.
 
 ## Out of Scope (Deferred)
 

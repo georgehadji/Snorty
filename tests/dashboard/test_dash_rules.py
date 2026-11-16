@@ -209,3 +209,16 @@ def test_alert_rows_have_a_mute_button(tmp_path: Path) -> None:
             url
         )
     assert 'id="flash"' in c.get("/alerts").text
+
+
+def test_rules_page_survives_unreadable_snort_files(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+
+    async def unreadable() -> list[MutedRule]:
+        raise PermissionError(13, "Permission denied")
+
+    rules(s).muted = unreadable  # type: ignore[method-assign]
+    r = c.get("/rules")
+    assert r.status_code == 200
+    assert "Could not read the Snort settings: Permission denied" in r.text
+    assert "Update now" in r.text and "Muted rules" not in r.text

@@ -29,13 +29,13 @@ def add_rules_routes(app: FastAPI, ui: Ui) -> None:
 
     @app.get("/rules", response_class=HTMLResponse)
     async def rules_page(request: Request, svc: Svc) -> HTMLResponse:
-        return ui.page(
-            request,
-            "rules.html",
-            rules=views.rules_summary(await svc.rules.status()),
-            muted=await svc.rules.muted(),
-            home=await svc.rules.home_net(),
-        )
+        rules = views.rules_summary(await svc.rules.status())
+        try:
+            muted, home = await svc.rules.muted(), await svc.rules.home_net()
+        except OSError as exc:  # snort.conf or local.rules unreadable
+            msg = f"Could not read the Snort settings: {exc.strerror or type(exc).__name__}"
+            return ui.page(request, "rules.html", rules=rules, load_error=msg)
+        return ui.page(request, "rules.html", rules=rules, muted=muted, home=home)
 
     @app.post("/rules/update", response_class=HTMLResponse)
     async def update(request: Request, svc: Svc) -> HTMLResponse:

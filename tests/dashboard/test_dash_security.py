@@ -243,3 +243,16 @@ def test_good_home_net(text: str) -> None:
 def test_bad_home_net(text: str) -> None:
     with pytest.raises(ValueError):
         valid_home_net(text)
+
+
+def test_an_unhandled_error_becomes_a_500_with_the_security_headers() -> None:
+    def boom(request: Request) -> PlainTextResponse:
+        raise RuntimeError("secret internals")
+
+    app = Starlette(routes=[Route("/", boom)])
+    app.add_middleware(SecurityMiddleware, token=TOKEN, port=PORT)
+    client = TestClient(app, base_url=f"http://127.0.0.1:{PORT}", raise_server_exceptions=False)
+    r = client.get("/")
+    assert r.status_code == 500 and "secret internals" not in r.text
+    assert r.headers["content-security-policy"].startswith("default-src 'self'")
+    assert r.headers["x-content-type-options"] == "nosniff"
