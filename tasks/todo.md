@@ -40,11 +40,11 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 4: NotifyService, filter and throttle (M)
 `src/snorty/notify/service.py`: `NotifyConfig(min_priority=1, window=300, cap=6, cap_window=60, tz)`, `NotifyService(bus, notifier, config, *, clock)`.
-- [ ] `start()` subscribes (maxsize 1000) before returning and spawns one consumer task
-- [ ] Only `AlertRaised` events are considered; `alert.priority > min_priority` is ignored; changing `min_priority` changes the cut-off
-- [ ] A live priority-1 alert gives one toast through the notifier with the built text
-- [ ] Throttle integrated: 500 alerts of one SID give one toast, then `+499 more` after the window (fake clock); many SIDs hit the cap and the next toast says `+M other alerts`
-- [ ] Verify: `uv run pytest tests/notify/test_service.py -q` (real `EventBus`, `RecordingNotifier`, fake clock)
+- [x] `start()` subscribes (maxsize 1000) before returning and spawns one consumer task
+- [x] Only `AlertRaised` events are considered; `alert.priority > min_priority` is ignored; changing `min_priority` changes the cut-off
+- [x] A live priority-1 alert gives one toast through the notifier with the built text
+- [x] Throttle integrated: 500 alerts of one SID give one toast, then `+499 more` after the window (fake clock); many SIDs hit the cap and the next toast says `+M other alerts`
+- [x] Verify: `uv run pytest tests/notify/test_service.py -q` (real `EventBus`, `RecordingNotifier`, fake clock)
 - Dependencies: Tasks 1-3 · Files: `service.py`, `tests/notify/notify_fakes.py`, `test_service.py`
 
 ## Task 5: Service resilience and lifecycle (M)

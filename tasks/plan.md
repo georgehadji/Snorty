@@ -35,7 +35,7 @@ check.
 
 ### Phase 2: Port and service
 - [x] Task 3: `Notifier` port, `ConsoleNotifier`, `WinotifyNotifier`, add `winotify`
-- [ ] Task 4: `NotifyService` (filter, throttle, build, show, counters)
+- [x] Task 4: `NotifyService` (filter, throttle, build, show, counters)
 - [ ] Task 5: service resilience (notifier errors and timeouts, blocking notifier, stop, double start)
 
 ### Checkpoint: Service
