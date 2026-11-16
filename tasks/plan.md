@@ -42,7 +42,7 @@ mute/unmute/home-net, then the CLI and real-Snort checks. Stdlib only.
 - [x] Every failure injection leaves `rules/` byte-identical; unit suite under 3 s
 
 ### Phase 3: Mute and home-net
-- [ ] Task 6: `mute`, `unmute`, `muted`, `set_home_net` through validate and atomic commit
+- [x] Task 6: `mute`, `unmute`, `muted`, `set_home_net` through validate and atomic commit
 
 ### Phase 4: CLI and real checks
 - [ ] Task 7: CLI, `@pytest.mark.snort` validation test, manual real update on this PC

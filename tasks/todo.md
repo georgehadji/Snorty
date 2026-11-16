@@ -58,11 +58,11 @@ Same `service.py`, new tests in `tests/rules/test_update_failures.py`.
 
 ## Task 6: Mute, unmute, home-net (M)
 `service.py` additions.
-- [ ] `mute(sid, note="", restart=True)` / `unmute(sid, restart=True)`: idempotent; candidate `threshold.conf` validated through a temp conf with the include rewritten; `os.replace` commit; one-time `threshold.conf.snorty.bak`; validation failure leaves the file unchanged
-- [ ] `muted()` returns the block's entries
-- [ ] `set_home_net(value=None)`: default from config; changes only the HOME_NET line; same validate-commit-backup path (`snort.conf.snorty.bak`); `home_net()` shows current and default
-- [ ] Sensor restarted when `restart=True` and the sensor was not STOPPED
-- [ ] Verify: `uv run pytest tests/rules/test_mute.py tests/rules/test_home_net.py -q`
+- [x] `mute(sid, note="", restart=True)` / `unmute(sid, restart=True)`: idempotent; candidate `threshold.conf` validated through a temp conf with the include rewritten; `os.replace` commit; one-time `threshold.conf.snorty.bak`; validation failure leaves the file unchanged
+- [x] `muted()` returns the block's entries
+- [x] `set_home_net(value=None)`: default from config; changes only the HOME_NET line; same validate-commit-backup path (`snort.conf.snorty.bak`); `home_net()` shows current and default
+- [x] Sensor restarted when `restart=True` and the sensor was not STOPPED
+- [x] Verify: `uv run pytest tests/rules/test_mute.py tests/rules/test_home_net.py -q`
 - Dependencies: Tasks 1, 3 · Files: `service.py`, `test_mute.py`, `test_home_net.py`
 
 ## Task 7: CLI and real checks (M)

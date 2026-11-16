@@ -16,7 +16,15 @@ from typing import Literal
 from snorty.core.bus import EventBus
 from snorty.core.events import RulesUpdated
 from snorty.rules.archive import count_rules, extract_rules, parse_md5, sanity_ok
-from snorty.rules.blocks import rewrite_rule_path
+from snorty.rules.blocks import (
+    MutedRule,
+    apply_block,
+    get_home_net,
+    read_block,
+    rewrite_include,
+    rewrite_rule_path,
+    set_home_net,
+)
 from snorty.rules.config import RulesConfig
 from snorty.rules.ports import Downloader, SensorControl, Validator
 from snorty.rules.state import RulesState, load_state, save_state
@@ -29,6 +37,13 @@ class UpdateReport:
     rule_count: int | None
     md5: str | None
     skipped: int
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class EditReport:
+    ok: bool
+    changed: bool
     detail: str
 
 
@@ -178,3 +193,94 @@ class RulesService:
         live = self._config.rules_dir
         self._rename(live, self._new_dir)
         self._rename(live.with_name("rules.prev"), live)
+
+    # --- mute, unmute, HOME_NET -------------------------------------------------------
+
+    async def muted(self) -> list[MutedRule]:
+        text = await asyncio.to_thread(read_text, self._config.threshold_conf)
+        return read_block(text)
+
+    async def mute(self, sid: int, note: str = "", *, restart: bool = True) -> EditReport:
+        def edit(entries: list[MutedRule]) -> list[MutedRule]:
+            return [e for e in entries if e.sid != sid] + [MutedRule(sid, note)]
+
+        return await self._edit_threshold(edit, f"muted {sid}", restart)
+
+    async def unmute(self, sid: int, *, restart: bool = True) -> EditReport:
+        def edit(entries: list[MutedRule]) -> list[MutedRule]:
+            return [e for e in entries if e.sid != sid]
+
+        return await self._edit_threshold(edit, f"unmuted {sid}", restart)
+
+    async def home_net(self) -> tuple[str, str]:
+        """(current value in snort.conf, the value `set_home_net()` would write)."""
+        text = await asyncio.to_thread(read_text, self._config.paths.conf)
+        return get_home_net(text), self._config.home_net_default
+
+    async def set_home_net(self, value: str | None = None, *, restart: bool = True) -> EditReport:
+        conf = self._config.paths.conf
+        new_value = value or self._config.home_net_default
+        async with self._lock:
+            try:
+                old = await asyncio.to_thread(read_text, conf)
+                new = set_home_net(old, new_value)
+                return await self._commit(
+                    conf, old, new, lambda _: new, f"HOME_NET {new_value}", restart
+                )
+            except Exception as e:
+                return EditReport(False, False, str(e))
+
+    async def _edit_threshold(
+        self, edit: Callable[[list[MutedRule]], list[MutedRule]], done: str, restart: bool
+    ) -> EditReport:
+        target = self._config.threshold_conf
+        async with self._lock:
+            try:
+                old = await asyncio.to_thread(read_text, target)
+                new = apply_block(old, edit(read_block(old)))
+                conf_text = read_text(self._config.paths.conf)
+
+                def stage_text(candidate: Path) -> str:
+                    return rewrite_include(conf_text, "threshold.conf", str(candidate))
+
+                return await self._commit(target, old, new, stage_text, done, restart)
+            except Exception as e:
+                return EditReport(False, False, str(e))
+
+    async def _commit(
+        self,
+        target: Path,
+        old: str,
+        new: str,
+        stage_text: Callable[[Path], str],
+        done: str,
+        restart: bool,
+    ) -> EditReport:
+        """Check `new` with snort -T through a temp conf, then replace `target` atomically."""
+        if new == old:
+            return EditReport(True, False, "no change")
+        candidate = target.with_name("snorty-candidate" + target.suffix)
+        stage_conf = self._config.paths.conf.with_name("snorty-stage.conf")
+        try:
+            write_text(candidate, new)
+            write_text(stage_conf, stage_text(candidate))
+            check = await self._validator.check(stage_conf)
+        finally:
+            candidate.unlink(missing_ok=True)
+            stage_conf.unlink(missing_ok=True)
+        if not check.ok:
+            return EditReport(False, False, "; ".join(check.errors))
+        await asyncio.to_thread(self._replace_file, target, new)
+        if restart and self._sensor.state in (State.RUNNING, State.STARTING):
+            if not await self._restart_ok():
+                return EditReport(False, True, f"{done}, but the sensor did not come back running")
+        return EditReport(True, True, done)
+
+    @staticmethod
+    def _replace_file(target: Path, text: str) -> None:
+        backup = target.with_name(target.name + ".snorty.bak")
+        if not backup.exists():
+            shutil.copy2(target, backup)
+        tmp = target.with_name(target.name + ".snorty.tmp")
+        write_text(tmp, text)
+        os.replace(tmp, target)

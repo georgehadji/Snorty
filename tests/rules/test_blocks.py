@@ -5,6 +5,7 @@ from snorty.rules.blocks import (
     START,
     MutedRule,
     apply_block,
+    get_home_net,
     read_block,
     rewrite_include,
     rewrite_rule_path,
@@ -118,3 +119,9 @@ def test_rewrite_missing_line_is_an_error() -> None:
         rewrite_rule_path("nothing here\n", "x")
     with pytest.raises(ValueError):
         rewrite_include("nothing here\n", "threshold.conf", "x")
+
+
+def test_get_home_net_reads_current_value() -> None:
+    assert get_home_net(CONF) == "[192.168.1.0/24]"
+    with pytest.raises(ValueError):
+        get_home_net("# ipvar HOME_NET any\n")

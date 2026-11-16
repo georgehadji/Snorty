@@ -86,6 +86,13 @@ def _replace_line(text: str, pattern: str, new: str) -> str:
     return out
 
 
+def get_home_net(text: str) -> str:
+    m = re.search(r"^ipvar[ \t]+HOME_NET[ \t]+([^\r\n]*)", text, re.M)
+    if m is None:
+        raise ValueError("line not found: ipvar HOME_NET")
+    return m[1].strip()
+
+
 def set_home_net(text: str, value: str) -> str:
     return _replace_line(text, r"^ipvar[ \t]+HOME_NET[ \t]+[^\r\n]*", f"ipvar HOME_NET {value}")
 
