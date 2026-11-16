@@ -5,9 +5,9 @@ import asyncio
 import json
 import sys
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 
+from snorty.core.localtz import LocalTimezone
 from snorty.lab.lint import MAX_BYTES
 from snorty.lab.models import LabJob, LabResult
 from snorty.lab.pcapgen import build_pcap, make_frames
@@ -146,7 +146,7 @@ def main(
     except OSError as exc:
         _err(f"could not read {args.rules}: {exc}")
         return 1
-    tz = datetime.now().astimezone().tzinfo or UTC
+    tz = LocalTimezone()
     service = LabService(paths or SnortPaths(), runner or SubprocessRunner(), tz=tz)
     if args.command == "check":
         result = asyncio.run(service.check(rules_text))

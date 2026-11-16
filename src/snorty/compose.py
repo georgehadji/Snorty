@@ -4,10 +4,11 @@ import asyncio
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 from snorty.core.bus import EventBus
+from snorty.core.localtz import LocalTimezone
 from snorty.core.repository import AlertRepository
 from snorty.dashboard.services import Services
 from snorty.journal.ports import NoteStore
@@ -60,7 +61,7 @@ def compose(
     """Wire every module together. The journal runs only when a note store is given."""
     paths = paths or SnortPaths()
     data_dir.mkdir(parents=True, exist_ok=True)
-    tz = datetime.now().astimezone().tzinfo or UTC
+    tz = LocalTimezone()
     bus = EventBus()
     repo = AlertRepository(data_dir / "snorty.db")
     config = SensorConfig(paths=paths, interface_ip=interface_ip)

@@ -3,6 +3,7 @@ from pathlib import Path
 from dash_fakes import make_services
 
 from snorty.compose import compose
+from snorty.core.localtz import LocalTimezone
 from snorty.journal.ports import MemoryNoteStore
 from snorty.notify.ports import ConsoleNotifier
 from snorty.sensor import State
@@ -25,6 +26,7 @@ async def test_compose_builds_every_service_and_starts_and_stops_without_snort(
         assert s.sensor.state is State.STOPPED
         assert s.journal is not None and rt.notify is not None
         assert s.pcap_dir == tmp_path / "data" / "pcaps"
+        assert isinstance(s.tz, LocalTimezone)  # DST-aware, not one fixed offset
         await rt.start(sensor=False)
         await rt.stop()
         assert s.sensor.state is State.STOPPED

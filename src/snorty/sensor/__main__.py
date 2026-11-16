@@ -5,11 +5,11 @@ import asyncio
 import contextlib
 import os
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 
 from snorty.core.bus import EventBus, Subscription
 from snorty.core.events import AlertRaised, SensorStateChanged
+from snorty.core.localtz import LocalTimezone
 from snorty.core.repository import AlertRepository
 from snorty.journal.ports import NoteStore, VaultNoteStore
 from snorty.journal.service import JournalConfig, JournalService
@@ -43,7 +43,7 @@ async def run(
 ) -> int:
     bus = EventBus()
     repo = AlertRepository(db)
-    tz = datetime.now().astimezone().tzinfo or UTC
+    tz = LocalTimezone()
     config = SensorConfig(paths=SnortPaths(), interface_ip=interface_ip)
     sensor = Sensor(
         config,

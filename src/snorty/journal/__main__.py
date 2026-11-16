@@ -3,9 +3,10 @@
 import argparse
 import os
 import sys
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from pathlib import Path
 
+from snorty.core.localtz import LocalTimezone
 from snorty.core.repository import AlertRepository
 from snorty.journal.merge import NoteConflict
 from snorty.journal.ports import NoteStore, StoreError, VaultNoteStore
@@ -28,7 +29,7 @@ def main(argv: list[str] | None = None, *, store: NoteStore | None = None) -> in
     write.add_argument("--dry-run", action="store_true", help="print the note, write nothing")
     args = parser.parse_args(argv)
 
-    tz = datetime.now().astimezone().tzinfo or UTC
+    tz = LocalTimezone()
     day: date = args.date or datetime.now(tz).date()
     vault = args.vault or os.environ.get("OBSIDIAN_VAULT_PATH")
     if store is None and vault:
