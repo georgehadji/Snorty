@@ -23,6 +23,7 @@ _RESERVED = {
     *(f"com{i}" for i in range(1, 10)),
     *(f"lpt{i}" for i in range(1, 10)),
 }
+_IMMUTABLE = (b"cache-control", b"public, max-age=31536000, immutable")
 _SECURITY_HEADERS = (
     (b"content-security-policy", b"default-src 'self'; frame-ancestors 'none'"),
     (b"x-content-type-options", b"nosniff"),
@@ -118,7 +119,10 @@ class SecurityMiddleware:
             nonlocal started
             if message["type"] == "http.response.start":
                 started = True
-                message = {**message, "headers": [*message.get("headers", []), *_SECURITY_HEADERS]}
+                extra: tuple[tuple[bytes, bytes], ...] = _SECURITY_HEADERS
+                if scope["path"].startswith("/static/") and b"v=" in scope["query_string"]:
+                    extra = (*extra, _IMMUTABLE)
+                message = {**message, "headers": [*message.get("headers", []), *extra]}
             await send(message)
 
         headers = {k.decode("latin-1"): v.decode("latin-1") for k, v in scope["headers"]}

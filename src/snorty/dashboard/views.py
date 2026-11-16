@@ -105,6 +105,7 @@ class AlertRow:
     count: int = 1  # how many alerts this row stands for
     first_time: str = ""  # time of the oldest alert in a group
     first_epoch: int = 0  # the oldest alert of a group, in seconds
+    raw: str = ""  # the alert line as Snort wrote it
     span: str = ""  # how long the group lasted, e.g. "12 min"; empty under a minute
 
 
@@ -120,6 +121,7 @@ def alert_row(a: Alert, tz: tzinfo) -> AlertRow:
         src=endpoint(a.src_ip, a.src_port),
         dst=endpoint(a.dst_ip, a.dst_port),
         classification=a.classification or "",
+        raw=a.raw,
         iso=a.ts.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         epoch=int(a.ts.timestamp()),
         first_epoch=int(a.ts.timestamp()),

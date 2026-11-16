@@ -165,14 +165,29 @@ class AlertRepository:
     ) -> list[tuple[datetime, int]]:
         """(hour start in tz, count) pairs in time order. Hours with no alerts are omitted."""
         where, args = _range(since, until)
+        # SQL folds the rows to one per minute (at most 60 per hour, however many alerts there
+        # are); the zone-aware hour is worked out here, so 30- and 45-minute zones stay right.
+        sql = f"SELECT substr(ts, 1, 16), COUNT(*) FROM alerts{where} GROUP BY 1"
         with self._lock:
-            stamps = [r[0] for r in self._conn.execute(f"SELECT ts FROM alerts{where}", args)]
+            minutes = self._conn.execute(sql, args).fetchall()
         buckets: Counter[datetime] = Counter()
-        for s in stamps:
-            local = datetime.fromisoformat(s).astimezone(tz)
+        for stamp, n in minutes:
+            local = datetime.fromisoformat(f"{stamp}:00+00:00").astimezone(tz)
             # Key on the UTC instant so the repeated hour at a DST change stays two buckets.
-            buckets[local.replace(minute=0, second=0, microsecond=0).astimezone(UTC)] += 1
+            buckets[local.replace(minute=0, second=0, microsecond=0).astimezone(UTC)] += n
         return [(k.astimezone(tz), buckets[k]) for k in sorted(buckets)]
+
+    def latest_msgs(self, sids: list[int], since: datetime | None = None) -> dict[int, str]:
+        """The newest message seen for each sid, in one query."""
+        if not sids:
+            return {}
+        where, args = _range(since, None)
+        marks = ",".join("?" * len(sids))
+        where += (" AND " if where else " WHERE ") + f"sid IN ({marks})"
+        # SQLite returns the row holding MAX(ts) for the bare column `msg`.
+        sql = f"SELECT sid, msg, MAX(ts) FROM alerts{where} GROUP BY sid"
+        with self._lock:
+            return {r[0]: r[1] for r in self._conn.execute(sql, [*args, *sids])}
 
     def prune(self, before: datetime) -> int:
         """Delete alerts strictly older than `before`; returns the number deleted."""

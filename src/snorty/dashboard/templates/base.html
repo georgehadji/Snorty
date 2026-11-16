@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false}'>
   <title>{% block title %}Snorty{% endblock %}</title>
-  <link rel="stylesheet" href="/static/app.css">
-  <script src="/static/htmx.min.js" defer></script>
-  <script src="/static/app.js" defer></script>
+  <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ asset('app.css') }}">
+  <script src="{{ asset('htmx.min.js') }}" defer></script>
+  <script src="{{ asset('app.js') }}" defer></script>
 </head>
 <body hx-headers='{"X-Snorty-Token": "{{ token }}"}'>
   <a class="skip" href="#main">Skip to content</a>
@@ -22,6 +23,7 @@
     </nav>
     {% set s = sensor_status() %}
     <div class="top-right">
+      <button id="theme" class="small" type="button" aria-label="Colour theme: auto">Theme: auto</button>
       <span id="live" class="live" role="status" hidden title="Live updates"><span class="dot"></span><span class="txt">Live updates paused</span></span>
       <a id="top-status" role="status" class="status {{ s.tone }}" href="/" title="Sensor status"><span class="dot"></span><span class="txt">Sensor {{ s.state }}</span></a>
     </div>

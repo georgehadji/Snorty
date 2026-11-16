@@ -1,6 +1,7 @@
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -102,6 +103,15 @@ def test_count_can_be_limited_to_urgent_priorities(repo: AlertRepository) -> Non
     assert repo.count(min_priority=2) == 2
     assert repo.count(min_priority=1) == 1
     assert repo.count() == 4
+
+
+def test_latest_msgs_returns_the_newest_message_per_sid(repo: AlertRepository) -> None:
+    repo.add(make_alert(1, sid=7, ts=T0))
+    repo.add(replace(make_alert(2, sid=7, ts=T0 + timedelta(seconds=5)), msg="newer"))
+    repo.add(make_alert(3, sid=8, ts=T0))
+    assert repo.latest_msgs([7, 8, 9]) == {7: "newer", 8: "rule 8"}
+    assert repo.latest_msgs([]) == {}
+    assert repo.latest_msgs([7], since=T0 + timedelta(hours=1)) == {}
 
 
 def test_counts_by_hour_buckets_in_given_zone(repo: AlertRepository) -> None:

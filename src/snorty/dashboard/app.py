@@ -1,6 +1,7 @@
 """The FastAPI app: routes are thin, each calls one service and renders a template."""
 
 import asyncio
+import hashlib
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.gzip import GZipMiddleware
 
 from snorty.core.events import AlertRaised, Event, SensorStateChanged
 from snorty.dashboard import views
@@ -25,6 +27,7 @@ from snorty.dashboard.ui import Ui
 from snorty.services import Services
 
 _HERE = Path(__file__).parent
+_STATIC = _HERE / "static"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,10 +41,9 @@ def _overview_data(svc: Services, now: datetime) -> dict[str, Any]:
     """Everything the Overview needs from the repository (blocking; run in a thread)."""
     midnight = now.astimezone(svc.tz).replace(hour=0, minute=0, second=0, microsecond=0)
     today = svc.repo.counts_by_sid(since=midnight)
-    top = []
-    for sid, count in today[:5]:
-        latest = svc.repo.query(sid=sid, since=midnight, limit=1)
-        top.append(TopRule(sid, latest[0].msg if latest else "", count))
+    best = today[:5]
+    msgs = svc.repo.latest_msgs([sid for sid, _ in best], since=midnight)
+    top = [TopRule(sid, msgs.get(sid, ""), count) for sid, count in best]
     total = sum(n for _, n in today)
     urgent = svc.repo.count(since=midnight, min_priority=2)
     first = top[0] if top else None
@@ -96,10 +98,14 @@ def build_app(
         title="Snorty", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
     )
     app.state.services = services
+    app.add_middleware(GZipMiddleware, minimum_size=500)  # Starlette skips SSE
     app.add_middleware(SecurityMiddleware, token=token, port=port)
-    app.mount("/static", StaticFiles(directory=_HERE / "static"), name="static")
+    app.mount("/static", StaticFiles(directory=_STATIC), name="static")
     templates = Jinja2Templates(directory=_HERE / "templates")
     templates.env.globals["token"] = token
+    # Versioned asset URLs let the browser cache them for good; a changed file gets a new URL.
+    stamps = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()[:10] for p in _STATIC.iterdir()}
+    templates.env.globals["asset"] = lambda name: f"/static/{name}?v={stamps.get(name, '0')}"
     templates.env.globals["sensor_status"] = lambda: views.sensor_card(
         services.sensor.status(), services.tz
     )

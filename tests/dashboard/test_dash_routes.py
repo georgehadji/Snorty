@@ -92,6 +92,31 @@ def test_pages_have_skip_link_named_nav_and_labelled_controls(tmp_path: Path) ->
     assert 'aria-label="Pcap file to upload"' in c.get("/lab").text
 
 
+def test_assets_are_versioned_cached_and_compressed(tmp_path: Path) -> None:
+    c, _ = make(tmp_path)
+    html = c.get("/").text
+    m = re.search(r'href="(/static/app\.css\?v=[0-9a-f]{10})"', html)
+    assert m and 'href="/static/favicon.svg?v=' in html
+    r = c.get(m.group(1))
+    assert r.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert "cache-control" not in c.get("/static/app.css").headers
+    assert c.get("/", headers={"accept-encoding": "gzip"}).headers["content-encoding"] == "gzip"
+
+
+def test_alert_rows_open_to_show_detail_and_the_page_has_a_theme_button(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    s.repo.add(alert(2001, ts=T0 + timedelta(minutes=10)))
+    html = c.get("/alerts").text
+    assert "<details><summary" in html and "Alert line" in html and "Protocol" in html
+    assert 'id="theme"' in html
+
+
+def test_templates_use_no_inline_style_attributes() -> None:
+    """The CSP (default-src 'self') blocks them, so they would silently do nothing."""
+    root = Path("src/snorty/dashboard/templates")
+    assert [p.name for p in root.glob("*.html") if " style=" in p.read_text("utf-8")] == []
+
+
 def test_overview_with_no_alerts(tmp_path: Path) -> None:
     c, _ = make(tmp_path)
     html = c.get("/").text

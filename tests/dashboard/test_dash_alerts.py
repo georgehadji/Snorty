@@ -152,7 +152,8 @@ def test_a_ten_thousand_character_message_is_cut_but_kept_in_the_tooltip(tmp_pat
     c, s = make(tmp_path)
     s.repo.add(alert(msg="é" * 10_000, ts=NOW - timedelta(minutes=1)))
     html = c.get("/alerts/rows").text
-    assert html.count("é") == 10_000 + 119  # full text in title, 119 chars + ellipsis shown
+    # the full text sits in the tooltip, the detail rule and the alert line; 119 chars are shown
+    assert html.count("é") == 3 * 10_000 + 119
     assert "…" in html
 
 

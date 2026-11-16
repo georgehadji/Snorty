@@ -77,7 +77,7 @@ document.addEventListener("htmx:beforeSwap", (event) => {
     if (!badge) {
       badge = document.createElement("span");
       badge.className = "count";
-      top.children[2].append(" ", badge);
+      (top.querySelector("summary") || top.children[2]).append(" ", badge);
     }
     const secs = Number(tr.dataset.epoch) - Number(top.dataset.first);
     const span = secs < 60 ? "" : secs < 3600 ? ` over ${Math.round(secs / 60)} min` : ` over ${Math.floor(secs / 3600)} h`;
@@ -139,6 +139,38 @@ document.addEventListener("htmx:beforeSwap", (event) => {
       swapById(e.data);
     });
     source.addEventListener("rules", (e) => swapById(e.data));
+  }
+
+  // A failed request says so, instead of leaving the page looking unchanged.
+  function fail(text) {
+    const box = document.getElementById("flash");
+    if (!box) return;
+    box.textContent = text;
+    box.className = "flash bad";
+  }
+  document.addEventListener("htmx:responseError", (e) => fail(`Request failed (${e.detail.xhr.status}).`));
+  document.addEventListener("htmx:sendError", () => fail("Could not reach Snorty."));
+
+  // Colour theme: auto follows the system; the button cycles auto, light, dark.
+  const THEMES = ["auto", "light", "dark"];
+  const themeBtn = document.getElementById("theme");
+  function setTheme(name) {
+    if (name === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.dataset.theme = name;
+    if (themeBtn) {
+      themeBtn.textContent = `Theme: ${name}`;
+      themeBtn.setAttribute("aria-label", `Colour theme: ${name}`);
+    }
+    try { localStorage.setItem("theme", name); } catch (_) { /* private mode */ }
+  }
+  let saved = "auto";
+  try { saved = localStorage.getItem("theme") || "auto"; } catch (_) { /* private mode */ }
+  setTheme(THEMES.includes(saved) ? saved : "auto");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      const now = document.documentElement.dataset.theme || "auto";
+      setTheme(THEMES[(THEMES.indexOf(now) + 1) % THEMES.length]);
+    });
   }
 
   refreshTimes();
