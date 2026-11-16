@@ -11,7 +11,17 @@ from snorty.dashboard.security import valid_priority, valid_range, valid_sid
 from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabResult
 from snorty.notify.service import NotifyStatus
-from snorty.packets import Decoded, DecodeResult, Failed, PacketView, Unavailable
+from snorty.packets import (
+    Conversation,
+    Decoded,
+    DecodeResult,
+    Failed,
+    PacketView,
+    ProtocolRow,
+    Summary,
+    SummaryResult,
+    Unavailable,
+)
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
 from snorty.sensor import SensorStatus, State
@@ -361,3 +371,25 @@ def packets_view(result: DecodeResult) -> PacketsView:
             return PacketsView("unavailable", why)
         case Failed(message=why):
             return PacketsView("error", why)
+
+
+@dataclass(frozen=True, slots=True)
+class SummaryView:
+    state: Literal["ok", "unavailable", "error"]
+    message: str
+    protocols: tuple[ProtocolRow, ...] = ()
+    groups: tuple[tuple[str, tuple[Conversation, ...]], ...] = ()  # kind, its conversations
+
+
+def summary_view(result: SummaryResult) -> SummaryView:
+    match result:
+        case Summary(protocols=protos, conversations=convs):
+            if not protos and not convs:
+                return SummaryView("ok", "The pcap holds no packets.")
+            kinds = dict.fromkeys(c.kind for c in convs)
+            groups = tuple((k, tuple(c for c in convs if c.kind == k)) for k in kinds)
+            return SummaryView("ok", "", protos, groups)
+        case Unavailable(reason=why):
+            return SummaryView("unavailable", why)
+        case Failed(message=why):
+            return SummaryView("error", why)

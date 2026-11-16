@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Protocol
 
-from snorty.packets.models import DecodeResult, Unavailable
+from snorty.packets.models import DecodeResult, SummaryResult, Unavailable
 
 NOT_FOUND = (
     "Wireshark (tshark) was not found. Install Wireshark, or set wireshark_dir in snorty.toml."
@@ -15,9 +15,14 @@ class Decoder(Protocol):
 
     async def decode(self, pcap: Path, *, limit: int) -> DecodeResult: ...
 
+    async def summarize(self, pcap: Path) -> SummaryResult: ...
+
 
 class NoDecoder:
     """Used when no tool is installed, so callers never branch on its absence."""
 
     async def decode(self, pcap: Path, *, limit: int) -> DecodeResult:
+        return Unavailable(NOT_FOUND)
+
+    async def summarize(self, pcap: Path) -> SummaryResult:
         return Unavailable(NOT_FOUND)

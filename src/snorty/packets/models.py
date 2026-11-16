@@ -36,6 +36,36 @@ class Decoded:
 
 
 @dataclass(frozen=True, slots=True)
+class ProtocolRow:
+    """One line of the protocol hierarchy; `depth` 0 is the outermost layer."""
+
+    name: str
+    depth: int
+    frames: int
+    bytes: int
+
+
+@dataclass(frozen=True, slots=True)
+class Conversation:
+    """Traffic between two endpoints. `size` and `duration` are shown as the tool prints them."""
+
+    kind: str  # IPv4, IPv6, TCP or UDP
+    a: str
+    b: str
+    frames: int
+    size: str
+    duration: str
+
+
+@dataclass(frozen=True, slots=True)
+class Summary:
+    """What a pcap contains, without the packets themselves."""
+
+    protocols: tuple[ProtocolRow, ...]
+    conversations: tuple[Conversation, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Unavailable:
     """The tool is not installed or not enabled; not an error."""
 
@@ -50,6 +80,7 @@ class Failed:
 
 
 DecodeResult = Decoded | Unavailable | Failed
+SummaryResult = Summary | Unavailable | Failed
 
 
 @dataclass(frozen=True, slots=True)

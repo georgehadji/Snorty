@@ -128,6 +128,9 @@ Task 1.6 Dashboard: `GET /packets/pcap/{name}` fragment (summary line, packet ta
 
 ### Phase 2 — Lab verification (S)
 
+> **Progress (2026-11-16):** done, tested with real tshark 4.6.9 and real Snort. One `tshark -q -z io,phs -z conv,ip/ipv6/tcp/udp` pass; `wireshark.stats.parse_summary` is pure and capped (60 protocols, 50 conversations per kind). tshark prints conversation sizes with units ("31 kB"), so they are kept as the tool's text; frames and protocol bytes are exact. The route composes both services: after a run, `_lab_result.html` lazy-loads `GET /packets/summary?pcap=`, so the lab package is untouched and a tshark failure never hides rule hits. With no Wireshark the block renders nothing (Inspect already explains).
+> Phase 0 facts learned on the way: tshark 4.6.9 is found in Program Files with no config; `dumpcap -D` lists `\Device\NPF_{GUID}` names without admin (an actual capture is still untested); `-n -q` text output is CRLF.
+
 Reuses Phase 1. After **Check/Run**, the Lab result gains "What the pcap contains": protocol hierarchy and top conversations (`tshark -q -z io,phs` and `-z conv,tcp/udp` parsed by pure functions) next to the rule hits. A rule with zero hits shows which conversations exist so the user can see why it did not fire.
 
 - **Acceptance:** an empty-hit run lists the pcap's protocols and conversations; summary parsing is covered by fixtures; the lab package is untouched (the route composes both services).

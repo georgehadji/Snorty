@@ -10,7 +10,7 @@ from snorty.core.repository import AlertRepository
 from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabJob, LabResult
 from snorty.notify.service import NotifyStatus
-from snorty.packets import Capabilities, DecodeResult
+from snorty.packets import Capabilities, DecodeResult, SummaryResult
 from snorty.rules.blocks import MutedRule
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
@@ -68,6 +68,8 @@ class PacketsPort(Protocol):
     def capabilities(self) -> Capabilities: ...
 
     async def decode(self, pcap: Path, limit: int = 200) -> DecodeResult: ...
+
+    async def summarize(self, pcap: Path) -> SummaryResult: ...
 
 
 @dataclass(frozen=True, slots=True)

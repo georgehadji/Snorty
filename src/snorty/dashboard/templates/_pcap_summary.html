@@ -1,0 +1,30 @@
+<div id="pcap-summary">
+{% if view.state == "error" %}
+  <p class="error">{{ view.message }}</p>
+{% elif view.state == "ok" %}
+  <h3>What the pcap contains</h3>
+  {% if view.message %}<p class="muted">{{ view.message }}</p>{% endif %}
+  {% if view.protocols %}
+  <div class="scroll">
+    <table class="proto">
+      <caption class="sr-only">Protocols in the pcap</caption>
+      <thead><tr><th scope="col">Protocol</th><th scope="col" class="num">Frames</th><th scope="col" class="num">Bytes</th></tr></thead>
+      <tbody>{% for p in view.protocols %}
+        <tr><td class="mono depth-{{ p.depth if p.depth < 6 else 6 }}">{{ p.name }}</td><td class="num">{{ p.frames }}</td><td class="num">{{ p.bytes }}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% for kind, rows in view.groups %}
+  <div class="scroll">
+    <table class="conv">
+      <caption>{{ kind }} conversations</caption>
+      <thead><tr><th scope="col">Between</th><th scope="col">And</th><th scope="col" class="num">Frames</th><th scope="col" class="num">Size</th><th scope="col" class="num">Seconds</th></tr></thead>
+      <tbody>{% for c in rows %}
+        <tr><td class="mono">{{ c.a }}</td><td class="mono">{{ c.b }}</td><td class="num">{{ c.frames }}</td><td class="num">{{ c.size }}</td><td class="num">{{ c.duration }}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+  </div>
+  {% endfor %}
+{% endif %}
+</div>

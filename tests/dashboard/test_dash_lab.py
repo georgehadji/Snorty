@@ -30,7 +30,7 @@ def post(c: TestClient, path: str, **fields: str):  # type: ignore[no-untyped-de
 def wait_done(c: TestClient) -> str:
     for _ in range(60):
         r = c.get("/lab/status")
-        if "hx-get" not in r.text:
+        if 'hx-trigger="every' not in r.text:
             return r.text
         time.sleep(0.05)
     raise AssertionError("lab run never finished")
@@ -302,3 +302,13 @@ def test_an_oversize_form_is_refused_while_reading_it(tmp_path: Path) -> None:
     c, s = make(tmp_path)
     r = c.post("/lab/check", content=b"rules=" + b"x" * (300 * 1024), headers=FORM)
     assert r.status_code == 422 and "form is too large" in r.text and lab(s).calls == []
+
+
+def test_a_run_asks_for_the_pcap_summary_and_a_check_does_not(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    put_pcap(s, "my-file.pcap")
+    with c:
+        post(c, "/lab/run", rules=RULE, pcap="my-file.pcap")
+        assert 'hx-get="/packets/summary?pcap=my-file.pcap"' in wait_done(c)
+        post(c, "/lab/check", rules=RULE)
+        assert "/packets/summary" not in wait_done(c)

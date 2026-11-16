@@ -24,6 +24,7 @@ def _number(form: dict[str, str], key: str, label: str) -> int:
 
 def add_lab_routes(app: FastAPI, ui: Ui) -> None:
     job: Job[LabResult] = Job()
+    last_pcap = [""]  # name of the pcap the latest run used; empty after a check
     ui.cleanups.append(job.cancel)
 
     def bad(request: Request, exc: ValueError) -> HTMLResponse:
@@ -51,8 +52,12 @@ def add_lab_routes(app: FastAPI, ui: Ui) -> None:
             return bad(request, exc)
         if lab_job is not None:
             started = job.start(lambda: svc.lab.run(lab_job))
+            if started:
+                last_pcap[0] = form.get("pcap", "")
         else:
             started = job.start(lambda: svc.lab.check(text))
+            if started:
+                last_pcap[0] = ""
         return running(request, already=not started)
 
     @app.post("/lab/check", response_class=HTMLResponse)
@@ -72,7 +77,7 @@ def add_lab_routes(app: FastAPI, ui: Ui) -> None:
         if job.result is None:
             return ui.page(request, "_lab_result.html", state="idle")
         lab = views.lab_view(job.result, svc.tz)
-        return ui.page(request, "_lab_result.html", state="done", lab=lab)
+        return ui.page(request, "_lab_result.html", state="done", lab=lab, pcap=last_pcap[0])
 
     def saved(request: Request, svc: Svc, name: str, what: str) -> HTMLResponse:
         msg = views.Message(True, f"{what} {name}.")

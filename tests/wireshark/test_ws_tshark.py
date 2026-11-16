@@ -2,8 +2,8 @@ import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from snorty.packets import Decoded, Failed
-from snorty.wireshark.commands import decode_command
+from snorty.packets import Decoded, Failed, Summary
+from snorty.wireshark.commands import decode_command, summary_command
 from snorty.wireshark.runner import Output, ToolError
 from snorty.wireshark.tshark import TsharkDecoder
 
@@ -71,3 +71,34 @@ async def test_a_tool_that_warns_but_produced_packets_still_shows_them() -> None
     out = Output(2, json.dumps([PACKET]).encode(), "tshark: truncated capture", False)
     result = await TsharkDecoder(EXE, run=FakeRun(out)).decode(Path("a.pcap"), limit=10)
     assert isinstance(result, Decoded)
+
+
+def test_the_summary_command_asks_for_statistics_only_and_no_name_lookups() -> None:
+    argv = summary_command(EXE, Path("C:/p/a.pcap"))
+    assert argv[:2] == [str(EXE), "-r"] and "-n" in argv and "-q" in argv
+    assert [argv[i + 1] for i, a in enumerate(argv) if a == "-z"] == [
+        "io,phs",
+        "conv,ip",
+        "conv,ipv6",
+        "conv,tcp",
+        "conv,udp",
+    ]
+
+
+async def test_a_summary_run_is_parsed_with_a_private_profile() -> None:
+    text = b"frame  frames:1 bytes:60\r\n  eth  frames:1 bytes:60\r\n"
+    run = FakeRun(Output(0, text, "", False))
+    result = await TsharkDecoder(EXE, run=run).summarize(Path("C:/p/a.pcap"))
+    assert isinstance(result, Summary) and [p.name for p in result.protocols] == ["frame", "eth"]
+    assert run.env is not None and "snorty-ws-" in run.env["WIRESHARK_CONFIG_DIR"]
+
+
+async def test_summary_failures_become_data() -> None:
+    p = Path("C:/p/a.pcap")
+    for run, expected in [
+        (FakeRun(error=ToolError("took longer than 20 s")), "longer"),
+        (FakeRun(Output(2, b"", "tshark: The file doesn't exist\nmore", False)), "doesn't exist"),
+        (FakeRun(Output(0, b"x", "", True)), "too large"),
+    ]:
+        result = await TsharkDecoder(EXE, run=run).summarize(p)
+        assert isinstance(result, Failed) and expected in result.message, expected

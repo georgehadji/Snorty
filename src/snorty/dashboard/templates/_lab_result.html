@@ -29,6 +29,7 @@
   </table></div>
   {% if lab.matches_total > lab.matches|length %}<p class="muted">Showing the first {{ lab.matches|length }} of {{ lab.matches_total }} matches.</p>{% endif %}
   {% endif %}
+  {% if pcap %}<div id="pcap-summary" hx-get="/packets/summary?pcap={{ pcap|urlencode }}" hx-trigger="load" hx-swap="outerHTML"></div>{% endif %}
 </div>
 {% else %}
 <div id="lab-result" role="status"></div>

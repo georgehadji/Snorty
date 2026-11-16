@@ -10,7 +10,17 @@ from snorty.core.repository import AlertRepository
 from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabJob, LabResult
 from snorty.notify.service import NotifyStatus
-from snorty.packets import Capabilities, Decoded, DecodeResult, Layer, PacketView
+from snorty.packets import (
+    Capabilities,
+    Conversation,
+    Decoded,
+    DecodeResult,
+    Layer,
+    PacketView,
+    ProtocolRow,
+    Summary,
+    SummaryResult,
+)
 from snorty.rules.blocks import MutedRule
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
@@ -173,6 +183,11 @@ class FakeLab:
 class FakePackets:
     def __init__(self) -> None:
         self.calls: list[tuple[Path, int]] = []
+        self.summaries: list[Path] = []
+        self.summary: SummaryResult = Summary(
+            (ProtocolRow("frame", 0, 3, 229), ProtocolRow("tcp", 1, 2, 154)),
+            (Conversation("TCP", "10.0.0.5:40000", "10.0.0.9:80", 2, "154 bytes", "0.0010"),),
+        )
         self.result: DecodeResult = Decoded(
             (
                 PacketView(
@@ -196,6 +211,10 @@ class FakePackets:
     async def decode(self, pcap: Path, limit: int = 200) -> DecodeResult:
         self.calls.append((pcap, limit))
         return self.result
+
+    async def summarize(self, pcap: Path) -> SummaryResult:
+        self.summaries.append(pcap)
+        return self.summary
 
 
 def make_services(tmp_path: Path) -> Services:
