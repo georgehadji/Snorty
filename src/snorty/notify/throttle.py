@@ -55,6 +55,11 @@ class Throttle:
             self._sids.popitem(last=False)
         return decision
 
+    def missed(self, count: int) -> None:
+        """`count` alerts never reached decide() (a burst overflowed the queue); the next toast
+        reports them with the ones the global cap dropped."""
+        self._other += count
+
     def release(self, sid: int, decision: Decision) -> None:
         """The toast `decision` allowed could not be shown. Let this SID try again at once and
         give back the counts that toast would have reported. The global cap slot stays used,

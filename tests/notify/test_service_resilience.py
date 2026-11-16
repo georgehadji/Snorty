@@ -70,7 +70,7 @@ async def test_a_hanging_notifier_is_cut_off_by_the_service_timeout() -> None:
     await service.stop()
 
 
-async def test_a_blocked_consumer_never_slows_publish_and_drops_oldest() -> None:
+async def test_a_blocked_consumer_never_slows_publish_and_keeps_the_oldest() -> None:
     notifier = ScriptedNotifier(hang_on=1)
     bus, service = make(notifier, show_timeout=60.0)
     await service.start()
@@ -81,8 +81,25 @@ async def test_a_blocked_consumer_never_slows_publish_and_drops_oldest() -> None
     for sid in range(2, 3002):
         raise_alert(bus, make_alert(sid))
     assert time.perf_counter() - started < 1.0
-    assert service._sub is not None and service._sub.dropped >= 2000  # maxsize is 1000
+    assert service._sub is not None and service._sub.dropped == 2000  # maxsize is 1000
+    assert service._sub._queue.get_nowait().alert.sid == 2  # type: ignore[union-attr]
     await service.stop()  # cancels the stuck consumer
+
+
+async def test_the_first_alert_of_a_burst_is_toasted_and_the_rest_are_counted() -> None:
+    notifier = RecordingNotifier()
+    bus, service = make(notifier, cap=2)
+    await service.start()
+    raise_alert(bus, make_alert(9_000_001))  # a rare rule, then a scan, all in one poll
+    for n in range(3000):
+        raise_alert(bus, make_alert(2_000_000 + n))
+    await settle(lambda: len(notifier.toasts) == 2)
+    await settle()
+    assert notifier.toasts[0].title.endswith("rule 9000001")
+    # 2001 never reached the queue: the next toast reports them, not the rare rule's toast
+    assert "+2001 other alerts" in notifier.toasts[1].lines
+    assert service._throttle._other == 998  # the rest of the queue, held by the cap
+    await service.stop()
 
 
 async def test_stop_cancels_the_consumer_and_closes_the_subscription() -> None:

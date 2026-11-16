@@ -58,12 +58,14 @@ class NotifyService:
         if self._task is not None:
             return
         # Only toast-worthy alerts enter the queue, so a flood of low-priority ones cannot
-        # push a priority-1 alert out of it before the consumer reads it.
+        # push a priority-1 alert out of it before the consumer reads it. A burst bigger than the
+        # queue keeps its first alerts: the rest are mostly repeats the throttle would hold back.
         self._sub = self._bus.subscribe(
             maxsize=1000,
             accept=lambda e: (
                 isinstance(e, AlertRaised) and e.alert.priority <= self._config.min_priority
             ),
+            keep_oldest=True,
         )
         self._task = asyncio.create_task(self._consume(self._sub), name="notify-consumer")
 
@@ -76,12 +78,17 @@ class NotifyService:
         self._task = self._sub = None
 
     async def _consume(self, sub: Subscription) -> None:
+        missed = 0
         async for event in sub:
             if isinstance(event, AlertRaised):
                 try:
                     await self._handle(event)
                 except Exception:  # the consumer must outlive any single bad alert
                     log.exception("could not handle alert SID %s", event.alert.sid)
+            # Alerts refused by the full queue came after this one: the next toast reports them.
+            if sub.dropped > missed:
+                self._throttle.missed(sub.dropped - missed)
+                missed = sub.dropped
 
     async def _handle(self, event: AlertRaised) -> None:
         alert = event.alert

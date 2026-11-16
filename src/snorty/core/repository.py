@@ -242,10 +242,16 @@ class AlertRepository:
         Snort's file (which still holds them) do not bring them back."""
         cutoff = _utc(before)
         with self._lock:
-            deleted = self._conn.execute("DELETE FROM alerts WHERE ts < ?", (cutoff,)).rowcount
-            self._conn.execute(
-                "INSERT INTO meta (key, value) VALUES (?, ?) "
-                "ON CONFLICT (key) DO UPDATE SET value = MAX(value, excluded.value)",
-                (_FLOOR, cutoff),
-            )
+            self._conn.execute("BEGIN")  # rows and floor together: a crash between them would
+            try:  # let the deleted alerts be read back from Snort's file
+                deleted = self._conn.execute("DELETE FROM alerts WHERE ts < ?", (cutoff,)).rowcount
+                self._conn.execute(
+                    "INSERT INTO meta (key, value) VALUES (?, ?) "
+                    "ON CONFLICT (key) DO UPDATE SET value = MAX(value, excluded.value)",
+                    (_FLOOR, cutoff),
+                )
+            except BaseException:
+                self._conn.execute("ROLLBACK")
+                raise
+            self._conn.execute("COMMIT")
             return deleted

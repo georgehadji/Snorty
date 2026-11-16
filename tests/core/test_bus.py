@@ -40,6 +40,15 @@ async def test_overflow_drops_oldest_and_counts() -> None:
     assert await take(sub, 3) == [ev(7), ev(8), ev(9)]
 
 
+async def test_a_keep_oldest_subscriber_refuses_new_events_when_full_and_counts() -> None:
+    bus = EventBus()
+    sub = bus.subscribe(maxsize=3, keep_oldest=True)
+    for i in range(10):
+        bus.publish(ev(i))
+    assert sub.dropped == 7
+    assert await take(sub, 3) == [ev(0), ev(1), ev(2)]
+
+
 async def test_publish_never_blocks_on_stalled_subscriber() -> None:
     bus = EventBus()
     bus.subscribe(maxsize=1)  # never read

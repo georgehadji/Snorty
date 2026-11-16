@@ -57,6 +57,15 @@ async def test_many_alerts_in_one_interval_cause_one_write_per_day(rig: Rig) -> 
     assert len(rig.store.writes) == 1
 
 
+async def test_a_burst_of_alerts_does_not_lose_the_day_of_its_first_alert(rig: Rig) -> None:
+    await rig.service.start()
+    older = NOW - timedelta(days=3)
+    rig.add(make_alert(7, older), *(make_alert(1000 + n) for n in range(1500)))  # one poll
+    rig.ticks.tick()
+    await settle(lambda: older.date() in rig.store.notes)
+    assert "| 7 | rule 7 | 1 |" in rig.store.notes[older.date()]
+
+
 async def test_stop_flushes_what_is_pending(rig: Rig) -> None:
     await rig.service.start()
     rig.add(make_alert(8))

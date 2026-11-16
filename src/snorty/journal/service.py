@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 
 from snorty.core.bus import EventBus, Subscription
-from snorty.core.events import AlertRaised
+from snorty.core.events import AlertRaised, Event
 from snorty.core.models import Alert
 from snorty.core.repository import AlertRepository
 from snorty.journal.merge import merge
@@ -99,12 +99,11 @@ class JournalService:
         """Subscribe, regenerate today and yesterday, then keep the notes current."""
         if self._sub is not None:
             return
-        self._sub = self._bus.subscribe(maxsize=1000)
+        # Days are marked as each alert is published, so no queue can overflow in a burst and lose
+        # a day; the subscription only holds the hook and is never read.
+        self._sub = self._bus.subscribe(maxsize=1, accept=self._mark)
         # The tasks exist before the first await, so a stop() during the flush finds them all.
-        self._tasks = [
-            asyncio.create_task(self._consume(self._sub), name="journal-consumer"),
-            asyncio.create_task(self._ticker(), name="journal-ticker"),
-        ]
+        self._tasks = [asyncio.create_task(self._ticker(), name="journal-ticker")]
         today = self._today()
         self._dirty |= {today - timedelta(days=1), today}
         await self.flush()
@@ -117,7 +116,7 @@ class JournalService:
         await asyncio.gather(*self._tasks, return_exceptions=True)
         self._sub.close()
         self._tasks, self._sub = [], None
-        self._dirty.add(self._today())  # events still queued were never read
+        self._dirty.add(self._today())  # today may hold alerts that were stored, never announced
         await self.flush()
 
     async def flush(self) -> None:
@@ -132,10 +131,11 @@ class JournalService:
                 self._failed[day] = f"{type(exc).__name__}: {exc}"
                 self._dirty.add(day)
 
-    async def _consume(self, sub: Subscription) -> None:
-        async for event in sub:
-            if isinstance(event, AlertRaised):
-                self._dirty.add(event.alert.ts.astimezone(self._config.tz).date())
+    def _mark(self, event: Event) -> bool:
+        """Runs inside publish(): note the alert's day, and keep nothing in the queue."""
+        if isinstance(event, AlertRaised):
+            self._dirty.add(event.alert.ts.astimezone(self._config.tz).date())
+        return False
 
     async def _ticker(self) -> None:
         while True:

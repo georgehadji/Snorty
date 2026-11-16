@@ -98,19 +98,22 @@ async def test_the_stream_ends_when_the_bus_subscription_is_closed() -> None:
         await anext(gen)
 
 
-async def test_a_slow_consumer_keeps_only_the_newest_events() -> None:
+async def test_a_slow_consumer_is_told_to_resync_then_gets_the_newest_events() -> None:
     bus = EventBus()
     gen, subs = stream(bus, heartbeat=0.02, maxsize=5)
     await anext(gen)
     for i in range(100):
         bus.publish(AlertRaised(alert(msg=f"m{i}")))
     got = []
-    while len(got) < 5:
+    while len(got) < 6:
         frame = await anext(gen)
         if frame.startswith("event"):
             got.append(frame)
-    assert [f.split("data: ")[1].strip() for f in got] == [f"m{i}" for i in range(95, 100)]
+    assert got[0] == "event: resync\ndata: \n\n"  # the tab redraws its table from the store
+    assert [f.split("data: ")[1].strip() for f in got[1:]] == [f"m{i}" for i in range(95, 100)]
     assert subs[0].dropped == 95
+    bus.publish(AlertRaised(alert(msg="next")))
+    assert await anext(gen) == "event: alert\ndata: next\n\n"  # no second resync without loss
     await gen.aclose()  # type: ignore[attr-defined]
 
 

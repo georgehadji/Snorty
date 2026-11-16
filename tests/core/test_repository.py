@@ -101,6 +101,14 @@ def test_pruned_alerts_are_not_stored_again(repo: AlertRepository) -> None:
     assert repo.add(old) is False
 
 
+def test_a_prune_that_cannot_record_its_floor_deletes_nothing(repo: AlertRepository) -> None:
+    repo.add(make_alert(1, ts=T0 - timedelta(days=100)))
+    repo._conn.execute("DROP TABLE meta")  # the second statement of the prune now fails
+    with pytest.raises(sqlite3.OperationalError):
+        repo.prune(T0 - timedelta(days=90))
+    assert len(repo.query()) == 1  # deleted rows without a floor would come back from the file
+
+
 def test_add_many_counts_only_new_rows(repo: AlertRepository) -> None:
     alerts = [make_alert(i) for i in range(5)]
     assert repo.add_many(alerts) == 5

@@ -122,6 +122,29 @@ document.addEventListener("htmx:beforeSwap", (event) => {
     }
   });
 
+  // The server dropped events this tab could not keep up with (a burst of alerts). Redraw the
+  // table from the store rather than leave gaps: the page's own URL renders the same table.
+  let resyncing = false;
+  async function resync() {
+    if (!rows || resyncing) return;
+    resyncing = true;
+    try {
+      const query = form ? new URLSearchParams(new FormData(form)).toString() : "";
+      const res = await fetch(query ? `${location.pathname}?${query}` : location.pathname);
+      if (!res.ok) return;
+      const page = new DOMParser().parseFromString(await res.text(), "text/html");
+      const fresh = page.getElementById("alert-rows");
+      if (!fresh) return;
+      rows.innerHTML = fresh.innerHTML;
+      activate(rows);
+      refreshTimes();
+    } catch {
+      // the stream's own error handling shows that Snorty is unreachable
+    } finally {
+      resyncing = false;
+    }
+  }
+
   function setLive(on) {
     const el = document.getElementById("live");
     if (!el) return;
@@ -135,6 +158,7 @@ document.addEventListener("htmx:beforeSwap", (event) => {
     source.addEventListener("open", () => setLive(true));
     source.addEventListener("error", () => setLive(false));
     source.addEventListener("alert", (e) => addRows(e.data));
+    source.addEventListener("resync", resync);
     source.addEventListener("sensor", (e) => {
       updateStatus(e.data);
       swapById(e.data);

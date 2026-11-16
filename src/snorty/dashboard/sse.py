@@ -27,6 +27,7 @@ async def sse_frames(
     whether the client left, the task was cancelled or the bus closed it."""
     sub = subscribe()
     waiting: asyncio.Future[Event] | None = None
+    dropped = 0
     try:
         yield ": connected\n\n"
         while True:
@@ -41,6 +42,9 @@ async def sse_frames(
                 event = finished.result()
             except StopAsyncIteration:
                 return
+            if sub.dropped > dropped:  # a burst outran this tab: have it redraw from the store
+                dropped = sub.dropped
+                yield format_frame("resync", "")
             if (out := await render(event)) is not None:
                 yield format_frame(*out)
     finally:
