@@ -67,18 +67,18 @@ def test_build_toast_has_message_addresses_sid_and_time() -> None:
     toast = build_toast(alert())
     assert toast == Toast(
         "Snort P1: NIDS test - uid=0(root) response",
-        ("TCP 10.0.0.1:4444 -> 10.0.0.2:80", "SID 1:1000002  01:02:03"),
+        ("TCP 10.0.0.1:4444 → 10.0.0.2:80", "SID 1:1000002 at 01:02:03"),
     )
 
 
 def test_missing_ports_are_omitted() -> None:
     toast = build_toast(alert(proto="ICMP", src_port=None, dst_port=None))
-    assert toast.lines[0] == "ICMP 10.0.0.1 -> 10.0.0.2"
+    assert toast.lines[0] == "ICMP 10.0.0.1 → 10.0.0.2"
 
 
 def test_time_is_shown_in_the_given_zone() -> None:
     zone = timezone(timedelta(hours=5, minutes=30))
-    assert build_toast(alert(), tz=zone).lines[1] == "SID 1:1000002  06:32:03"
+    assert build_toast(alert(), tz=zone).lines[1] == "SID 1:1000002 at 06:32:03"
 
 
 def test_suppressed_counts_add_lines_only_when_non_zero() -> None:
@@ -95,5 +95,5 @@ def test_hostile_alert_text_is_sanitised_and_capped_everywhere() -> None:
     assert len(toast.title) <= 80
     assert all(len(line) <= 120 for line in toast.lines)
     text = toast.title + "".join(toast.lines)
-    assert not set(text) & (DANGEROUS - {">"})
-    assert text.count(">") == 1  # only the arrow between the addresses
+    assert not set(text) & DANGEROUS
+    assert text.count("→") == 1  # the arrow between the addresses

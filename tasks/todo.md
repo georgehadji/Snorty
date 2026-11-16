@@ -30,12 +30,12 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 3: Port and adapters, dependency (M)
 `ports.py`; `pyproject.toml` via `uv add winotify`.
-- [ ] `Notifier` Protocol (`async show(toast)`)
-- [ ] `ConsoleNotifier(out=print)` prints title and lines
-- [ ] `WinotifyNotifier(app_id="Snorty", timeout=10.0, send=None)`: builds the library's `Notification` from a `Toast` and shows it in `asyncio.to_thread` under `asyncio.wait_for`; the library call is injectable (`send`) so tests never show a real toast
-- [ ] Read the installed `winotify` source and record in a code comment what it does with title and message text (script, XML, or escaping); if text is interpolated unescaped, the sanitiser already guards it and a test pins that no sanitised character class reaches the library
-- [ ] Unit tests: `send` called with the title and joined lines; timeout raises `TimeoutError`; library exception propagates (the service handles it in Task 5)
-- [ ] Verify: `uv run pytest tests/notify/test_ports.py -q`
+- [x] `Notifier` Protocol (`async show(toast)`)
+- [x] `ConsoleNotifier(out=print)` prints title and lines
+- [x] `WinotifyNotifier(app_id="Snorty", timeout=10.0, send=None)`: builds the library's `Notification` from a `Toast` and shows it in `asyncio.to_thread` under `asyncio.wait_for`; the library call is injectable (`send`) so tests never show a real toast
+- [x] Read the installed `winotify` source and record in a code comment what it does with title and message text (script, XML, or escaping); if text is interpolated unescaped, the sanitiser already guards it and a test pins that no sanitised character class reaches the library
+- [x] Unit tests: `send` called with the title and joined lines; timeout raises `TimeoutError`; library exception propagates (the service handles it in Task 5)
+- [x] Verify: `uv run pytest tests/notify/test_ports.py -q`
 - Dependencies: Task 1 · Files: `ports.py`, `pyproject.toml`, `uv.lock`, `tests/notify/test_ports.py`
 
 ## Task 4: NotifyService, filter and throttle (M)

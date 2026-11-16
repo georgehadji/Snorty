@@ -34,7 +34,7 @@ check.
 - [x] All unit tests green; ruff and strict mypy clean on `snorty.notify`
 
 ### Phase 2: Port and service
-- [ ] Task 3: `Notifier` port, `ConsoleNotifier`, `WinotifyNotifier`, add `winotify`
+- [x] Task 3: `Notifier` port, `ConsoleNotifier`, `WinotifyNotifier`, add `winotify`
 - [ ] Task 4: `NotifyService` (filter, throttle, build, show, counters)
 - [ ] Task 5: service resilience (notifier errors and timeouts, blocking notifier, stop, double start)
 

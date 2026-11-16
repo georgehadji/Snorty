@@ -44,11 +44,11 @@ def build_toast(alert: Alert, same_sid: int = 0, other: int = 0, tz: tzinfo = UT
     title = sanitize(f"Snort P{alert.priority}: {alert.msg}", TITLE_LIMIT)
     flow = (
         f"{sanitize(alert.proto, 10)} {_endpoint(alert.src_ip, alert.src_port)}"
-        f" -> {_endpoint(alert.dst_ip, alert.dst_port)}"
+        f" → {_endpoint(alert.dst_ip, alert.dst_port)}"
     )
     lines = [
         flow[:LINE_LIMIT],
-        f"SID {alert.gid}:{alert.sid}  {alert.ts.astimezone(tz):%H:%M:%S}",
+        f"SID {alert.gid}:{alert.sid} at {alert.ts.astimezone(tz):%H:%M:%S}",
     ]
     if same_sid:
         lines.append(f"+{same_sid} more")

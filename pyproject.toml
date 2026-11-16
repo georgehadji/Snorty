@@ -3,7 +3,9 @@ name = "snorty"
 version = "0.1.0"
 description = "Local dashboard and tooling around a Snort 2.9 install"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "winotify>=1.1.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -40,3 +42,7 @@ python_version = "3.12"
 [[tool.mypy.overrides]]
 module = ["snorty.core.*", "snorty.snort.*", "snorty.sensor.*", "snorty.rules.*", "snorty.notify.*"]
 strict = true
+
+[[tool.mypy.overrides]]
+module = ["winotify", "winotify.*"]
+ignore_missing_imports = true
