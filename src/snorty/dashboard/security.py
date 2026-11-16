@@ -10,6 +10,7 @@ from urllib.parse import parse_qs
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from snorty.core.repository import GroupBy
 from snorty.rules.blocks import Track
 
 log = logging.getLogger(__name__)
@@ -67,6 +68,19 @@ def valid_priority(text: str) -> int:
     if text not in ("1", "2", "3"):
         raise ValueError("priority must be 1, 2 or 3")
     return int(text)
+
+
+def valid_ip(text: str) -> str:
+    try:
+        return str(ipaddress.ip_address(text))
+    except ValueError:
+        raise ValueError("address must be a single IP address") from None
+
+
+def valid_group(text: str) -> GroupBy:
+    if text not in ("sid", "src_ip", "dst_ip"):
+        raise ValueError("group must be sid, src_ip or dst_ip")
+    return cast(GroupBy, text)
 
 
 def valid_range(text: str) -> str:

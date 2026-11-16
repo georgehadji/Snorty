@@ -24,6 +24,7 @@ from snorty.rules.service import RulesService
 from snorty.sensor import Sensor, SensorConfig, SnortAdapter
 from snorty.services import Services
 from snorty.snort import Interface, SnortPaths, SubprocessRunner
+from snorty.triage import TriageService
 from snorty.wireshark import DumpcapRecorder, TsharkDecoder, WiresharkViewer, find_tools
 
 log = logging.getLogger("snorty")
@@ -36,6 +37,7 @@ class Runtime:
     services: Services
     notify: NotifyService | None
     journal: JournalService | None
+    triage: TriageService | None = None
 
     async def start(self, *, sensor: bool = False) -> None:
         try:
@@ -43,6 +45,8 @@ class Runtime:
                 await self.notify.start()
             if self.journal:
                 await self.journal.start()
+            if self.triage:
+                await self.triage.start()
             if sensor:
                 await self.services.sensor.start()
         except BaseException:  # leave nothing half started
@@ -56,11 +60,15 @@ class Runtime:
             await asyncio.shield(self.services.sensor.stop())
         finally:
             try:
-                if self.journal:
-                    await self.journal.stop()
+                if self.triage:
+                    await self.triage.stop()
             finally:
-                if self.notify:
-                    await self.notify.stop()
+                try:
+                    if self.journal:
+                        await self.journal.stop()
+                finally:
+                    if self.notify:
+                        await self.notify.stop()
 
 
 def compose(
@@ -119,4 +127,4 @@ def compose(
         scratch=data_dir / "opened",
     )
     services = Services(sensor, rules, journal, toasts, lab, repo, bus, tz, data_dir, packets)
-    return Runtime(services, toasts, journal)
+    return Runtime(services, toasts, journal, TriageService(bus, repo))

@@ -7,7 +7,9 @@ from typing import Literal
 from urllib.parse import urlencode
 
 from snorty.core.models import Alert
-from snorty.dashboard.security import valid_priority, valid_range, valid_sid
+from snorty.core.query import AlertQuery
+from snorty.core.repository import Group, GroupBy
+from snorty.dashboard.security import valid_group, valid_ip, valid_priority, valid_range, valid_sid
 from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabResult
 from snorty.notify.service import NotifyStatus
@@ -52,10 +54,26 @@ class AlertFilters:
     priority: int | None  # shows priorities up to this number (1 = most severe only)
     range: str
     page: int
+    src: str | None = None  # only alerts from this address
+    dst: str | None = None
+    group: GroupBy | None = None  # count alerts per rule, source or destination instead
 
     def since(self, now: datetime) -> datetime | None:
         delta = _RANGE_DELTA[self.range]
         return now - delta if delta else None
+
+    def ungrouped_query(self) -> str:
+        return replace(self, group=None).query_string(1)
+
+    def to_query(self, now: datetime | None) -> AlertQuery:
+        """What this view shows; without `now` the range is left out (a live alert is new)."""
+        return AlertQuery(
+            since=self.since(now) if now else None,
+            sid=self.sid,
+            min_priority=self.priority,
+            src_ip=self.src,
+            dst_ip=self.dst,
+        )
 
     def query_string(self, page: int) -> str:
         params: dict[str, str | int] = {}
@@ -63,6 +81,12 @@ class AlertFilters:
             params["sid"] = self.sid
         if self.priority is not None:
             params["priority"] = self.priority
+        if self.src is not None:
+            params["src"] = self.src
+        if self.dst is not None:
+            params["dst"] = self.dst
+        if self.group is not None:
+            params["group"] = self.group
         params["range"] = self.range
         params["page"] = page
         return urlencode(params)
@@ -70,7 +94,7 @@ class AlertFilters:
 
 def alert_matches(f: AlertFilters, a: Alert) -> bool:
     """Whether a live alert belongs in a table filtered by `f` (range and page do not apply)."""
-    return (f.sid is None or a.sid == f.sid) and (f.priority is None or a.priority <= f.priority)
+    return f.to_query(None).matches(a)
 
 
 def parse_alert_filters(params: Mapping[str, str]) -> AlertFilters:
@@ -78,6 +102,7 @@ def parse_alert_filters(params: Mapping[str, str]) -> AlertFilters:
     sid = params.get("sid", "")
     priority = params.get("priority", "")
     page = params.get("page", "")
+    src, dst, group = params.get("src", ""), params.get("dst", ""), params.get("group", "")
     if page and not (page.isascii() and page.isdigit() and 0 < int(page) <= MAX_PAGE):
         raise ValueError(f"page must be a whole number from 1 to {MAX_PAGE}")
     return AlertFilters(
@@ -85,6 +110,9 @@ def parse_alert_filters(params: Mapping[str, str]) -> AlertFilters:
         priority=valid_priority(priority) if priority else None,
         range=valid_range(params.get("range") or "24h"),
         page=int(page) if page else 1,
+        src=valid_ip(src) if src else None,
+        dst=valid_ip(dst) if dst else None,
+        group=valid_group(group) if group else None,
     )
 
 
@@ -130,6 +158,40 @@ class AlertRow:
     packet_filter: str = ""  # Wireshark display filter for this packet; empty if none
     conversation_filter: str = ""  # the same for both directions
     span: str = ""  # how long the group lasted, e.g. "12 min"; empty under a minute
+
+
+@dataclass(frozen=True, slots=True)
+class GroupRow:
+    key: str
+    count: int
+    first: str
+    last: str
+    msg: str  # the newest alert's message
+    href: str  # the alert table narrowed to this group
+
+
+def group_rows_view(groups: list[Group], f: AlertFilters, tz: tzinfo) -> list[GroupRow]:
+    """Each group links to the plain table filtered to it, keeping the other filters."""
+    out: list[GroupRow] = []
+    for g in groups:
+        match f.group:
+            case "sid":
+                narrowed = replace(f, group=None, sid=int(g.key))
+            case "src_ip":
+                narrowed = replace(f, group=None, src=g.key)
+            case _:
+                narrowed = replace(f, group=None, dst=g.key)
+        out.append(
+            GroupRow(
+                g.key,
+                g.count,
+                fmt_time(g.first_ts, tz),
+                fmt_time(g.last_ts, tz),
+                g.msg if len(g.msg) <= MSG_MAX else g.msg[: MSG_MAX - 1] + "…",
+                "/alerts?" + narrowed.query_string(1),
+            )
+        )
+    return out
 
 
 def alert_row(a: Alert, tz: tzinfo) -> AlertRow:

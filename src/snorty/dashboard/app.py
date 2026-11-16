@@ -16,6 +16,8 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.gzip import GZipMiddleware
 
 from snorty.core.events import AlertRaised, Event, RulesUpdated, SensorStateChanged
+from snorty.core.query import AlertQuery
+from snorty.core.triage import INBOX
 from snorty.dashboard import views
 from snorty.dashboard.capture_routes import add_capture_routes
 from snorty.dashboard.journal_routes import add_journal_routes
@@ -25,6 +27,7 @@ from snorty.dashboard.rules_routes import add_rules_routes
 from snorty.dashboard.security import SecurityMiddleware
 from snorty.dashboard.services import Svc
 from snorty.dashboard.sse import HEARTBEAT_SECONDS, Render, sse_frames
+from snorty.dashboard.triage_routes import add_triage_routes
 from snorty.dashboard.ui import Ui
 from snorty.services import Services
 
@@ -54,6 +57,7 @@ def _overview_data(svc: Services, now: datetime) -> dict[str, Any]:
         "count_hour": svc.repo.count(since=now - timedelta(hours=1)),
         "count_today": total,
         "count_urgent": urgent,
+        "count_inbox": sum(svc.repo.counts_by_state(AlertQuery())[s] for s in INBOX),
         "finding": views.overview_finding(
             total, urgent, first.msg if first else "", first.count if first else 0
         ),
@@ -69,10 +73,13 @@ def _alert_page(
     svc: Services, f: views.AlertFilters, now: datetime
 ) -> tuple[list[views.AlertRow], str | None]:
     """One page of alerts and the query string for the next page, if there is one."""
+    q = f.to_query(now)
     found = svc.repo.query(
-        since=f.since(now),
-        sid=f.sid,
-        min_priority=f.priority,
+        since=q.since,
+        sid=q.sid,
+        min_priority=q.min_priority,
+        src_ip=q.src_ip,
+        dst_ip=q.dst_ip,
         limit=views.PAGE_SIZE + 1,
         offset=(f.page - 1) * views.PAGE_SIZE,
     )
@@ -162,10 +169,21 @@ def build_app(
         except ValueError as exc:
             blank = views.AlertFilters(None, None, "24h", 1)
             return page(
-                request, "alerts.html", status=422, f=blank, error=str(exc), rows=[], more=None
+                request,
+                "alerts.html",
+                status=422,
+                f=blank,
+                error=str(exc),
+                rows=[],
+                more=None,
+                groups=None,
             )
+        if f.group:
+            found = await asyncio.to_thread(svc.repo.group, f.to_query(clock()), f.group)
+            groups = views.group_rows_view(found, f, svc.tz)
+            return page(request, "alerts.html", f=f, error=None, rows=[], more=None, groups=groups)
         rows, more = await asyncio.to_thread(_alert_page, svc, f, clock())
-        return page(request, "alerts.html", f=f, error=None, rows=rows, more=more)
+        return page(request, "alerts.html", f=f, error=None, rows=rows, more=more, groups=None)
 
     @app.get("/alerts/rows", response_class=HTMLResponse)
     async def alert_rows(request: Request, svc: Svc) -> HTMLResponse:
@@ -196,6 +214,7 @@ def build_app(
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
         )
 
+    add_triage_routes(app, ui)
     add_rules_routes(app, ui)
     add_journal_routes(app, ui)
     add_lab_routes(app, ui)

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from snorty.core.models import Alert
-from snorty.core.repository import AlertRepository
+from snorty.core.repository import MIGRATIONS, AlertRepository
 
 T0 = datetime(2026, 11, 15, 12, 0, 0, tzinfo=UTC)
 
@@ -283,8 +283,8 @@ def test_each_database_records_how_many_migrations_it_has_had(tmp_path: Path) ->
     with closing(sqlite3.connect(path)) as conn:
         conn.executescript(OLD_SCHEMA)
     repo = AlertRepository(path)
-    assert repo.meta_get("schema_version") == "1"
+    assert repo.meta_get("schema_version") == str(len(MIGRATIONS))
     repo.close()
     fresh = AlertRepository(tmp_path / "fresh.db")
-    assert fresh.meta_get("schema_version") == "1"
+    assert fresh.meta_get("schema_version") == str(len(MIGRATIONS))
     fresh.close()

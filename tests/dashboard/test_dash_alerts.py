@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from dash_fakes import alert
-from test_dash_routes import NOW, make
+from test_dash_routes import NOW, POST, make
 
 from snorty.dashboard.views import AlertFilters, parse_alert_filters
 from snorty.services import Services
@@ -171,3 +171,45 @@ def test_alert_tables_carry_the_class_that_keeps_narrow_screens_readable(tmp_pat
     assert '<table class="alerts">' in c.get("/alerts").text
     assert '<table class="alerts">' in c.get("/").text
     assert "table.alerts" in (Path("src/snorty/dashboard/static/app.css")).read_text("utf-8")
+
+
+def test_group_by_source_lists_each_address_and_links_to_its_alerts(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    c, s = make(tmp_path)
+    s.repo.add_many(
+        replace(alert(2001, ts=NOW - timedelta(minutes=i + 1)), src_ip=ip)
+        for i, ip in enumerate(["10.0.0.7", "10.0.0.7", "10.0.0.8"])
+    )
+    r = c.get("/alerts?group=src_ip")
+    assert r.status_code == 200
+    assert "10.0.0.7" in r.text and "10.0.0.8" in r.text
+    assert 'href="/alerts?src=10.0.0.7&amp;range=24h&amp;page=1"' in r.text
+    filtered = c.get("/alerts?src=10.0.0.8").text
+    assert row_count(filtered) == 1
+
+
+@pytest.mark.parametrize("query", ["src=nope", "dst=1.2.3", "group=bogus"])
+def test_bad_host_or_group_filters_give_422(tmp_path: Path, query: str) -> None:
+    c, _ = make(tmp_path)
+    assert c.get(f"/alerts?{query}").status_code == 422
+
+
+def test_the_inbox_acknowledges_a_rule_and_can_auto_acknowledge_it(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    fill(s, 3, sid=2001)
+    fill(s, 2, sid=2002)
+    page = c.get("/inbox").text
+    assert "5 new" in page and "2001" in page and "2002" in page
+    r = c.post("/triage/set?sid=2001&state=ack", headers=POST)
+    assert r.status_code == 200 and "2 new · 0 starred · 3 acknowledged" in r.text
+    r = c.post("/triage/archive?sid=2002", headers=POST)
+    assert "0 new" in r.text and "Nothing needs a look" in r.text and "Remove" in r.text
+    assert "Unacknowledged" in c.get("/").text
+
+
+def test_bad_inbox_requests_give_422(tmp_path: Path) -> None:
+    c, _ = make(tmp_path)
+    assert c.post("/triage/set?sid=2001&state=bogus", headers=POST).status_code == 422
+    assert c.post("/triage/set?sid=x&state=ack", headers=POST).status_code == 422
+    assert c.post("/triage/archive?sid=0", headers=POST).status_code == 422

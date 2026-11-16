@@ -1,0 +1,47 @@
+<div id="inbox">
+  <section class="card">
+    <h2>Needs a look</h2>
+    <p class="muted">{{ counts.new }} new · {{ counts.starred }} starred · {{ counts.ack }} acknowledged</p>
+    {% if inbox %}
+    <table>
+      <thead><tr><th scope="col">SID</th><th scope="col">Rule</th><th scope="col">Alerts</th><th scope="col">Latest</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>
+        {% for r in inbox %}
+        <tr>
+          <td class="mono"><a href="/alerts?sid={{ r.sid }}&amp;range=all">{{ r.sid }}</a></td>
+          <td>{{ r.msg }}</td>
+          <td class="mono">{{ r.count }}</td>
+          <td class="when">{{ r.last }}</td>
+          <td>
+            <button class="small" hx-post="/triage/set?sid={{ r.sid }}&amp;state=ack" hx-target="#inbox" hx-swap="outerHTML">Acknowledge</button>
+            <button class="small" hx-post="/triage/set?sid={{ r.sid }}&amp;state=starred" hx-target="#inbox" hx-swap="outerHTML">Star</button>
+            {% if not r.archived %}<button class="small" hx-post="/triage/archive?sid={{ r.sid }}" hx-target="#inbox" hx-swap="outerHTML" title="Acknowledge this rule's alerts from now on">Auto-acknowledge</button>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Nothing needs a look.</p>
+    {% endif %}
+  </section>
+  <section class="card">
+    <h2>Auto-acknowledge rules</h2>
+    {% if archive %}
+    <table>
+      <thead><tr><th scope="col">SID</th><th scope="col">Note</th><th scope="col">Added</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>
+        {% for id, sid, note, created in archive %}
+        <tr>
+          <td class="mono">{{ sid }}</td><td>{{ note }}</td><td class="when">{{ created }}</td>
+          <td><button class="small" hx-post="/triage/archive/{{ id }}/delete" hx-target="#inbox" hx-swap="outerHTML">Remove</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="muted">These alerts are still stored and detected. They only skip the inbox.</p>
+    {% else %}
+    <p class="muted">No rules. Use Auto-acknowledge on a noisy rule above.</p>
+    {% endif %}
+  </section>
+</div>

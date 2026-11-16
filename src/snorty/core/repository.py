@@ -1,13 +1,15 @@
 import sqlite3
 import threading
 from collections import Counter
-from collections.abc import Callable, Iterable
-from dataclasses import replace
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, tzinfo
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from snorty.core.models import Alert
+from snorty.core.query import AlertQuery, utc_text
+from snorty.core.triage import STATES, ArchiveRule, TriageState, spec_from_json, spec_to_json
 
 
 def _alerts_table(name: str) -> str:
@@ -49,16 +51,9 @@ _VERSION = "schema_version"
 TAIL_KEY = "tail"  # meta key: the ingest checkpoint (opaque text to the repository)
 
 
-def _utc(dt: datetime) -> str:
-    """UTC ISO-8601 with fixed width, so text order equals time order."""
-    if dt.tzinfo is None:
-        raise ValueError("datetime must be timezone-aware")
-    return dt.astimezone(UTC).isoformat(timespec="microseconds")
-
-
 def _row(a: Alert) -> tuple[Any, ...]:
     return (
-        _utc(a.ts), a.gid, a.sid, a.rev, a.msg, a.classification, a.priority, a.proto,
+        utc_text(a.ts), a.gid, a.sid, a.rev, a.msg, a.classification, a.priority, a.proto,
         a.src_ip, a.src_port, a.dst_ip, a.dst_port, a.raw, a.dup,
     )  # fmt: skip
 
@@ -69,15 +64,7 @@ def _alert(r: tuple[Any, ...]) -> Alert:
 
 
 def _range(since: datetime | None, until: datetime | None) -> tuple[str, list[Any]]:
-    clauses: list[str] = []
-    args: list[Any] = []
-    if since is not None:
-        clauses.append("ts >= ?")
-        args.append(_utc(since))
-    if until is not None:
-        clauses.append("ts < ?")
-        args.append(_utc(until))
-    return (" WHERE " + " AND ".join(clauses) if clauses else ""), args
+    return AlertQuery(since, until).to_sql()
 
 
 def _rebuild_with_dup(conn: sqlite3.Connection) -> None:
@@ -92,8 +79,54 @@ def _rebuild_with_dup(conn: sqlite3.Connection) -> None:
     conn.execute("ALTER TABLE alerts_v2 RENAME TO alerts")
 
 
+def _index_hosts(conn: sqlite3.Connection) -> None:
+    """Group-by and per-host filters read alerts by address."""
+    conn.execute("CREATE INDEX IF NOT EXISTS alerts_src ON alerts (src_ip)")
+    conn.execute("CREATE INDEX IF NOT EXISTS alerts_dst ON alerts (dst_ip)")
+
+
+def _add_triage(conn: sqlite3.Connection) -> None:
+    """No triage row means the alert is new, so storing an alert stays a plain insert."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS triage ("
+        "alert_id INTEGER PRIMARY KEY REFERENCES alerts(id) ON DELETE CASCADE, "
+        "state TEXT NOT NULL, changed TEXT NOT NULL)"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS archive_rules ("
+        "id INTEGER PRIMARY KEY, spec TEXT NOT NULL, note TEXT NOT NULL, created TEXT NOT NULL)"
+    )
+
+
 # Append only: a database's `schema_version` is how many of these it has had.
-MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [_rebuild_with_dup]
+MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
+    _rebuild_with_dup,
+    _index_hosts,
+    _add_triage,
+]
+
+
+def _with_states(q: AlertQuery, states: Sequence[TriageState] | None) -> tuple[str, str, list[Any]]:
+    """(table expression, WHERE, arguments); joins the triage table only when states are asked."""
+    where, args = q.to_sql()
+    if states is None:
+        return "alerts", where, args
+    marks = ",".join("?" * len(states))
+    clause = f"COALESCE(triage.state, 'new') IN ({marks})"
+    where += (" AND " if where else " WHERE ") + clause
+    return "alerts LEFT JOIN triage ON triage.alert_id = alerts.id", where, [*args, *states]
+
+
+type GroupBy = Literal["sid", "src_ip", "dst_ip"]
+
+
+@dataclass(frozen=True, slots=True)
+class Group:
+    key: str  # the SID, or the address, the alerts share
+    count: int
+    first_ts: datetime
+    last_ts: datetime
+    msg: str  # message of the newest alert in the group
 
 
 class AlertRepository:
@@ -107,6 +140,7 @@ class AlertRepository:
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA synchronous=NORMAL")
             self._conn.execute("PRAGMA busy_timeout=5000")
+            self._conn.execute("PRAGMA foreign_keys=ON")  # pruned alerts take their triage
             self._conn.execute(_alerts_table("alerts"))
             self._migrate()
             self._conn.executescript(_INDEXES)
@@ -166,7 +200,7 @@ class AlertRepository:
                 row = self._conn.execute("SELECT value FROM meta WHERE key = ?", (_FLOOR,))
                 floor = (row.fetchone() or ("",))[0]
                 for alert in alerts:
-                    if _utc(alert.ts) < floor:  # older than the last prune: not stored again
+                    if utc_text(alert.ts) < floor:  # older than the last prune: not stored again
                         continue
                     cur = self._conn.execute(sql, _row(alert))
                     if cur.rowcount == 1:
@@ -186,26 +220,43 @@ class AlertRepository:
         until: datetime | None = None,
         sid: int | None = None,
         min_priority: int | None = None,
+        src_ip: str | None = None,
+        dst_ip: str | None = None,
+        states: Sequence[TriageState] | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[Alert]:
         """Newest first. since is inclusive, until exclusive. min_priority=1 keeps
         only priority 1 (1 is the most severe)."""
-        where, args = _range(since, until)
-        extra: list[str] = []
-        if sid is not None:
-            extra.append("sid = ?")
-            args.append(sid)
-        if min_priority is not None:
-            extra.append("priority <= ?")
-            args.append(min_priority)
-        if extra:
-            where += (" AND " if where else " WHERE ") + " AND ".join(extra)
+        q = AlertQuery(since, until, sid, min_priority, src_ip, dst_ip)
+        source, where, args = _with_states(q, states)
         order = "ORDER BY ts DESC, id DESC LIMIT ? OFFSET ?"
-        sql = f"SELECT {_SELECT}{_COLUMNS} FROM alerts{where} {order}"
+        sql = f"SELECT {_SELECT}{_COLUMNS} FROM {source}{where} {order}"
         with self._lock:
             rows = self._conn.execute(sql, [*args, limit, offset]).fetchall()
         return [_alert(r) for r in rows]
+
+    def group(
+        self,
+        q: AlertQuery,
+        by: GroupBy,
+        limit: int = 200,
+        states: Sequence[TriageState] | None = None,
+    ) -> list[Group]:
+        """Alerts matching `q` counted per rule, source or destination, most frequent first.
+        `msg` is the newest alert's message."""
+        source, where, args = _with_states(q, states)
+        column = {"sid": "sid", "src_ip": "src_ip", "dst_ip": "dst_ip"}[by]  # never user text
+        sql = (
+            f"SELECT {column}, COUNT(*) AS n, MIN(ts), MAX(ts), msg FROM {source}{where} "
+            f"GROUP BY {column} ORDER BY n DESC, {column} LIMIT ?"
+        )
+        with self._lock:
+            rows = self._conn.execute(sql, [*args, limit]).fetchall()
+        return [
+            Group(str(r[0]), r[1], datetime.fromisoformat(r[2]), datetime.fromisoformat(r[3]), r[4])
+            for r in rows
+        ]
 
     def get(self, alert_id: int) -> Alert | None:
         """One stored alert by its row id, or None."""
@@ -269,10 +320,63 @@ class AlertRepository:
         with self._lock:
             return {r[0]: r[1] for r in self._conn.execute(sql, [*args, *sids])}
 
+    def set_state(
+        self, q: AlertQuery, state: TriageState, now: datetime, *, only_new: bool = False
+    ) -> int:
+        """Set the triage state of every alert matching `q`; returns how many changed.
+        `only_new` leaves alerts someone already triaged alone."""
+        where, args = q.to_sql()
+        with self._lock:
+            if state == "new":
+                sql = f"DELETE FROM triage WHERE alert_id IN (SELECT id FROM alerts{where})"
+                return self._conn.execute(sql, args).rowcount
+            guard = " AND id NOT IN (SELECT alert_id FROM triage)" if only_new else ""
+            sql = (
+                f"INSERT INTO triage (alert_id, state, changed) SELECT id, ?, ? FROM alerts"
+                f"{where or ' WHERE 1'}{guard} "
+                "ON CONFLICT (alert_id) DO UPDATE SET state = excluded.state, "
+                "changed = excluded.changed"
+            )
+            return self._conn.execute(sql, [state, utc_text(now), *args]).rowcount
+
+    def counts_by_state(self, q: AlertQuery) -> dict[TriageState, int]:
+        source, where, args = _with_states(q, STATES)
+        sql = f"SELECT COALESCE(triage.state, 'new'), COUNT(*) FROM {source}{where} GROUP BY 1"
+        with self._lock:
+            found = dict(self._conn.execute(sql, args).fetchall())
+        return {s: found.get(s, 0) for s in STATES}
+
+    def add_archive_rule(self, spec: AlertQuery, note: str, now: datetime) -> int:
+        with self._lock:
+            cur = self._conn.execute(
+                "INSERT INTO archive_rules (spec, note, created) VALUES (?, ?, ?)",
+                (spec_to_json(spec), note, utc_text(now)),
+            )
+            return cur.lastrowid or 0
+
+    def archive_rules(self) -> list[ArchiveRule]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, spec, note, created FROM archive_rules ORDER BY id"
+            ).fetchall()
+        return [
+            ArchiveRule(spec_from_json(r[1]), r[2], datetime.fromisoformat(r[3]), r[0])
+            for r in rows
+        ]
+
+    def delete_archive_rule(self, rule_id: int) -> bool:
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM archive_rules WHERE id = ?", (rule_id,))
+            return cur.rowcount == 1
+
+    def apply_archive_rules(self, now: datetime) -> int:
+        """Acknowledge new alerts that match an archive rule; returns how many."""
+        return sum(self.set_state(r.spec, "ack", now, only_new=True) for r in self.archive_rules())
+
     def prune(self, before: datetime) -> int:
         """Delete alerts strictly older than `before`; returns the number deleted. Later reads of
         Snort's file (which still holds them) do not bring them back."""
-        cutoff = _utc(before)
+        cutoff = utc_text(before)
         with self._lock:
             self._conn.execute("BEGIN")  # rows and floor together: a crash between them would
             try:  # let the deleted alerts be read back from Snort's file
