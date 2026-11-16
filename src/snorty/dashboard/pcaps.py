@@ -111,3 +111,22 @@ def publish_capture(folder: Path, temp: Path, when: datetime) -> str:
             os.replace(temp, folder / name)
             return name
     raise ValueError("too many captures in the same second")
+
+
+def prune_captures(folder: Path, days: int, *, now: float | None = None) -> int:
+    """Delete recorded `capture-*.pcap` files older than `days` days (0 keeps all).
+
+    Only files Snorty named itself are touched, never an upload or a generated test pcap.
+    """
+    if days <= 0 or not folder.is_dir():
+        return 0
+    cutoff = (time.time() if now is None else now) - days * 86400
+    removed = 0
+    for entry in folder.glob("capture-*.pcap"):
+        try:
+            if entry.is_file() and not entry.is_symlink() and entry.stat().st_mtime < cutoff:
+                entry.unlink()
+                removed += 1
+        except OSError:
+            pass  # in use or already gone: the next sweep tries again
+    return removed

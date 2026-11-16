@@ -178,6 +178,8 @@ Task 4.5 Confidence in the UI: `Exact` quiet, `Near`/`Ambiguous` show "closest m
 
 README (feature, optional dependency, security model additions), `SPEC-packets.md` finalised with deviations, `snorty.toml` key documented, retention of extracted/captured pcaps (delete files older than the alert retention), full verification pass including the real-tshark marker, taste/a11y inspector on the new UI, and a manual browser check.
 
+> **Progress (2026-11-16):** done. `SPEC-packets.md` records the built behaviour and every deviation from this plan. The README gained the Packets feature, Wireshark as an optional requirement, the `packets/` and `wireshark/` entries, and the limits. `snorty.toml` already documented `wireshark_dir`; `retention_days` now also covers recorded captures: the daily prune deletes `capture-*.pcap` files older than it, nothing else (uploads and other files stay). The "opened" scratch files were already swept after 24 h in phase 4. Audit: no shell is used anywhere; tools start only from `wireshark/runner.py` and `wireshark/viewer.py` with fixed argument lists, and import-linter enforces it.
+
 ## 7. Dependency graph and order
 
 ```

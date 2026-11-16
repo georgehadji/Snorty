@@ -184,3 +184,47 @@ def test_capture_names_never_overwrite_and_stale_temp_files_are_swept(tmp_path: 
 def test_nanosecond_pcaps_from_dumpcap_pass_the_upload_check(tmp_path: Path) -> None:
     nano = b"\x4d\x3c\xb2\xa1" + bytes(20)
     assert pcaps.save_pcap(tmp_path, "n.pcap", nano) == "n.pcap"
+
+
+def test_old_recorded_captures_are_deleted_and_nothing_else(tmp_path: Path) -> None:
+    import os
+
+    now = time.time()
+    old, fresh = (
+        tmp_path / "capture-20260101-000000.pcap",
+        tmp_path / "capture-20261115-000000.pcap",
+    )
+    mine, other = tmp_path / "upload.pcap", tmp_path / "capture-note.txt"
+    for f in (old, fresh, mine, other):
+        f.write_bytes(b"x")
+    long_ago = now - 100 * 86400
+    for f in (old, mine, other):
+        os.utime(f, (long_ago, long_ago))
+    assert pcaps.prune_captures(tmp_path, 90, now=now) == 1
+    assert not old.exists() and fresh.exists() and mine.exists() and other.exists()
+    assert pcaps.prune_captures(tmp_path, 0, now=now) == 0  # 0 keeps everything
+    assert pcaps.prune_captures(tmp_path / "gone", 90, now=now) == 0
+
+
+async def test_the_daily_prune_also_clears_old_captures(tmp_path: Path) -> None:
+    import os
+
+    from snorty.core.repository import AlertRepository
+    from snorty.dashboard.__main__ import prune_old
+
+    folder = tmp_path / "pcaps"
+    folder.mkdir()
+    old = folder / "capture-20260101-000000.pcap"
+    old.write_bytes(b"x")
+    long_ago = time.time() - 100 * 86400
+    os.utime(old, (long_ago, long_ago))
+    repo = AlertRepository(tmp_path / "t.db")
+    try:
+        await prune_old(repo, 90, folder)
+        assert not old.exists()
+        old.write_bytes(b"x")
+        os.utime(old, (long_ago, long_ago))
+        await prune_old(repo, 0, folder)  # retention off: nothing is deleted
+        assert old.exists()
+    finally:
+        repo.close()

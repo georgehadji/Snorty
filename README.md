@@ -14,6 +14,7 @@ Snorty is a single-user tool for one PC. It listens on `127.0.0.1` only and has 
 | **Notify** | Windows toast for priority-1 alerts, throttled per rule and overall so a flood does not bury you. |
 | **Journal** | Writes one Markdown note per day into `Security/Snort/` of an Obsidian vault, touching only its own marked block. |
 | **Rule lab** | Lints and tests your own rules in a sandbox copy of the Snort config, against a pcap you upload or generate. The live sensor is never touched. |
+| **Packets** | Optional, needs Wireshark. Shows the packet behind an alert and what it was for (DNS name, TLS server, HTTP host), offers a one-packet download and "Open in Wireshark", suggests display filters, decodes and summarises lab pcaps, and records 5 to 120 seconds of live traffic into the lab. |
 
 ## Requirements
 
@@ -21,6 +22,7 @@ Snorty is a single-user tool for one PC. It listens on `127.0.0.1` only and has 
 - Snort 2.9.20 installed at `C:\Snort`, with Npcap capturing without administrator rights
 - [Python](https://www.python.org/) 3.12 or newer and [uv](https://docs.astral.sh/uv/)
 - Optional: an Obsidian vault, for the journal
+- Optional: [Wireshark](https://www.wireshark.org/) 4.x, for decoded packets, "Open in Wireshark" and recording. Snorty installs nothing; without Wireshark those parts say why they are off and everything else works.
 
 ## Quick start
 
@@ -49,7 +51,7 @@ journal = true
 autostart_sensor = false
 wireshark_dir = "C:/Program Files/Wireshark"  # optional; tshark is found automatically
 rules_update_at = "03:00"         # local HH:MM; "" turns the daily rules update off
-retention_days = 90               # alerts older than this are deleted; 0 keeps everything
+retention_days = 90               # alerts and recorded captures older than this are deleted; 0 keeps everything
 ```
 
 Dashboard flags: `--port`, `--start-sensor`, `--no-notify`, `--no-journal`, `--vault`, `--interface-ip`, `--data-dir`.
@@ -98,6 +100,8 @@ src/snorty/
   notify/     throttled Windows toasts
   journal/    daily Obsidian notes
   lab/        rule linting, sandbox, pcap generation
+  packets/    alert-to-packet matching, pcap reader, display filters (no processes)
+  wireshark/  the only code that runs tshark, dumpcap and Wireshark
   dashboard/  FastAPI app, pages, security middleware, autostart
   services.py the Protocols and bundle the UI layer uses
   compose.py  wires the modules together (the one composition root)
@@ -139,6 +143,8 @@ Code style: Python 3.12, line length 100, `ruff format`, strict `mypy`. Tests li
 - Snort 3 is not supported. Moving to it would mean swapping one adapter and the alert parser.
 - If Snort rotates `alert.ids` and the new file grows past the old offset before the next read, the rotation is not noticed.
 - Alerts are only parsed in Snort's `alert_fast` format.
+- An alert's packet is found in Snort's own `snort.log.*` files by timestamp. Two different packets stamped on the same microsecond cannot be told apart, and the page then says the match is ambiguous. See [`SPEC-packets.md`](SPEC-packets.md).
+- Recording needs the sensor running, because it records the adapter the sensor uses. Recorded captures are deleted after `retention_days`; uploaded pcaps are kept.
 
 ## License
 
