@@ -49,6 +49,17 @@ async def test_a_failing_notifier_is_logged_and_the_next_alert_still_toasts(
     await service.stop()
 
 
+async def test_a_toast_that_failed_does_not_silence_its_rule_for_the_window() -> None:
+    notifier = ScriptedNotifier(raises={1: RuntimeError("powershell missing")})
+    bus, service = make(notifier)
+    await service.start()
+    raise_alert(bus, make_alert(1))
+    raise_alert(bus, make_alert(1))  # same rule, same instant: used to be throttled away
+    await settle(lambda: len(notifier.toasts) == 1)
+    assert service.status().toasts_shown == 1
+    await service.stop()
+
+
 async def test_a_hanging_notifier_is_cut_off_by_the_service_timeout() -> None:
     notifier = ScriptedNotifier(hang_on=1)
     bus, service = make(notifier, show_timeout=0.05)

@@ -5,6 +5,7 @@ Every operation edits a candidate, checks it with `snort -T`, and only then comm
 
 import asyncio
 import hashlib
+import logging
 import os
 import shutil
 from collections.abc import Callable
@@ -29,6 +30,11 @@ from snorty.rules.config import RulesConfig
 from snorty.rules.ports import Downloader, SensorControl, Validator
 from snorty.rules.state import RulesState, load_state, save_state
 from snorty.sensor.states import State
+
+log = logging.getLogger("snorty.rules")
+
+# The stage an update is in, so a failure can say where it happened.
+type Step = Literal["recover", "download", "stage", "validate", "swap", "restart"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,14 +82,37 @@ class RulesService:
         self._clock = clock
         self._rename = rename
         self._lock = asyncio.Lock()
-        self._step = "download"  # which stage an exception came from; the lock serialises use
+        self._step: Step = "download"  # where an exception came from; the lock serialises use
+
+    def recover(self) -> str | None:
+        """Finish or undo a swap that a crash cut short, so `rules` exists and is whole.
+        Returns what it did, or None when nothing was wrong."""
+        live = self._config.rules_dir
+        prev, tmp = live.with_name("rules.prev"), live.with_name("rules.swap")
+        if tmp.exists():
+            if live.exists():  # the new rules were already live: complete the swap
+                if prev.exists():
+                    shutil.rmtree(prev)
+                self._rename(tmp, prev)
+                what = "finished an interrupted rules swap"
+            else:  # the old rules were set aside and the new ones never arrived
+                self._rename(tmp, live)
+                what = "restored the previous rules after an interrupted swap"
+        elif not live.exists() and prev.exists():  # a rollback cut short
+            self._rename(prev, live)
+            what = "restored the previous rules after an interrupted rollback"
+        else:
+            return None
+        log.warning("rules: %s", what)
+        return what
 
     async def update(self, *, force: bool = False) -> UpdateReport:
         """Update the ruleset. Never raises: a failure is a report, and the live rules are
         left exactly as they were."""
         async with self._lock:
-            self._step = "download"
+            self._step = "recover"
             try:
+                await asyncio.to_thread(self.recover)
                 return await self._update(force)
             except Exception as e:
                 return await self._fail(f"{self._step}: {e}")
@@ -136,8 +165,12 @@ class RulesService:
                 raise RuntimeError("sensor did not come back with the new rules; rolled back")
 
         saved = RulesState(expected, self._clock().isoformat(), count, "ok")
-        await asyncio.to_thread(save_state, cfg.state_path, saved)
         detail = f"{count} rules"
+        try:
+            await asyncio.to_thread(save_state, cfg.state_path, saved)
+        except OSError as e:  # the rules are live and healthy: do not call that a failure
+            log.warning("rules: could not save the update state: %s", e)
+            detail += f" (could not save the update state: {e.strerror or type(e).__name__})"
         self._bus.publish(RulesUpdated(True, count, detail))
         return UpdateReport("updated", count, expected, skipped, detail)
 

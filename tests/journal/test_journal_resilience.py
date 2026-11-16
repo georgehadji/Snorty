@@ -3,11 +3,11 @@ import logging
 import threading
 import time
 from collections.abc import AsyncIterator
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
-from journal_fakes import Rig, make_alert, settle
+from journal_fakes import NOW, Rig, make_alert, settle
 
 from snorty.core.events import AlertRaised
 from snorty.journal.ports import MemoryNoteStore
@@ -120,6 +120,51 @@ async def test_a_day_over_the_row_cap_says_so_and_keeps_the_true_total(tmp_path:
     note = rig.store.notes[TODAY]
     assert "12 alerts" in note and "truncated: 7 alerts not shown in tables" in note
     await rig.service.stop()
+    rig.repo.close()
+
+
+class DayStore(MemoryNoteStore):
+    """Refuses to write one day."""
+
+    def __init__(self, bad: date) -> None:
+        super().__init__()
+        self.bad = bad
+
+    def write(self, day: date, text: str) -> None:
+        if day == self.bad:
+            raise OSError("disk full")
+        super().write(day, text)
+
+
+async def test_a_later_day_that_succeeds_does_not_hide_an_earlier_one_that_failed(
+    tmp_path: Path,
+) -> None:
+    rig = Rig(tmp_path)
+    store = rig.service._store = DayStore(date(2026, 11, 15))  # yesterday
+    rig.add(make_alert(1, ts=NOW - timedelta(days=1)), make_alert(2), announce=False)
+    await rig.service.start()
+    assert TODAY in store.notes
+    assert "disk full" in (rig.service.status().error or "")  # yesterday is still unwritten
+    rig.service._store = MemoryNoteStore()  # the disk recovers
+    await rig.service.flush()
+    assert rig.service.status().error is None
+    await rig.service.stop()
+    rig.repo.close()
+
+
+async def test_stop_during_the_first_flush_leaves_no_task_behind(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    store = BlockingStore()
+    rig.service._store = store
+    rig.add(make_alert(1), announce=False)
+    starter = asyncio.create_task(rig.service.start())
+    await asyncio.to_thread(store.entered.wait, 5)  # the first flush is blocked in the store
+    stopper = asyncio.create_task(rig.service.stop())
+    await asyncio.sleep(0.05)
+    store.gate.set()
+    await asyncio.gather(starter, stopper)
+    left = [t for t in asyncio.all_tasks() if t.get_name().startswith("journal-")]
+    assert left == [] and rig.bus._subs == []
     rig.repo.close()
 
 

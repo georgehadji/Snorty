@@ -123,6 +123,15 @@ def test_without_dumpcap_or_a_sensor_adapter_it_explains_and_records_nothing(
     assert packets(s).recorded == []
 
 
+def test_a_stopped_or_restarting_sensor_does_not_lend_its_last_adapter(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    for state in (State.STOPPED, State.STARTING, State.FAILED):
+        sensor(s).set_state(state, interface=IFACE)  # the sensor remembers its last interface
+        r = record(c)
+        assert r.status_code == 409 and "Start the sensor first" in r.text, state
+    assert packets(s).recorded == []
+
+
 def test_the_lab_page_offers_the_form_only_when_recording_is_possible(tmp_path: Path) -> None:
     c, s = ready(tmp_path)
     html = c.get("/lab").text

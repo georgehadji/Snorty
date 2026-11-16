@@ -86,12 +86,11 @@ class JournalService:
         self._tasks: list[asyncio.Task[None]] = []
         self._notes_written = 0
         self._last_written: datetime | None = None
-        self._error: str | None = None
+        self._failed: dict[date, str] = {}  # days whose last write failed, with the reason
 
     def status(self) -> JournalStatus:
-        return JournalStatus(
-            self._store.label, self._last_written, self._notes_written, self._error
-        )
+        error = self._failed[max(self._failed)] if self._failed else None  # newest day first
+        return JournalStatus(self._store.label, self._last_written, self._notes_written, error)
 
     def _today(self) -> date:
         return self._now().astimezone(self._config.tz).date()
@@ -101,13 +100,14 @@ class JournalService:
         if self._sub is not None:
             return
         self._sub = self._bus.subscribe(maxsize=1000)
-        today = self._today()
-        self._dirty |= {today - timedelta(days=1), today}
-        await self.flush()
+        # The tasks exist before the first await, so a stop() during the flush finds them all.
         self._tasks = [
             asyncio.create_task(self._consume(self._sub), name="journal-consumer"),
             asyncio.create_task(self._ticker(), name="journal-ticker"),
         ]
+        today = self._today()
+        self._dirty |= {today - timedelta(days=1), today}
+        await self.flush()
 
     async def stop(self) -> None:
         if self._sub is None:
@@ -126,10 +126,10 @@ class JournalService:
             self._dirty.discard(day)
             try:
                 await asyncio.to_thread(self._write_day, day)
-                self._error = None
+                self._failed.pop(day, None)
             except Exception as exc:  # one bad day must not stop the rest, or the next flush
                 log.exception("could not write the journal note for %s", day)
-                self._error = f"{type(exc).__name__}: {exc}"
+                self._failed[day] = f"{type(exc).__name__}: {exc}"
                 self._dirty.add(day)
 
     async def _consume(self, sub: Subscription) -> None:

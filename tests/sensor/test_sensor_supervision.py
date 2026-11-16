@@ -155,6 +155,20 @@ async def test_restart_command(rig: Rig) -> None:
     await rig.sensor.stop()
 
 
+async def test_restart_during_a_crash_backoff_waits_until_the_sensor_runs_again(rig: Rig) -> None:
+    await rig.sensor.start()
+    rig.clock.block = True  # the backoff sleep waits until released
+    rig.port.procs[0].exit(1)
+    await eventually(lambda: rig.sensor.state is State.STARTING)
+    waiter = asyncio.create_task(rig.sensor.restart())
+    await asyncio.sleep(0.02)
+    assert not waiter.done()  # it used to return at once, while the sensor was still starting
+    rig.clock.release()
+    await asyncio.wait_for(waiter, 2)
+    assert rig.sensor.state is State.RUNNING
+    await rig.sensor.stop()
+
+
 async def test_restart_when_stopped_just_starts(rig: Rig) -> None:
     await rig.sensor.restart()
     assert rig.sensor.state is State.RUNNING and len(rig.port.procs) == 1

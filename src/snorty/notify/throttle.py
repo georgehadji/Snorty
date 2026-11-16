@@ -1,5 +1,6 @@
 """Per-SID throttle with a global cap. Pure: the caller supplies the time."""
 
+import math
 from collections import OrderedDict, deque
 from dataclasses import dataclass
 
@@ -53,6 +54,16 @@ class Throttle:
         while len(self._sids) > self._max_sids:
             self._sids.popitem(last=False)
         return decision
+
+    def release(self, sid: int, decision: Decision) -> None:
+        """The toast `decision` allowed could not be shown. Let this SID try again at once and
+        give back the counts that toast would have reported. The global cap slot stays used,
+        so a broken notifier is retried at most `cap` times per window."""
+        if decision.same_sid:
+            self._sids[sid] = _Entry(-math.inf, decision.same_sid)  # window long over
+        else:
+            self._sids.pop(sid, None)
+        self._other += decision.other
 
     def _sweep(self, now: float) -> None:
         """Forget SIDs whose window is over and that have nothing left to report."""

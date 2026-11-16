@@ -91,5 +91,9 @@ class NotifyService:
         if not decision.show:
             return
         toast = build_toast(alert, decision.same_sid, decision.other, self._config.tz)
-        await asyncio.wait_for(self._notifier.show(toast), self._config.show_timeout)
+        try:
+            await asyncio.wait_for(self._notifier.show(toast), self._config.show_timeout)
+        except Exception:  # nobody saw it: the next alert of this SID must not be throttled
+            self._throttle.release(alert.sid, decision)
+            raise
         self._shown += 1

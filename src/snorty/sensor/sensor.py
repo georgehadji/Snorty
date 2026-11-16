@@ -29,9 +29,9 @@ type MonitorEvent = Literal["stop", "restart", "network", "exited"]
 class SensorStatus:
     state: State
     reason: str | None
-    interface: Interface | None
+    interface: Interface | None  # the interface of the last start; kept after a stop
     pid: int | None
-    started_at: datetime | None
+    started_at: datetime | None  # likewise the time of the last start
     alerts_seen: int  # new alerts stored since the sensor object was created (backlog + live)
     last_alert_ts: datetime | None
     unparsed: int
@@ -173,7 +173,9 @@ class Sensor:
         self._state, self._reason = new, reason
         log.info("sensor %s -> %s%s", old.name, new.name, f" ({reason})" if reason else "")
         self._bus.publish(SensorStateChanged(old.value, new.value, reason))
-        if new in (State.RUNNING, State.FAILED, State.STOPPED):
+        if new is State.STARTING:  # a retry or crash restart is not settled until it ends
+            self._settled.clear()
+        elif new in (State.RUNNING, State.FAILED, State.STOPPED):
             self._settled.set()
 
     # --- supervisor -------------------------------------------------------------------

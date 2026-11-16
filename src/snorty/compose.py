@@ -1,6 +1,7 @@
 """Builds the real Snorty services from paths and options (used by the dashboard)."""
 
 import asyncio
+import logging
 import os
 import time
 from collections.abc import Callable
@@ -25,6 +26,8 @@ from snorty.services import Services
 from snorty.snort import Interface, SnortPaths, SubprocessRunner
 from snorty.wireshark import DumpcapRecorder, TsharkDecoder, WiresharkViewer, find_tools
 
+log = logging.getLogger("snorty")
+
 
 @dataclass(slots=True)
 class Runtime:
@@ -35,20 +38,29 @@ class Runtime:
     journal: JournalService | None
 
     async def start(self, *, sensor: bool = False) -> None:
-        if self.notify:
-            await self.notify.start()
-        if self.journal:
-            await self.journal.start()
-        if sensor:
-            await self.services.sensor.start()
+        try:
+            if self.notify:
+                await self.notify.start()
+            if self.journal:
+                await self.journal.start()
+            if sensor:
+                await self.services.sensor.start()
+        except BaseException:  # leave nothing half started
+            await self.stop()
+            raise
 
     async def stop(self) -> None:
-        """Stop everything that was started; does not close the repository."""
-        await asyncio.shield(self.services.sensor.stop())
-        if self.journal:
-            await self.journal.stop()
-        if self.notify:
-            await self.notify.stop()
+        """Stop everything that was started; does not close the repository. A part that fails
+        to stop does not keep the others running."""
+        try:
+            await asyncio.shield(self.services.sensor.stop())
+        finally:
+            try:
+                if self.journal:
+                    await self.journal.stop()
+            finally:
+                if self.notify:
+                    await self.notify.stop()
 
 
 def compose(
@@ -89,6 +101,10 @@ def compose(
         bus,
         clock=lambda: datetime.now().astimezone(),
     )
+    try:  # a crash in the middle of a rules swap must not leave Snort without its rules
+        rules.recover()
+    except OSError:
+        log.exception("could not repair an interrupted rules swap")
     lab = LabService(paths, SubprocessRunner(), tz=tz)
     toasts = NotifyService(bus, notifier or WinotifyNotifier()) if notify else None
     journal = (

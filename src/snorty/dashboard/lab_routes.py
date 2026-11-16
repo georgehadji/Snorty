@@ -1,6 +1,8 @@
 """Lab page: try rules against a pcap from data\\pcaps, without touching the live sensor."""
 
 import asyncio
+from collections.abc import Awaitable
+from dataclasses import dataclass
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -15,6 +17,14 @@ from snorty.lab.models import LabJob, LabResult
 _PROTOS = ("tcp", "udp")
 
 
+@dataclass(frozen=True, slots=True)
+class Ran:
+    """A finished lab job: its result and the pcap it used (empty after a rules check)."""
+
+    result: LabResult
+    pcap: str
+
+
 def _number(form: dict[str, str], key: str, label: str) -> int:
     text = form.get(key, "")
     if not (text.isascii() and text.isdigit() and len(text) <= 5):
@@ -23,9 +33,11 @@ def _number(form: dict[str, str], key: str, label: str) -> int:
 
 
 def add_lab_routes(app: FastAPI, ui: Ui) -> None:
-    job: Job[LabResult] = Job()
-    last_pcap = [""]  # name of the pcap the latest run used; empty after a check
+    job: Job[Ran] = Job()
     ui.cleanups.append(job.cancel)
+
+    async def tagged(work: Awaitable[LabResult], pcap: str) -> Ran:
+        return Ran(await work, pcap)
 
     def bad(request: Request, exc: ValueError) -> HTMLResponse:
         return ui.flash(request, views.Message(False, str(exc)), status=422)
@@ -57,13 +69,9 @@ def add_lab_routes(app: FastAPI, ui: Ui) -> None:
         except ValueError as exc:
             return bad(request, exc)
         if lab_job is not None:
-            started = job.start(lambda: svc.lab.run(lab_job))
-            if started:
-                last_pcap[0] = form.get("pcap", "")
+            started = job.start(lambda: tagged(svc.lab.run(lab_job), form.get("pcap", "")))
         else:
-            started = job.start(lambda: svc.lab.check(text))
-            if started:
-                last_pcap[0] = ""
+            started = job.start(lambda: tagged(svc.lab.check(text), ""))
         return running(request, already=not started)
 
     @app.post("/lab/check", response_class=HTMLResponse)
@@ -81,11 +89,9 @@ def add_lab_routes(app: FastAPI, ui: Ui) -> None:
                 return running(request)
             case Errored(message=why):
                 return ui.page(request, "_lab_result.html", state="error", error=why)
-            case Done(result=result):
-                lab = views.lab_view(result, svc.tz)
-                return ui.page(
-                    request, "_lab_result.html", state="done", lab=lab, pcap=last_pcap[0]
-                )
+            case Done(result=ran):
+                lab = views.lab_view(ran.result, svc.tz)
+                return ui.page(request, "_lab_result.html", state="done", lab=lab, pcap=ran.pcap)
             case Idle():
                 return ui.page(request, "_lab_result.html", state="idle")
 

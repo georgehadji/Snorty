@@ -10,6 +10,35 @@ def test_first_alert_shows_and_repeat_inside_window_is_suppressed() -> None:
     assert t.decide(2, 10) == Decision(True, 0, 0)  # another SID is independent
 
 
+def test_a_released_toast_lets_the_sid_try_again_and_keeps_its_counts() -> None:
+    t = Throttle(window=300)
+    t.decide(1, 0)
+    for now in (10, 20, 30):
+        t.decide(1, now)
+    shown = t.decide(1, 301)
+    assert shown == Decision(True, 3, 0)
+    t.release(1, shown)  # the toast failed
+    assert t.decide(1, 302) == Decision(True, 3, 0)  # tried again at once, still reports 3
+
+
+def test_releasing_a_first_toast_forgets_the_sid() -> None:
+    t = Throttle(window=300)
+    shown = t.decide(1, 0)
+    t.release(1, shown)
+    assert t.tracked == 0 and t.decide(1, 1) == Decision(True, 0, 0)
+
+
+def test_release_gives_back_the_dropped_count_but_keeps_the_cap_slot() -> None:
+    t = Throttle(window=300, cap=1, cap_window=60)
+    t.decide(1, 0)
+    assert t.decide(2, 1) == NO  # dropped by the cap: counted
+    shown = t.decide(3, 61)
+    assert shown == Decision(True, 0, 1)
+    t.release(3, shown)
+    assert t.decide(4, 62) == NO  # the failed attempt still used the slot: no retry storm
+    assert t.decide(5, 122) == Decision(True, 0, 2)  # both drops are reported
+
+
 def test_window_boundary_is_inclusive_of_the_end() -> None:
     t = Throttle(window=300)
     t.decide(1, 0)

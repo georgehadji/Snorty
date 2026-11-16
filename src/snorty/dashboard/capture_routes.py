@@ -21,6 +21,7 @@ from snorty.packets import (
     Failed,
     Unavailable,
 )
+from snorty.sensor import State
 
 EMPTY_CAPTURE = 24  # a pcap with only its header: the adapter saw nothing
 
@@ -109,7 +110,8 @@ def add_capture_routes(
             return fail(
                 request, "Wireshark (dumpcap) was not found, so nothing can be recorded.", 409
             )
-        adapter = svc.sensor.status().interface
+        sensor = svc.sensor.status()  # its interface is the last one used, even once stopped
+        adapter = sensor.interface if sensor.state is State.RUNNING else None
         if adapter is None:
             return fail(
                 request, "Start the sensor first: Snorty records on the adapter Snort uses.", 409
