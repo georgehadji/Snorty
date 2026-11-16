@@ -51,9 +51,12 @@ A sensor that was STOPPED before the update stays stopped (no restart, no health
 
   ```
   # >>> snorty managed: do not edit between these markers >>>
-  suppress gen_id 1, sig_id 2100498   # GPL ATTACK_RESPONSE id check returned root
+  # 2100498: GPL ATTACK_RESPONSE id check returned root
+  suppress gen_id 1, sig_id 2100498
   # <<< snorty managed <<<
   ```
+
+  The note is its own comment line above the suppress line: Snort rejects a trailing comment on a `suppress` line ("Invalid integer input"), found in the first real run.
 
 - The block is the source of truth: `list_muted()` parses it back. Text outside the markers is preserved byte for byte, including line endings. No block yet: appended at the end.
 - `mute(sid, note="")` / `unmute(sid)` are idempotent. SID must be a positive int (gen_id fixed at 1 in V1).
@@ -127,7 +130,7 @@ def safe_members(names: Iterable[str]) -> list[str]: ...
 - [ ] 7. `set_home_net` changes only the `ipvar HOME_NET` line; a missing line is an error, not an insert; `-T` failure leaves the file unchanged.
 - [ ] 8. Concurrent calls are serialised (second waits), never interleaved.
 - [ ] 9. `@pytest.mark.snort` validation test passes on this PC (good set passes, broken rule fails) without touching `C:\Snort\rules`.
-- [ ] 10. Manual: `python -m snorty.rules update` against the real ET URL succeeds, the sensor comes back RUNNING, and `snort -T` on the live conf still passes; `muted`, `mute`, `unmute` round-trip on the real `threshold.conf`; HOME_NET set to the new default.
+- [ ] 10. Manual (in-process script, because the CLI runs outside the sensor's process and cannot restart it): `RulesService.update()` against the real ET URL succeeds, the sensor comes back RUNNING, and `snort -T` on the live conf still passes; `muted`, `mute`, `unmute` round-trip on the real `threshold.conf`; HOME_NET set to the new default.
 - [ ] 11. `ruff check`, strict mypy on `snorty.rules`, coverage at least 90%; `snorty.rules` imports only `snorty.core`, `snorty.snort`, and the `Sensor` protocol surface (`state`, `restart`); no `subprocess` outside `snort/`.
 
 ## Out of Scope (Deferred)

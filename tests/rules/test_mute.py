@@ -21,7 +21,10 @@ async def test_mute_adds_block_validates_backs_up_and_restarts(tmp_path: Path) -
     assert report.ok and report.changed
     text = threshold(rig).decode()
     assert text.startswith(ORIGINAL.decode())
-    assert f"{START}\r\nsuppress gen_id 1, sig_id 2100498   # id check returned root\r\n" in text
+    assert (
+        f"{START}\r\n# 2100498: id check returned root\r\nsuppress gen_id 1, sig_id 2100498\r\n"
+        in text
+    )
     assert text.endswith(f"{END}\r\n")
     assert (rig.etc / "threshold.conf.snorty.bak").read_bytes() == ORIGINAL
     # validated through a temp conf: only the threshold include line pointed elsewhere

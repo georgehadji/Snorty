@@ -75,3 +75,12 @@ async def test_real_snort_accepts_a_good_set_and_rejects_a_broken_one(tmp_path: 
     assert not (tmp_path / "rules.new").exists()
 
     assert fingerprint() == before  # the real C:\Snort was never touched
+
+
+async def test_real_snort_accepts_a_mute_with_a_note(tmp_path: Path) -> None:
+    lab = Lab(tmp_path)
+    service = lab.service(make_archive({}))
+    report = await service.mute(1000002, "manual check", restart=False)
+    assert report.ok and report.changed, report.detail
+    assert [m.sid for m in await service.muted()] == [1000002]
+    assert (await service.unmute(1000002, restart=False)).ok

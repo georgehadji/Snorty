@@ -11,7 +11,9 @@ from dataclasses import dataclass
 START = "# >>> snorty managed: do not edit between these markers >>>"
 END = "# <<< snorty managed <<<"
 
-_ENTRY = re.compile(r"^suppress gen_id 1, sig_id (\d+)(?: {3}# (.*))?$")
+# Snort rejects a trailing comment on a suppress line, so a note is its own line above it.
+_ENTRY = re.compile(r"^suppress gen_id 1, sig_id (\d+)$")
+_NOTE = re.compile(r"^# (\d+): (.*)$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,11 +50,14 @@ def read_block(text: str) -> list[MutedRule]:
         return []
     out: list[MutedRule] = []
     inner = text[span[0] : span[1]].splitlines()[1:-1]
+    notes: dict[int, str] = {}
     for line in inner:
-        m = _ENTRY.match(line)
-        if m is None:
+        if n := _NOTE.match(line):
+            notes[int(n[1])] = n[2]
+        elif m := _ENTRY.match(line):
+            out.append(MutedRule(int(m[1]), notes.get(int(m[1]), "")))
+        else:
             raise ValueError(f"unexpected line inside the managed block: {line!r}")
-        out.append(MutedRule(int(m[1]), m[2] or ""))
     return out
 
 
@@ -60,8 +65,10 @@ def _render(entries: Sequence[MutedRule], eol: str) -> str:
     by_sid = {e.sid: e for e in entries}  # last one wins
     lines = [START]
     for sid in sorted(by_sid):
-        note = by_sid[sid].note
-        lines.append(f"suppress gen_id 1, sig_id {sid}" + (f"   # {note}" if note else ""))
+        note = " ".join(by_sid[sid].note.split())  # one line, no stray whitespace
+        if note:
+            lines.append(f"# {sid}: {note}")
+        lines.append(f"suppress gen_id 1, sig_id {sid}")
     lines.append(END)
     return eol.join(lines) + eol
 

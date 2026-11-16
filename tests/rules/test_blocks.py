@@ -19,9 +19,18 @@ def test_render_and_read_roundtrip() -> None:
     text = apply_block(BASE, [MutedRule(30, "b rule"), MutedRule(7)])
     assert text == (
         f"{BASE}{START}\r\nsuppress gen_id 1, sig_id 7\r\n"
-        f"suppress gen_id 1, sig_id 30   # b rule\r\n{END}\r\n"
+        f"# 30: b rule\r\nsuppress gen_id 1, sig_id 30\r\n{END}\r\n"
     )
     assert read_block(text) == [MutedRule(7), MutedRule(30, "b rule")]
+
+
+def test_no_suppress_line_has_a_trailing_comment() -> None:
+    """Snort rejects `suppress ... # note` ('Invalid integer input'), found in a real run."""
+    text = apply_block("", [MutedRule(5, "has a\nnewline  and   spaces")])
+    for line in text.splitlines():
+        if line.startswith("suppress"):
+            assert "#" not in line
+    assert read_block(text) == [MutedRule(5, "has a newline and spaces")]
 
 
 def test_no_block_reads_empty() -> None:

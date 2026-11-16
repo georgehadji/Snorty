@@ -45,7 +45,7 @@ mute/unmute/home-net, then the CLI and real-Snort checks. Stdlib only.
 - [x] Task 6: `mute`, `unmute`, `muted`, `set_home_net` through validate and atomic commit
 
 ### Phase 4: CLI and real checks
-- [ ] Task 7: CLI, `@pytest.mark.snort` validation test, manual real update on this PC
+- [x] Task 7: CLI, `@pytest.mark.snort` validation test, manual real update on this PC
 - [ ] Task 8: close-out (coverage, containment, spec boxes ticked)
 
 ### Checkpoint: Complete

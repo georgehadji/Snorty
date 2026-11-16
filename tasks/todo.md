@@ -67,10 +67,10 @@ Same `service.py`, new tests in `tests/rules/test_update_failures.py`.
 
 ## Task 7: CLI and real checks (M)
 `__main__.py`, `tests/rules/test_rules_integration.py`.
-- [ ] CLI subcommands exactly as in the spec; exit 0 on success or up to date, 1 on a failed update, 2 on bad arguments; prints progress lines per stage
-- [ ] `@pytest.mark.snort`: copy `C:\Snort\rules` and `snort.conf` to a temp dir; real `SnortValidator` passes the good set and fails with a message when one rule is broken; real `C:\Snort` untouched (hash check before and after)
-- [ ] Manual, recorded in the final summary: `python -m snorty.rules update` against the real URL, sensor back to RUNNING, `snort -T` still passes; `mute` / `muted` / `unmute` round trip on the real `threshold.conf`; `home-net --set` default applied (with the sensor stopped or restarted as appropriate); nothing left running
-- [ ] Verify: `uv run pytest tests/rules -q -m snort`; manual commands above
+- [x] CLI subcommands exactly as in the spec; exit 0 on success or up to date, 1 on a failed update, 2 on bad arguments; prints progress lines per stage
+- [x] `@pytest.mark.snort`: copy `C:\Snort\rules` and `snort.conf` to a temp dir; real `SnortValidator` passes the good set and fails with a message when one rule is broken; real `C:\Snort` untouched (hash check before and after)
+- [x] Manual, recorded in the final summary: `python -m snorty.rules update` against the real URL, sensor back to RUNNING, `snort -T` still passes; `mute` / `muted` / `unmute` round trip on the real `threshold.conf`; `home-net --set` default applied (with the sensor stopped or restarted as appropriate); nothing left running
+- [x] Verify: `uv run pytest tests/rules -q -m snort`; manual commands above
 - Dependencies: Tasks 3-6 · Files: `__main__.py`, `test_integration.py`
 
 ## Task 8: Close-out (S)
