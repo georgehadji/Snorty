@@ -55,6 +55,21 @@ def _remove_pid(path: Path) -> None:
     path.unlink(missing_ok=True)
 
 
+def _settle_fold(ts: datetime, last: float | None, second: bool) -> tuple[datetime, float, bool]:
+    """Snort writes local wall time. When the clocks go back, that hour is written twice and both
+    passes parse to the first. A time that steps back inside such an hour starts the second pass;
+    its lines get fold=1 until a time outside the repeated hour shows up.
+    `last` is the newest instant read so far. Returns the time, the new `last` and `second`."""
+    if ts.utcoffset() == ts.replace(fold=1).utcoffset():
+        second = False
+    elif not second and last is not None and ts.timestamp() < last - 1:
+        second = True
+    if second:
+        ts = ts.replace(fold=1)
+    instant = ts.timestamp()
+    return ts, instant if last is None else max(instant, last), second
+
+
 class Sensor:
     """Keeps Snort running and turns its output into events.
 
@@ -89,6 +104,8 @@ class Sensor:
         self._tail = TailState()
         self._backlog_done = False
         self._ingest_task: asyncio.Task[None] | None = None
+        self._last_instant: float | None = None  # newest alert time read so far, for _settle_fold
+        self._second_pass = False  # reading the repeated hour of a clock change a second time
 
         self._state = State.STOPPED
         self._reason: str | None = None
@@ -379,6 +396,7 @@ class Sensor:
         while True:
             try:
                 await self._poll_once()
+                self._last_error = None  # whatever failed before has recovered
             except Exception as e:  # a bad poll must not stop ingestion; it is retried
                 log.exception("alert ingest failed; will retry")
                 self._last_error = repr(e)
@@ -418,7 +436,8 @@ class Sensor:
     async def _poll(self) -> bool:
         result = await asyncio.to_thread(read_new_lines, self._alert_path, self._tail)
         if result.rotated:
-            log.warning("alert file was rotated or truncated; reading it from the start")
+            log.warning("alert file was rotated or replaced; reading it from the start")
+            self._last_instant, self._second_pass = None, False
         if result.lines:
             new, bad = await asyncio.to_thread(
                 self._store_lines, result.lines, self._wall().year, result.ties
@@ -442,6 +461,7 @@ class Sensor:
         `ties[i]` says which of several identical lines `lines[i]` is (0 when not given)."""
         alerts: list[Alert] = []
         bad = 0
+        last, second = self._last_instant, self._second_pass
         now = self._wall()
         for i, text in enumerate(lines):
             alert = parse_line(text, default_year=year, tz=self._tz)
@@ -452,5 +472,9 @@ class Sensor:
                 bad += 1
                 log.warning("unparsed alert line: %.120s", text)
             else:
+                ts, last, second = _settle_fold(alert.ts, last, second)
+                alert = replace(alert, ts=ts)
                 alerts.append(replace(alert, dup=ties[i]) if i < len(ties) else alert)
-        return self._repo.add_new(alerts), bad
+        new = self._repo.add_new(alerts)
+        self._last_instant, self._second_pass = last, second  # only once the lines are stored
+        return new, bad

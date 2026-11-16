@@ -33,6 +33,36 @@ def test_the_numbering_carries_across_reads(tmp_path: Path) -> None:
     assert first.ties == [0] and second.ties == [1]  # the repeat is not mistaken for the first
 
 
+def test_identical_lines_are_numbered_apart_even_with_another_stamp_between(
+    tmp_path: Path,
+) -> None:
+    f = tmp_path / "a.ids"
+    between = "11/16/26-20:57:52.742056  [**] ping"
+    f.write_text(f"{STAMPED}\n{between}\n{STAMPED}\n")  # Snort's clock stepped back a tick
+    assert read_new_lines(f, TailState()).ties == [0, 0, 1]
+
+
+def test_a_replaced_file_that_is_already_bigger_is_read_from_the_start(tmp_path: Path) -> None:
+    f = tmp_path / "a.ids"
+    f.write_text("11/16/26-10:00:00.000001 old one\n11/16/26-10:00:00.000002 old two\n")
+    state = read_new_lines(f, TailState()).state
+    new = [f"11/16/26-11:00:00.{n:06d} new {n}" for n in range(1, 6)]
+    f.write_text("\n".join(new) + "\n")  # larger than the old file: the size alone shows nothing
+    result = read_new_lines(f, state)
+    assert result.rotated and result.lines == new
+
+
+def test_a_file_that_only_grew_is_not_taken_for_a_new_one(tmp_path: Path) -> None:
+    f = tmp_path / "a.ids"
+    f.write_text("short\n")  # shorter than the bytes kept to recognise the file
+    first = read_new_lines(f, TailState())
+    with f.open("a") as fh:
+        fh.write("x" * 200 + "\nlast\n")
+    second = read_new_lines(f, first.state)
+    assert not second.rotated and second.lines == ["x" * 200, "last"]
+    assert not read_new_lines(f, second.state).rotated
+
+
 def test_a_rotated_file_starts_the_numbering_again(tmp_path: Path) -> None:
     f = tmp_path / "a.ids"
     f.write_text(f"{STAMPED}\n{STAMPED}\n")

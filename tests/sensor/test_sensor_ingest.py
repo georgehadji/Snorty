@@ -1,7 +1,7 @@
 import asyncio
 import time
 from collections.abc import Callable, Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
 
 import pytest
@@ -148,7 +148,8 @@ async def test_a_damaged_line_with_oversized_ids_does_not_stall_ingest(rig: Rig)
     await rig.sensor.start()
     rig.append(line(1).replace(":1000002:", ":99999999999999999999:"), line(2))
     await eventually(lambda: rig.stored() == 1)  # the good line behind it still arrives
-    assert rig.sensor.status().unparsed == 1 and rig.sensor.state.name == "RUNNING"
+    await eventually(lambda: rig.sensor.status().unparsed == 1)  # counted after the write
+    assert rig.sensor.state.name == "RUNNING"
     await rig.sensor.stop()
 
 
@@ -175,7 +176,7 @@ async def test_junk_lines_are_counted_not_fatal(rig: Rig) -> None:
     await rig.sensor.start()
     rig.append("this is not an alert", line(1))
     await eventually(lambda: rig.stored() == 1)
-    assert rig.sensor.status().unparsed == 1
+    await eventually(lambda: rig.sensor.status().unparsed == 1)  # counted after the write
     assert rig.sensor.state.name == "RUNNING"
     await rig.sensor.stop()
 
@@ -243,10 +244,32 @@ async def test_database_error_loses_nothing(rig: Rig, monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(rig.repo, "add_new", flaky)
     rig.append(line(4))
-    await eventually(lambda: rig.stored() == 1)
-    assert "disk full" in (rig.sensor.status().last_error or "")
+    seen: list[AlertRaised] = []  # the announcement follows the write, so wait for it too
+    await eventually(lambda: bool(seen.extend(rig.raised())) or len(seen) >= 1)
+    assert rig.stored() == 1 and len(seen) == 1
     assert rig.sensor.state.name == "RUNNING"
-    assert len(rig.raised()) == 1
+    await rig.sensor.stop()
+
+
+async def test_a_failed_poll_is_reported_until_ingest_recovers(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await rig.sensor.start()
+    real = rig.repo.add_new
+    reported: list[str | None] = []
+
+    def flaky(alerts: object) -> list:  # type: ignore[type-arg]
+        if not reported:
+            reported.append(None)
+            raise RuntimeError("disk full")
+        reported.append(rig.sensor.status().last_error)  # what the card shows at the retry
+        return real(alerts)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(rig.repo, "add_new", flaky)
+    rig.append(line(4))
+    await eventually(lambda: rig.stored() == 1)
+    await eventually(lambda: rig.sensor.status().last_error is None)  # shown no longer once fine
+    assert "disk full" in (reported[1] or "")
     await rig.sensor.stop()
 
 
@@ -271,6 +294,57 @@ def test_a_line_from_today_keeps_the_current_year(tmp_path: Path) -> None:
     rig.sensor._wall = lambda: datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
     new, _ = rig.sensor._store_lines([yearless("11/16"), yearless("11/15")], 2026)
     assert [a.ts.year for a in new] == [2026, 2026]
+
+
+class Athens(tzinfo):
+    """+03:00 until the clocks go back at 04:00 on 2026-10-25, +02:00 after: 03:00-04:00 repeats."""
+
+    def utcoffset(self, dt: datetime | None) -> timedelta:
+        assert dt is not None
+        naive = dt.replace(tzinfo=None)
+        start, end = datetime(2026, 10, 25, 3), datetime(2026, 10, 25, 4)
+        summer = naive < start or (naive < end and dt.fold == 0)
+        return timedelta(hours=3 if summer else 2)
+
+    def dst(self, dt: datetime | None) -> timedelta:
+        return timedelta(0)
+
+    def tzname(self, dt: datetime | None) -> str:
+        return "Athens"
+
+
+def test_the_repeated_hour_of_a_clock_change_is_read_in_the_right_order(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    rig.sensor._tz = Athens()
+    rig.sensor._wall = lambda: datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
+
+    def at(hm: str, n: int) -> str:
+        return (
+            f"10/25/26-{hm}:00.{n:06d}  [**] [1:1000002:1] test rule [**] [Priority: 1] "
+            "{TCP} 10.0.0.1:1000 -> 10.0.0.2:80"
+        )
+
+    lines = [at("02:50", 1), at("03:10", 2), at("03:50", 3), at("03:05", 4), at("03:30", 5),
+             at("04:10", 6)]  # fmt: skip
+    new, bad = rig.sensor._store_lines(lines, 2026)
+    assert bad == 0
+    assert [a.ts.astimezone(UTC).strftime("%H:%M") for a in new] == [
+        "23:50", "00:10", "00:50",  # first pass at +03:00
+        "01:05", "01:30",  # the same wall hour a second time, at +02:00
+        "02:10",
+    ]  # fmt: skip
+    rig.repo.close()
+
+
+async def test_a_replaced_alert_file_is_read_again_even_if_it_is_larger(rig: Rig) -> None:
+    rig.append(line(1), line(2))
+    await rig.sensor.start()
+    rig.alerts.write_bytes("".join(line(n) + "\n" for n in range(10, 16)).encode())
+    seen: list[AlertRaised] = []  # the announcements follow the write, so wait for them too
+    await eventually(lambda: bool(seen.extend(rig.raised())) or len(seen) >= 6)
+    assert rig.stored() == 8
+    assert sorted(e.alert.src_port for e in seen) == [1010 + n for n in range(6)]
+    await rig.sensor.stop()
 
 
 async def test_a_backlog_larger_than_one_chunk_is_stored_whole_and_not_announced(
