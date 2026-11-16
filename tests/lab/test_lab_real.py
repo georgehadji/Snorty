@@ -22,7 +22,9 @@ UID_RULE = (
     'alert tcp any any -> any any (msg:"lab uid root"; content:"uid=0|28|root|29|"; '
     "sid:9000001; rev:1;)"
 )
-OTHER_RULE = 'alert tcp any any -> any any (msg:"lab other"; content:"nothing-here"; sid:9000002; rev:1;)'
+OTHER_RULE = (
+    'alert tcp any any -> any any (msg:"lab other"; content:"nothing-here"; sid:9000002; rev:1;)'
+)
 EST_RULE = (
     'alert tcp any any -> any 80 (msg:"lab established"; flow:established,to_server; '
     'content:"hello"; sid:9000003; rev:1;)'
