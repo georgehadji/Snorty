@@ -12,6 +12,36 @@ def test_missing_file_changes_nothing(tmp_path: Path) -> None:
     assert result.lines == [] and result.state == state and result.rotated is False
 
 
+STAMPED = "11/16/26-20:57:52.742055  [**] ping"
+
+
+def test_identical_lines_with_one_timestamp_are_numbered_apart(tmp_path: Path) -> None:
+    f = tmp_path / "a.ids"
+    other = "11/16/26-20:57:52.742055  [**] pong"  # same instant, different text
+    later = "11/16/26-20:57:53.000001  [**] ping"
+    f.write_text(f"{STAMPED}\n{STAMPED}\n{other}\n{STAMPED}\n{later}\n{later}\n")
+    assert read_new_lines(f, TailState()).ties == [0, 1, 0, 2, 0, 1]
+
+
+def test_the_numbering_carries_across_reads(tmp_path: Path) -> None:
+    f = tmp_path / "a.ids"
+    f.write_text(f"{STAMPED}\n")
+    first = read_new_lines(f, TailState())
+    with f.open("a") as fh:
+        fh.write(f"{STAMPED}\n")
+    second = read_new_lines(f, first.state)
+    assert first.ties == [0] and second.ties == [1]  # the repeat is not mistaken for the first
+
+
+def test_a_rotated_file_starts_the_numbering_again(tmp_path: Path) -> None:
+    f = tmp_path / "a.ids"
+    f.write_text(f"{STAMPED}\n{STAMPED}\n")
+    state = read_new_lines(f, TailState()).state
+    f.write_text(f"{STAMPED}\n")  # shorter: rotated
+    result = read_new_lines(f, state)
+    assert result.rotated and result.ties == [0]
+
+
 def test_reads_complete_lines_once(tmp_path: Path) -> None:
     f = tmp_path / "a.ids"
     f.write_bytes(b"one\ntwo\n")

@@ -1,7 +1,7 @@
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, tzinfo
 from pathlib import Path
 from typing import Literal
@@ -106,6 +106,7 @@ class Sensor:
         self._restart_requested = asyncio.Event()
         self._settled = asyncio.Event()
         self._cmd_lock = asyncio.Lock()
+        self._poll_lock = asyncio.Lock()
 
     # --- public API -------------------------------------------------------------------
 
@@ -398,12 +399,30 @@ class Sensor:
     async def _poll_once(self) -> bool:
         """Read one chunk of new lines, store them, announce the new ones. The tail position
         only advances after a successful store, so a database error loses no lines.
-        Returns whether any lines were read, so a caller can loop until the file is consumed."""
+        Returns whether any lines were read, so a caller can loop until the file is consumed.
+
+        One poll at a time, and a poll that is cancelled still finishes: its database write runs
+        in a thread that cancelling cannot stop, so abandoning it would store alerts that were
+        never announced, and the next poll would find them already stored."""
+        async with self._poll_lock:
+            poll = asyncio.ensure_future(self._poll())
+            try:
+                return await asyncio.shield(poll)
+            except asyncio.CancelledError:
+                try:
+                    await poll
+                except Exception:
+                    log.exception("alert ingest failed while stopping")
+                raise
+
+    async def _poll(self) -> bool:
         result = await asyncio.to_thread(read_new_lines, self._alert_path, self._tail)
         if result.rotated:
             log.warning("alert file was rotated or truncated; reading it from the start")
         if result.lines:
-            new, bad = await asyncio.to_thread(self._store_lines, result.lines, self._wall().year)
+            new, bad = await asyncio.to_thread(
+                self._store_lines, result.lines, self._wall().year, result.ties
+            )
             self._unparsed += bad
             self._alerts_seen += len(new)
             if new:
@@ -416,12 +435,15 @@ class Sensor:
         self._tail = result.state
         return bool(result.lines)
 
-    def _store_lines(self, lines: list[str], year: int) -> tuple[list[Alert], int]:
-        """Runs in a worker thread: parse and store. Returns (new alerts, unparsed count)."""
+    def _store_lines(
+        self, lines: list[str], year: int, ties: Sequence[int] = ()
+    ) -> tuple[list[Alert], int]:
+        """Runs in a worker thread: parse and store. Returns (new alerts, unparsed count).
+        `ties[i]` says which of several identical lines `lines[i]` is (0 when not given)."""
         alerts: list[Alert] = []
         bad = 0
         now = self._wall()
-        for text in lines:
+        for i, text in enumerate(lines):
             alert = parse_line(text, default_year=year, tz=self._tz)
             if alert is not None and alert.ts > now + timedelta(days=1):
                 # Snort writes no year: a December line read in January is from last year.
@@ -430,5 +452,5 @@ class Sensor:
                 bad += 1
                 log.warning("unparsed alert line: %.120s", text)
             else:
-                alerts.append(alert)
+                alerts.append(replace(alert, dup=ties[i]) if i < len(ties) else alert)
         return self._repo.add_new(alerts), bad

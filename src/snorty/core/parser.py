@@ -11,10 +11,11 @@ from snorty.core.models import Alert
 UNCLASSIFIED_PRIORITY = 3
 
 _FAST = re.compile(
-    r"^(?P<ts>\S+)\s+\[\*\*\] \[(?P<gid>\d+):(?P<sid>\d+):(?P<rev>\d+)\] "
+    # Snort ids are 32-bit: more digits is a damaged line, and would overflow SQLite's integers.
+    r"^(?P<ts>\S+)\s+\[\*\*\] \[(?P<gid>\d{1,10}):(?P<sid>\d{1,10}):(?P<rev>\d{1,10})\] "
     r"(?P<msg>.*?) \[\*\*\]"
     r"(?: \[Classification: (?P<cls>[^\]]*)\])?"
-    r" \[Priority: (?P<prio>\d+)\] \{(?P<proto>[^}]+)\} (?P<src>\S+) -> (?P<dst>\S+)$"
+    r" \[Priority: (?P<prio>\d{1,9})\] \{(?P<proto>[^}]+)\} (?P<src>\S+) -> (?P<dst>\S+)$"
 )
 # MM/DD-HH:MM:SS.ffffff, or MM/DD/YY-... when Snort runs with -y
 _TS = re.compile(

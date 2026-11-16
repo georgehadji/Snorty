@@ -9,8 +9,12 @@ from typing import Any
 
 from snorty.core.models import Alert
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS alerts (
+
+def _alerts_table(name: str) -> str:
+    # (raw, dup) is the idempotency key: re-reading Snort's file stores nothing twice, while two
+    # alerts that print as the same line (same microsecond, same flow) are both kept.
+    return f"""
+CREATE TABLE IF NOT EXISTS {name} (
     id INTEGER PRIMARY KEY,
     ts TEXT NOT NULL,
     gid INTEGER NOT NULL,
@@ -24,16 +28,23 @@ CREATE TABLE IF NOT EXISTS alerts (
     src_port INTEGER,
     dst_ip TEXT NOT NULL,
     dst_port INTEGER,
-    raw TEXT NOT NULL UNIQUE
-);
+    raw TEXT NOT NULL,
+    dup INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (raw, dup)
+)"""
+
+
+_INDEXES = """
 CREATE INDEX IF NOT EXISTS alerts_ts ON alerts (ts);
 CREATE INDEX IF NOT EXISTS alerts_sid ON alerts (sid);
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
 _SELECT = "id, "
 _COLUMNS = (
     "ts, gid, sid, rev, msg, classification, priority, proto, "
     "src_ip, src_port, dst_ip, dst_port, raw"
 )
+_FLOOR = "prune_floor"  # meta key: nothing older than this is stored again
 
 
 def _utc(dt: datetime) -> str:
@@ -46,7 +57,7 @@ def _utc(dt: datetime) -> str:
 def _row(a: Alert) -> tuple[Any, ...]:
     return (
         _utc(a.ts), a.gid, a.sid, a.rev, a.msg, a.classification, a.priority, a.proto,
-        a.src_ip, a.src_port, a.dst_ip, a.dst_port, a.raw,
+        a.src_ip, a.src_port, a.dst_ip, a.dst_port, a.raw, a.dup,
     )  # fmt: skip
 
 
@@ -78,9 +89,30 @@ class AlertRepository:
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA synchronous=NORMAL")
             self._conn.execute("PRAGMA busy_timeout=5000")
-            self._conn.executescript(_SCHEMA)
+            self._conn.execute(_alerts_table("alerts"))
+            self._migrate()
+            self._conn.executescript(_INDEXES)
             # rows stored before the parser mapped Snort's priority 0 to the lowest level
             self._conn.execute("UPDATE alerts SET priority = 3 WHERE priority = 0")
+
+    def _migrate(self) -> None:
+        """Databases from before `dup` held raw as UNIQUE, so identical alert lines collapsed
+        into one row. SQLite cannot change a constraint in place: rebuild the table, keeping every
+        row and id. The dropped alerts come back the next time Snort's file is read."""
+        if "dup" in {r[1] for r in self._conn.execute("PRAGMA table_info(alerts)")}:
+            return
+        self._conn.execute("BEGIN")
+        try:
+            self._conn.execute(_alerts_table("alerts_v2"))
+            self._conn.execute(
+                f"INSERT INTO alerts_v2 (id, {_COLUMNS}) SELECT id, {_COLUMNS} FROM alerts"
+            )
+            self._conn.execute("DROP TABLE alerts")
+            self._conn.execute("ALTER TABLE alerts_v2 RENAME TO alerts")
+        except BaseException:
+            self._conn.execute("ROLLBACK")
+            raise
+        self._conn.execute("COMMIT")
 
     def close(self) -> None:
         with self._lock:
@@ -96,12 +128,16 @@ class AlertRepository:
 
     def add_new(self, alerts: Iterable[Alert]) -> list[Alert]:
         """Store alerts in one transaction; returns the ones that were new, in order."""
-        sql = f"INSERT OR IGNORE INTO alerts ({_COLUMNS}) VALUES ({', '.join('?' * 13)})"
+        sql = f"INSERT OR IGNORE INTO alerts ({_COLUMNS}, dup) VALUES ({', '.join('?' * 14)})"
         new: list[Alert] = []
         with self._lock:
             self._conn.execute("BEGIN")
             try:
+                row = self._conn.execute("SELECT value FROM meta WHERE key = ?", (_FLOOR,))
+                floor = (row.fetchone() or ("",))[0]
                 for alert in alerts:
+                    if _utc(alert.ts) < floor:  # older than the last prune: not stored again
+                        continue
                     cur = self._conn.execute(sql, _row(alert))
                     if cur.rowcount == 1:
                         new.append(replace(alert, id=cur.lastrowid or 0))
@@ -202,6 +238,14 @@ class AlertRepository:
             return {r[0]: r[1] for r in self._conn.execute(sql, [*args, *sids])}
 
     def prune(self, before: datetime) -> int:
-        """Delete alerts strictly older than `before`; returns the number deleted."""
+        """Delete alerts strictly older than `before`; returns the number deleted. Later reads of
+        Snort's file (which still holds them) do not bring them back."""
+        cutoff = _utc(before)
         with self._lock:
-            return self._conn.execute("DELETE FROM alerts WHERE ts < ?", (_utc(before),)).rowcount
+            deleted = self._conn.execute("DELETE FROM alerts WHERE ts < ?", (cutoff,)).rowcount
+            self._conn.execute(
+                "INSERT INTO meta (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = MAX(value, excluded.value)",
+                (_FLOOR, cutoff),
+            )
+            return deleted

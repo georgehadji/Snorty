@@ -23,6 +23,16 @@ def test_real_lines_parse(line: str) -> None:
     assert alert.ts.tzinfo is TZ
 
 
+def test_ids_longer_than_snort_allows_are_not_parsed() -> None:
+    assert "[1:1000002:1]" in REAL_LINES[0]
+    for damaged in (
+        "[1:99999999999999999999:1]",
+        "[99999999999:1000002:1]",
+        "[1:1000002:99999999999]",
+    ):
+        assert parse(REAL_LINES[0].replace("[1:1000002:1]", damaged)) is None
+
+
 def test_real_line_fields() -> None:
     alert = parse(REAL_LINES[0])
     assert alert == Alert(

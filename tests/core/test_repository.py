@@ -48,6 +48,59 @@ def test_add_is_idempotent(repo: AlertRepository) -> None:
     assert len(repo.query()) == 1
 
 
+def test_two_alerts_that_print_as_one_line_are_both_kept(repo: AlertRepository) -> None:
+    first = make_alert(1)
+    twin = replace(first, dup=1)  # same raw line, the second of its kind
+    assert repo.add_many([first, twin]) == 2
+    assert repo.add_many([first, twin]) == 0  # reading the file again adds nothing
+    assert len(repo.query()) == 2
+
+
+OLD_SCHEMA = """
+CREATE TABLE alerts (
+    id INTEGER PRIMARY KEY, ts TEXT NOT NULL, gid INTEGER NOT NULL, sid INTEGER NOT NULL,
+    rev INTEGER NOT NULL, msg TEXT NOT NULL, classification TEXT, priority INTEGER NOT NULL,
+    proto TEXT NOT NULL, src_ip TEXT NOT NULL, src_port INTEGER, dst_ip TEXT NOT NULL,
+    dst_port INTEGER, raw TEXT NOT NULL UNIQUE
+);
+CREATE INDEX alerts_ts ON alerts (ts);
+CREATE INDEX alerts_sid ON alerts (sid);
+"""
+
+
+def test_a_database_from_before_dup_is_rebuilt_keeping_every_row(tmp_path: Path) -> None:
+    path = tmp_path / "old.db"
+    with closing(sqlite3.connect(path)) as conn:
+        conn.executescript(OLD_SCHEMA)
+        conn.execute(
+            "INSERT INTO alerts VALUES (7, '2026-11-15T12:00:00.000000+00:00', 1, 1000, 1, 'm', "
+            "NULL, 2, 'TCP', '10.0.0.1', 1234, '10.0.0.2', 80, 'the line')"
+        )
+        conn.commit()
+    repo = AlertRepository(path)
+    try:
+        kept = repo.get(7)
+        assert kept is not None and kept.raw == "the line" and kept.sid == 1000
+        assert repo.add(replace(kept, dup=1)) is True  # the dropped twin can now be stored
+        assert repo.add(replace(kept, id=0)) is False  # the original is still not doubled
+        with closing(sqlite3.connect(path)) as conn:
+            names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
+        assert {"alerts_ts", "alerts_sid"} <= names and "alerts_v2" not in names
+    finally:
+        repo.close()
+    AlertRepository(path).close()  # opening it again changes nothing
+
+
+def test_pruned_alerts_are_not_stored_again(repo: AlertRepository) -> None:
+    old, new = make_alert(1, ts=T0 - timedelta(days=100)), make_alert(2)
+    repo.add(old)
+    assert repo.prune(T0 - timedelta(days=90)) == 1
+    assert repo.add(old) is False  # Snort's file still holds it; it must not come back
+    assert repo.add(new) is True
+    repo.prune(T0 - timedelta(days=200))  # a smaller cutoff never lowers the floor
+    assert repo.add(old) is False
+
+
 def test_add_many_counts_only_new_rows(repo: AlertRepository) -> None:
     alerts = [make_alert(i) for i in range(5)]
     assert repo.add_many(alerts) == 5

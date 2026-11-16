@@ -19,6 +19,9 @@ class Alert:
     dst_port: int | None
     raw: str  # original line, the idempotency key
     id: int = field(default=0, compare=False)  # database row id; 0 until the alert is stored
+    # Which of several identical lines this is (0 for the first). Snort prints only microseconds,
+    # so two alerts can read exactly alike; `raw` plus `dup` is what tells them apart.
+    dup: int = field(default=0, compare=False)
 
 
 @dataclass(frozen=True, slots=True)

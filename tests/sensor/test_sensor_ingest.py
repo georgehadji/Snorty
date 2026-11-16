@@ -110,6 +110,67 @@ async def test_restart_with_same_file_creates_no_duplicates_or_events(tmp_path: 
     first.repo.close()
 
 
+async def test_alerts_that_print_as_one_line_are_all_stored_and_announced(tmp_path: Path) -> None:
+    first = Rig(tmp_path)
+    await first.sensor.start()
+    first.append(line(1), line(1), line(1))  # three alerts in one microsecond, same flow
+    seen: list[AlertRaised] = []
+    await eventually(lambda: bool(seen.extend(first.raised())) or len(seen) == 3)
+    assert first.stored() == 3
+    await first.sensor.stop()
+
+    second = Rig(tmp_path, repo=first.repo)  # a restart reads the file again
+    await second.sensor.start()
+    await asyncio.sleep(0.02)
+    assert second.stored() == 3 and second.raised() == []
+    await second.sensor.stop()
+    first.repo.close()
+
+
+async def test_a_poll_that_is_cancelled_mid_write_still_finishes_and_announces(rig: Rig) -> None:
+    s = rig.sensor
+    s._backlog_done = True
+    rig.append(line(1))
+    real = s._store_lines
+
+    def slow(lines: list[str], year: int, ties: list[int] = []) -> object:  # noqa: B006
+        time.sleep(0.2)  # the write is inside its worker thread when the cancel arrives
+        return real(lines, year, ties)
+
+    s._store_lines = slow  # type: ignore[method-assign,assignment]
+    s._ingest_task = asyncio.create_task(s._poll_once())
+    await asyncio.sleep(0.05)
+    await s._stop_ingest()  # cancels, then does the final pass
+    assert rig.stored() == 1 and len(rig.raised()) == 1  # it used to be stored and never announced
+
+
+async def test_a_damaged_line_with_oversized_ids_does_not_stall_ingest(rig: Rig) -> None:
+    await rig.sensor.start()
+    rig.append(line(1).replace(":1000002:", ":99999999999999999999:"), line(2))
+    await eventually(lambda: rig.stored() == 1)  # the good line behind it still arrives
+    assert rig.sensor.status().unparsed == 1 and rig.sensor.state.name == "RUNNING"
+    await rig.sensor.stop()
+
+
+async def test_pruned_alerts_are_not_read_back_from_the_file_on_restart(tmp_path: Path) -> None:
+    first = Rig(tmp_path)
+    old = (
+        "01/01/25-10:00:00.000001  [**] [1:1000002:1] old [**] [Priority: 1] "
+        "{TCP} 10.0.0.1:1 -> 10.0.0.2:80"
+    )
+    first.append(old, line(1))
+    await first.sensor.start()
+    assert first.stored() == 2
+    await first.sensor.stop()
+    first.repo.prune(datetime.now(UTC) - timedelta(days=90))
+
+    second = Rig(tmp_path, repo=first.repo)
+    await second.sensor.start()  # the dashboard restarts and reads the whole file again
+    assert second.stored() == 1
+    await second.sensor.stop()
+    first.repo.close()
+
+
 async def test_junk_lines_are_counted_not_fatal(rig: Rig) -> None:
     await rig.sensor.start()
     rig.append("this is not an alert", line(1))
@@ -162,8 +223,10 @@ async def test_rotated_file_is_read_again_and_announced(rig: Rig) -> None:
     rig.append(line(1), line(2), line(3))
     await rig.sensor.start()
     rig.alerts.write_bytes((line(8) + "\n").encode())  # shorter than before: rotated
-    await eventually(lambda: rig.stored() == 4)
-    assert [e.alert.src_port for e in rig.raised()] == [1008]
+    seen: list[AlertRaised] = []  # the announcement follows the write, so wait for it too
+    await eventually(lambda: bool(seen.extend(rig.raised())) or len(seen) >= 1)
+    assert rig.stored() == 4
+    assert [e.alert.src_port for e in seen] == [1008]
     await rig.sensor.stop()
 
 
