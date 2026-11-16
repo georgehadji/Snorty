@@ -5,12 +5,12 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 1: Managed block, home-net and conf rewrites (S)
 Pure functions in `src/snorty/rules/blocks.py`.
-- [ ] `render_block(entries)` writes the marker lines plus `suppress gen_id G, sig_id S   # note` per entry, in SID order, using the file's line ending
-- [ ] `read_block(text)` returns the entries (and notes) between the markers; no block gives `[]`; a lone start marker is an error
-- [ ] `apply_block(text, entries)` replaces the block or appends it; text outside the markers is byte-identical (LF, CRLF and mixed files tested); empty entries removes the whole block
-- [ ] `set_home_net(text, value)` changes only the `ipvar HOME_NET` line; missing line raises `ValueError`
-- [ ] `rewrite_rule_path(text, path)` and `rewrite_include(text, name, path)` change only the `var RULE_PATH` line and the one `include threshold.conf` line
-- [ ] Verify: `uv run pytest tests/rules/test_blocks.py -q`
+- [x] `render_block(entries)` writes the marker lines plus `suppress gen_id G, sig_id S   # note` per entry, in SID order, using the file's line ending
+- [x] `read_block(text)` returns the entries (and notes) between the markers; no block gives `[]`; a lone start marker is an error
+- [x] `apply_block(text, entries)` replaces the block or appends it; text outside the markers is byte-identical (LF, CRLF and mixed files tested); empty entries removes the whole block
+- [x] `set_home_net(text, value)` changes only the `ipvar HOME_NET` line; missing line raises `ValueError`
+- [x] `rewrite_rule_path(text, path)` and `rewrite_include(text, name, path)` change only the `var RULE_PATH` line and the one `include threshold.conf` line
+- [x] Verify: `uv run pytest tests/rules/test_blocks.py -q`
 - Dependencies: none · Files: `src/snorty/rules/__init__.py`, `blocks.py`, `tests/rules/__init__.py`, `test_blocks.py`
 
 ## Task 2: Archive handling (S)
@@ -43,7 +43,7 @@ Pure functions in `src/snorty/rules/blocks.py`.
 - [ ] Sensor STOPPED before the update: no restart, no health gate
 - [ ] Returns an `UpdateReport` (outcome, rule_count, md5, skipped members)
 - [ ] Verify: `uv run pytest tests/rules/test_update.py -q` (fake downloader, fake validator, fake sensor, real temp dirs)
-- Dependencies: Tasks 1-3 · Files: `service.py`, `tests/rules/fakes.py`, `test_update.py`
+- Dependencies: Tasks 1-3 · Files: `service.py`, `tests/rules/rules_fakes.py`, `test_update.py`
 
 ## Task 5: Update failures and rollback (M)
 Same `service.py`, new tests in `tests/rules/test_update_failures.py`.
@@ -66,7 +66,7 @@ Same `service.py`, new tests in `tests/rules/test_update_failures.py`.
 - Dependencies: Tasks 1, 3 · Files: `service.py`, `test_mute.py`, `test_home_net.py`
 
 ## Task 7: CLI and real checks (M)
-`__main__.py`, `tests/rules/test_integration.py`.
+`__main__.py`, `tests/rules/test_rules_integration.py`.
 - [ ] CLI subcommands exactly as in the spec; exit 0 on success or up to date, 1 on a failed update, 2 on bad arguments; prints progress lines per stage
 - [ ] `@pytest.mark.snort`: copy `C:\Snort\rules` and `snort.conf` to a temp dir; real `SnortValidator` passes the good set and fails with a message when one rule is broken; real `C:\Snort` untouched (hash check before and after)
 - [ ] Manual, recorded in the final summary: `python -m snorty.rules update` against the real URL, sensor back to RUNNING, `snort -T` still passes; `mute` / `muted` / `unmute` round trip on the real `threshold.conf`; `home-net --set` default applied (with the sensor stopped or restarted as appropriate); nothing left running

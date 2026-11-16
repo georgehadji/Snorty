@@ -27,7 +27,7 @@ mute/unmute/home-net, then the CLI and real-Snort checks. Stdlib only.
 ## Task List
 
 ### Phase 1: Pure logic
-- [ ] Task 1: managed block, `set_home_net`, conf rewrites (`blocks.py`)
+- [x] Task 1: managed block, `set_home_net`, conf rewrites (`blocks.py`)
 - [ ] Task 2: md5 parse, safe tar extraction, rule count, sanity check (`archive.py`)
 
 ### Checkpoint: Pure logic
