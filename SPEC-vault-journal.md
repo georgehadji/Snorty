@@ -42,7 +42,7 @@ User: you, reading `Security/Snort/YYYY-MM-DD.md` next to your other notes. Succ
 
 **Block content**, in order:
 
-1. `## Snort alerts` and one line: `N alerts · P1 a · P2 b · P3 c · updated HH:MM`.
+1. `## Snort alerts` and one line: `N alerts · P1 a · P2 b · P3 c · last alert HH:MM`.
 2. `### Top rules`: table of the 10 most frequent rules: SID, message, count.
 3. `### Top addresses`: top 10 sources and top 10 destinations with counts.
 4. `### By hour`: 24-row table, hour and count.
@@ -78,11 +78,12 @@ CLI:    uv run python -m snorty.journal write [--date YYYY-MM-DD] [--db PATH] [-
 
 ```
 src/snorty/journal/
-  render.py     render(), merge(), sanitize_cell() (pure)
+  render.py     render(), sanitize_cell(), BEGIN/END markers (pure)
+  merge.py      merge(), NoteConflict (pure)
   ports.py      NoteStore Protocol, VaultNoteStore
   service.py    JournalConfig, JournalService
   __main__.py   CLI (write command)
-tests/journal/  test_render, test_merge, test_store, test_service, test_journal_cli
+tests/journal/  test_journal_render, _merge, _store, _service, _resilience, _cli, journal_fakes
 ```
 
 Test files get unique basenames (a repeat basename in another folder breaks collection).
@@ -113,18 +114,29 @@ def merge(existing: str | None, block: str, day: date) -> str:
 
 ## Success Criteria
 
-- [ ] 1. `render` is deterministic and its output matches a golden note for a fixed alert set, including the empty day and the P1 table cut at 50.
-- [ ] 2. Day boundaries use the local zone: an alert at 23:59 and one at 00:01 local land in different notes.
-- [ ] 3. `merge` into no note creates frontmatter, title and block; into a note without markers appends the block and changes nothing else; with good markers replaces only between them; with broken markers raises and writes nothing.
-- [ ] 4. Your text and frontmatter in an existing note survive 10 regenerations byte for byte; an unchanged result causes no write.
-- [ ] 5. Hostile alert text cannot add a table column, wikilink, tag, comment, HTML or marker line.
-- [ ] 6. `VaultNoteStore` refuses any path outside `<vault>\Security\Snort\` and a missing vault root; writes are atomic.
-- [ ] 7. The service flushes a dirty day at most once per interval, flushes on `stop()`, retries after a failed write, and never raises out of its consumer task.
-- [ ] 8. `start()` regenerates today and yesterday from the database, including alerts the sensor ingested without announcing.
-- [ ] 9. A slow or failing store never slows `bus.publish`.
-- [ ] 10. A day over the 100,000-row cap produces a truncation line and a correct total.
-- [ ] 11. Manual: `python -m snorty.journal write` creates today's note in the vault, and a line typed outside the markers survives a second run; `python -m snorty.sensor --journal` runs and stops cleanly with no leftover `snort.exe`.
-- [ ] 12. `ruff check`, strict mypy on `snorty.journal`, coverage at least 90%; `snorty.journal` imports only `snorty.core` and stdlib; no `subprocess` in our `src/snorty` outside `snort/`.
+- [x] 1. `render` is deterministic and its output matches a golden note for a fixed alert set, including the empty day and the P1 table cut at 50.
+- [x] 2. Day boundaries use the local zone: an alert at 23:59 and one at 00:01 local land in different notes.
+- [x] 3. `merge` into no note creates frontmatter, title and block; into a note without markers appends the block and changes nothing else; with good markers replaces only between them; with broken markers raises and writes nothing.
+- [x] 4. Your text and frontmatter in an existing note survive 10 regenerations byte for byte; an unchanged result causes no write.
+- [x] 5. Hostile alert text cannot add a table column, wikilink, tag, comment, HTML or marker line.
+- [x] 6. `VaultNoteStore` refuses any path outside `<vault>\Security\Snort\` and a missing vault root; writes are atomic.
+- [x] 7. The service flushes a dirty day at most once per interval, flushes on `stop()`, retries after a failed write, and never raises out of its consumer task.
+- [x] 8. `start()` regenerates today and yesterday from the database, including alerts the sensor ingested without announcing.
+- [x] 9. A slow or failing store never slows `bus.publish`.
+- [x] 10. A day over the 100,000-row cap produces a truncation line and a correct total.
+- [x] 11. Manual: `python -m snorty.journal write` creates today's note in the vault, and a line typed outside the markers survives a second run; `python -m snorty.sensor --journal` runs and stops cleanly with no leftover `snort.exe`.
+- [x] 12. `ruff check`, strict mypy on `snorty.journal`, coverage at least 90%; `snorty.journal` imports only `snorty.core` and stdlib; no `subprocess` in our `src/snorty` outside `snort/`.
+
+## Built-in deviations and findings (V1 close-out)
+
+- The count line ends with `last alert HH:MM` (time of the newest alert) instead of `updated HH:MM`: a wall-clock time would change the text on every flush and defeat the no-write-when-unchanged rule.
+- The service runs two small tasks (consumer that marks days dirty, ticker that flushes), not one.
+- `build_note(repo, existing, day, cfg)` in `service.py` is shared by the service and the CLI. `merge` lives in `merge.py`.
+- `python -m snorty.sensor` also takes `--vault` (default `$OBSIDIAN_VAULT_PATH`); `--journal` without a vault is a usage error (exit 2).
+- A Windows junction at `Security/` let `mkdir` create a folder outside the vault before the containment check ran; found by the escape test, fixed by checking each level before creating it.
+- Priority 0 alerts (a rule with no `classtype`) count in the summary but do not appear in the Priority 1 table, while notify toasts them. Left as specified.
+- Real check: Snort on loopback plus `JournalService` wrote `Security/Snort/2026-11-16.md` in the vault (2 alerts); a line typed outside the markers survived two `python -m snorty.journal write` runs, which reported `unchanged`; no `snort.exe` was left. That note holds test alerts and can be deleted.
+- `python -m snorty.sensor --journal` uses the same composition as the real check but cannot select the loopback adapter by IP (as with `--notify`).
 
 ## Out of Scope (Deferred)
 

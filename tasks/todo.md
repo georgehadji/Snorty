@@ -64,10 +64,10 @@ Same `service.py`; `tests/journal/test_journal_resilience.py`.
 - Dependencies: Tasks 3-5 · Files: `journal/__main__.py`, `sensor/__main__.py`, `tests/journal/test_journal_cli.py`, `tests/sensor/test_cli_journal.py`
 
 ## Task 7: Real checks and close-out (S)
-- [ ] Manual: `uv run python -m snorty.journal write --db <db with real alerts>` creates today's note in the vault; a line typed outside the markers survives a second run (report what I saw)
-- [ ] Manual: a real Snort loopback run with `JournalService` writes a note containing the alert, with no leftover `snort.exe`
-- [ ] Coverage for `snorty.journal` at least 90% from unit tests alone (read from the json report)
-- [ ] `grep -r subprocess src/snorty` matches only `snort/` files; `snorty.journal` imports only `snorty.core` and stdlib
-- [ ] SPEC-vault-journal.md Success Criteria and deviations amended and ticked; plan and todo boxes ticked except the "next module" one
-- [ ] Verify: `uv run pytest -q -m "not snort"`; `uv run ruff check src tests`; mypy as above
+- [x] Manual: `uv run python -m snorty.journal write --db <db with real alerts>` creates today's note in the vault; a line typed outside the markers survives a second run (report what I saw)
+- [x] Manual: a real Snort loopback run with `JournalService` writes a note containing the alert, with no leftover `snort.exe`
+- [x] Coverage for `snorty.journal` at least 90% from unit tests alone (read from the json report)
+- [x] `grep -r subprocess src/snorty` matches only `snort/` files; `snorty.journal` imports only `snorty.core` and stdlib
+- [x] SPEC-vault-journal.md Success Criteria and deviations amended and ticked; plan and todo boxes ticked except the "next module" one
+- [x] Verify: `uv run pytest -q -m "not snort"`; `uv run ruff check src tests`; mypy as above
 - Dependencies: Task 6

@@ -44,10 +44,10 @@ flag on the sensor CLI, then the manual real-vault check.
 
 ### Phase 3: CLI and real checks
 - [x] Task 6: `python -m snorty.journal write`, `--journal` on the sensor CLI
-- [ ] Task 7: manual real-vault write and real `--journal` run, close-out
+- [x] Task 7: manual real-vault write and real `--journal` run, close-out
 
 ### Checkpoint: Complete
-- [ ] Every Success Criteria box in SPEC-vault-journal.md checked
+- [x] Every Success Criteria box in SPEC-vault-journal.md checked
 - [ ] Then the next module spec (rule-lab or dashboard)
 
 ## Risks and Mitigations
