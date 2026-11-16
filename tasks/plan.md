@@ -36,7 +36,7 @@ flag on the sensor CLI, then the manual real-vault check.
 
 ### Phase 2: Port and service
 - [x] Task 3: `NoteStore`, `VaultNoteStore`, `MemoryNoteStore`
-- [ ] Task 4: `JournalService` (dirty days, flush, start regeneration, stop flush)
+- [x] Task 4: `JournalService` (dirty days, flush, start regeneration, stop flush)
 - [ ] Task 5: resilience and paging (failed write retry, no-write when unchanged, cap, non-blocking publish)
 
 ### Checkpoint: Service

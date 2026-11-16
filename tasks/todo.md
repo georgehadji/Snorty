@@ -35,11 +35,11 @@ Same `render.py` (or `merge.py` if it grows).
 
 ## Task 4: JournalService (M)
 `service.py`: `JournalConfig(flush_interval=300, tz)`, `JournalService(bus, repo, store, config, *, clock, sleep)`; `journal_fakes.py`.
-- [ ] `start()` subscribes before returning, regenerates today and yesterday from the repository, spawns the consumer task
-- [ ] `AlertRaised` marks the alert's local day dirty; a flush rebuilds each dirty day (`collect` pages the repository, builds `render`, `merge`s with `store.read`, writes) and clears the flag
-- [ ] At most one flush per interval; `stop()` flushes once then cancels and closes the subscription; `stop()` before `start()` and twice are harmless; `start()` twice does not double-subscribe
-- [ ] Alerts the sensor ingested without announcing appear after `start()`
-- [ ] Verify: `uv run pytest tests/journal/test_journal_service.py -q` (real `EventBus`, temp `AlertRepository`, `MemoryNoteStore`, fake clock and sleep)
+- [x] `start()` subscribes before returning, regenerates today and yesterday from the repository, spawns the consumer task
+- [x] `AlertRaised` marks the alert's local day dirty; a flush rebuilds each dirty day (`collect` pages the repository, builds `render`, `merge`s with `store.read`, writes) and clears the flag
+- [x] At most one flush per interval; `stop()` flushes once then cancels and closes the subscription; `stop()` before `start()` and twice are harmless; `start()` twice does not double-subscribe
+- [x] Alerts the sensor ingested without announcing appear after `start()`
+- [x] Verify: `uv run pytest tests/journal/test_journal_service.py -q` (real `EventBus`, temp `AlertRepository`, `MemoryNoteStore`, fake clock and sleep)
 - Dependencies: Tasks 1-3 · Files: `service.py`, `tests/journal/journal_fakes.py`, `test_journal_service.py`
 
 ## Task 5: Resilience and paging (M)
