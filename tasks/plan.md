@@ -51,7 +51,7 @@ then the real-Snort integration tests and CLI. Stdlib only.
 
 ### Checkpoint D: module complete
 - [x] Every Success Criteria box in SPEC-sensor.md checked
-- [ ] Then the next module spec (rules, notify, vault-journal or rule-lab)
+- [x] Then the next module spec (rules, notify, vault-journal or rule-lab)
 
 ## Risks and Mitigations
 
