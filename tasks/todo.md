@@ -74,8 +74,8 @@ Same `service.py`, new tests in `tests/rules/test_update_failures.py`.
 - Dependencies: Tasks 3-6 · Files: `__main__.py`, `test_integration.py`
 
 ## Task 8: Close-out (S)
-- [ ] Coverage for `snorty.rules` at least 90% from unit tests alone
-- [ ] `grep -r subprocess src/snorty` still matches only `snort/` files; `snorty.rules` imports only `snorty.core`, `snorty.snort`, stdlib
-- [ ] SPEC-rules.md Success Criteria boxes ticked; plan and todo boxes ticked except the "next module" one
-- [ ] Verify: `uv run pytest -q -m "not snort" --cov=snorty.rules --cov-report=term-missing`; `uv run ruff check src tests`; mypy as above
+- [x] Coverage for `snorty.rules` at least 90% from unit tests alone
+- [x] `grep -r subprocess src/snorty` still matches only `snort/` files; `snorty.rules` imports only `snorty.core`, `snorty.snort`, stdlib
+- [x] SPEC-rules.md Success Criteria boxes ticked; plan and todo boxes ticked except the "next module" one
+- [x] Verify: `uv run pytest -q -m "not snort" --cov=snorty.rules --cov-report=term-missing`; `uv run ruff check src tests`; mypy as above
 - Dependencies: Task 7

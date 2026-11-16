@@ -121,17 +121,17 @@ def safe_members(names: Iterable[str]) -> list[str]: ...
 
 ## Success Criteria
 
-- [ ] 1. A good update (fake archive) replaces `emerging-*.rules`, keeps `local.rules` and the lists byte-identical, leaves the old set in `rules.prev`, restarts the sensor once, and publishes `RulesUpdated(ok=True, rule_count, ...)`.
-- [ ] 2. Failure at each step (download error, md5 mismatch, oversize, hostile archive, sanity ratio, validation failure, rename failure, sensor not RUNNING after restart) leaves `rules/` byte-identical to before, the sensor running the old set, and publishes `RulesUpdated(ok=False, detail)`.
-- [ ] 3. A tar with path traversal, absolute or drive paths, symlinks or non-`.rules` files writes nothing outside the staging dir; skipped members are counted in the report.
-- [ ] 4. Same md5 as the last applied update: no download of the tarball, no restart, reported as up to date; `--force` overrides.
-- [ ] 5. An update with a STOPPED sensor does not start it.
-- [ ] 6. `mute`/`unmute` are idempotent; text outside the markers is preserved byte for byte (CRLF and LF); `muted` lists what the block holds; a mute that fails `-T` leaves `threshold.conf` unchanged.
-- [ ] 7. `set_home_net` changes only the `ipvar HOME_NET` line; a missing line is an error, not an insert; `-T` failure leaves the file unchanged.
-- [ ] 8. Concurrent calls are serialised (second waits), never interleaved.
-- [ ] 9. `@pytest.mark.snort` validation test passes on this PC (good set passes, broken rule fails) without touching `C:\Snort\rules`.
-- [ ] 10. Manual (in-process script, because the CLI runs outside the sensor's process and cannot restart it): `RulesService.update()` against the real ET URL succeeds, the sensor comes back RUNNING, and `snort -T` on the live conf still passes; `muted`, `mute`, `unmute` round-trip on the real `threshold.conf`; HOME_NET set to the new default.
-- [ ] 11. `ruff check`, strict mypy on `snorty.rules`, coverage at least 90%; `snorty.rules` imports only `snorty.core`, `snorty.snort`, and the `Sensor` protocol surface (`state`, `restart`); no `subprocess` outside `snort/`.
+- [x] 1. A good update (fake archive) replaces `emerging-*.rules`, keeps `local.rules` and the lists byte-identical, leaves the old set in `rules.prev`, restarts the sensor once, and publishes `RulesUpdated(ok=True, rule_count, ...)`.
+- [x] 2. Failure at each step (download error, md5 mismatch, oversize, hostile archive, sanity ratio, validation failure, rename failure, sensor not RUNNING after restart) leaves `rules/` byte-identical to before, the sensor running the old set, and publishes `RulesUpdated(ok=False, detail)`.
+- [x] 3. A tar with path traversal, absolute or drive paths, symlinks or non-`.rules` files writes nothing outside the staging dir; skipped members are counted in the report.
+- [x] 4. Same md5 as the last applied update: no download of the tarball, no restart, reported as up to date; `--force` overrides.
+- [x] 5. An update with a STOPPED sensor does not start it.
+- [x] 6. `mute`/`unmute` are idempotent; text outside the markers is preserved byte for byte (CRLF and LF); `muted` lists what the block holds; a mute that fails `-T` leaves `threshold.conf` unchanged.
+- [x] 7. `set_home_net` changes only the `ipvar HOME_NET` line; a missing line is an error, not an insert; `-T` failure leaves the file unchanged.
+- [x] 8. Concurrent calls are serialised (second waits), never interleaved.
+- [x] 9. `@pytest.mark.snort` validation test passes on this PC (good set passes, broken rule fails) without touching `C:\Snort\rules`.
+- [x] 10. Manual (in-process script, because the CLI runs outside the sensor's process and cannot restart it): `RulesService.update()` against the real ET URL succeeds, the sensor comes back RUNNING, and `snort -T` on the live conf still passes; `muted`, `mute`, `unmute` round-trip on the real `threshold.conf`; HOME_NET set to the new default.
+- [x] 11. `ruff check`, strict mypy on `snorty.rules`, coverage at least 90%; `snorty.rules` imports only `snorty.core`, `snorty.snort`, and the `Sensor` protocol surface (`state`, `restart`); no `subprocess` outside `snort/`.
 
 ## Out of Scope (Deferred)
 

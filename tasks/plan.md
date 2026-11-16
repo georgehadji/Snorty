@@ -46,10 +46,10 @@ mute/unmute/home-net, then the CLI and real-Snort checks. Stdlib only.
 
 ### Phase 4: CLI and real checks
 - [x] Task 7: CLI, `@pytest.mark.snort` validation test, manual real update on this PC
-- [ ] Task 8: close-out (coverage, containment, spec boxes ticked)
+- [x] Task 8: close-out (coverage, containment, spec boxes ticked)
 
 ### Checkpoint: Complete
-- [ ] Every Success Criteria box in SPEC-rules.md checked
+- [x] Every Success Criteria box in SPEC-rules.md checked
 - [ ] Then the next module spec (notify, vault-journal or rule-lab)
 
 ## Risks and Mitigations
