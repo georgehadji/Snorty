@@ -36,10 +36,10 @@ mute/unmute/home-net, then the CLI and real-Snort checks. Stdlib only.
 ### Phase 2: Ports and update
 - [x] Task 3: ports, `UrllibDownloader`, `SnortValidator`, `RulesConfig`, state file
 - [x] Task 4: `RulesService.update` happy path (stage, validate, swap, restart, state, event, up-to-date, stopped sensor)
-- [ ] Task 5: update failures and rollback (every step), concurrency lock
+- [x] Task 5: update failures and rollback (every step), concurrency lock
 
 ### Checkpoint: Update
-- [ ] Every failure injection leaves `rules/` byte-identical; unit suite under 3 s
+- [x] Every failure injection leaves `rules/` byte-identical; unit suite under 3 s
 
 ### Phase 3: Mute and home-net
 - [ ] Task 6: `mute`, `unmute`, `muted`, `set_home_net` through validate and atomic commit

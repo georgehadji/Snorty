@@ -1,7 +1,9 @@
 """Test doubles and a ready-made Snort directory for the rules service tests."""
 
+import asyncio
 import hashlib
 import io
+import os
 import tarfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -73,7 +75,7 @@ class FakeSensor:
     def __init__(self, state: State = State.RUNNING) -> None:
         self._state = state
         self.restarts = 0
-        self.after_restart = State.RUNNING
+        self.results: list[State | None] = []  # per restart: end state, or None = hang forever
 
     @property
     def state(self) -> State:
@@ -81,11 +83,37 @@ class FakeSensor:
 
     async def restart(self) -> None:
         self.restarts += 1
-        self._state = self.after_restart
+        result = self.results.pop(0) if self.results else State.RUNNING
+        if result is None:
+            await asyncio.Event().wait()
+        else:
+            self._state = result
+
+
+class FlakyRename:
+    """os.replace that fails on the given (1-based) call numbers."""
+
+    def __init__(self, fail_on: set[int]) -> None:
+        self.fail_on = fail_on
+        self.calls = 0
+
+    def __call__(self, src: Path, dst: Path) -> None:
+        self.calls += 1
+        if self.calls in self.fail_on:
+            raise OSError(f"rename {self.calls} refused")
+        os.replace(src, dst)
 
 
 class Rig:
-    def __init__(self, tmp_path: Path, archive: bytes | Exception | None = None) -> None:
+    def __init__(
+        self,
+        tmp_path: Path,
+        archive: bytes | Exception | None = None,
+        *,
+        md5_text: str | None = None,
+        rename: FlakyRename | None = None,
+        **config: object,
+    ) -> None:
         self.root = tmp_path / "snort"
         self.rules = self.root / "rules"
         self.etc = self.root / "etc"
@@ -110,14 +138,23 @@ class Rig:
             ),
             rules_dir=self.rules,
             url=URL,
+            **config,  # type: ignore[arg-type]
         )
-        self.downloader = FakeDownloader(archive if archive is not None else self.good_archive())
+        self.downloader = FakeDownloader(
+            archive if archive is not None else self.good_archive(), md5_text
+        )
         self.validator = FakeValidator()
         self.sensor = FakeSensor()
         self.bus = EventBus()
         self.sub: Subscription = self.bus.subscribe(maxsize=100)
         self.service = RulesService(
-            self.config, self.downloader, self.validator, self.sensor, self.bus, clock=lambda: NOW
+            self.config,
+            self.downloader,
+            self.validator,
+            self.sensor,
+            self.bus,
+            clock=lambda: NOW,
+            rename=rename or os.replace,
         )
 
     @staticmethod

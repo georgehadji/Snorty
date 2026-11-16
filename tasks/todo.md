@@ -47,14 +47,14 @@ Pure functions in `src/snorty/rules/blocks.py`.
 
 ## Task 5: Update failures and rollback (M)
 Same `service.py`, new tests in `tests/rules/test_update_failures.py`.
-- [ ] Parametrised failures: download error, md5 mismatch, oversize, hostile archive (nothing extracted), sanity ratio, `-T` failure (first error lines in the detail), each of the 3 renames failing (undo path), sensor not RUNNING within `health_timeout` (rollback + second restart)
-- [ ] After every failure: `rules/` byte-identical to before (hash of the tree), no `rules.new` / `rules.swap` left behind, `RulesUpdated(ok=False, detail)` published, state not advanced
-- [ ] Two concurrent calls (update + mute) run one after the other (lock), never interleaved
-- [ ] Verify: `uv run pytest tests/rules -q -m "not snort"`
+- [x] Parametrised failures: download error, md5 mismatch, oversize, hostile archive (nothing extracted), sanity ratio, `-T` failure (first error lines in the detail), each of the 3 renames failing (undo path), sensor not RUNNING within `health_timeout` (rollback + second restart)
+- [x] After every failure: `rules/` byte-identical to before (hash of the tree), no `rules.new` / `rules.swap` left behind, `RulesUpdated(ok=False, detail)` published, state not advanced
+- [x] Two concurrent calls (update + mute) run one after the other (lock), never interleaved
+- [x] Verify: `uv run pytest tests/rules -q -m "not snort"`
 - Dependencies: Task 4 · Files: `service.py`, `test_update_failures.py`
 
 ### Checkpoint: Tasks 3-5
-- [ ] All failure injections green; whole rules unit suite under 3 s; ruff and strict mypy clean
+- [x] All failure injections green; whole rules unit suite under 3 s; ruff and strict mypy clean
 
 ## Task 6: Mute, unmute, home-net (M)
 `service.py` additions.
