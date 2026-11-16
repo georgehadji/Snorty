@@ -134,9 +134,19 @@ class AlertRepository:
             rows = self._conn.execute(sql, [*args, limit, offset]).fetchall()
         return [_alert(r) for r in rows]
 
-    def count(self, since: datetime | None = None, until: datetime | None = None) -> int:
-        """How many alerts are in the range; cheaper than summing counts_by_sid."""
+    def count(
+        self,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        *,
+        min_priority: int | None = None,
+    ) -> int:
+        """How many alerts are in the range; cheaper than summing counts_by_sid.
+        min_priority=2 counts only priorities 1 and 2."""
         where, args = _range(since, until)
+        if min_priority is not None:
+            where += (" AND " if where else " WHERE ") + "priority <= ?"
+            args.append(min_priority)
         with self._lock:
             row = self._conn.execute(f"SELECT COUNT(*) FROM alerts{where}", args).fetchone()
         return int(row[0])

@@ -2,13 +2,15 @@
 {% set active = "overview" %}
 {% block title %}Overview · Snorty{% endblock %}
 {% block main %}
+<header class="title"><h1>Overview</h1><p class="sub" id="finding">{{ finding }}</p></header>
 <div class="grid">
   {% include "_sensor_card.html" %}
   <section class="card">
     <h2>Alerts</h2>
     <div class="stats">
+      <div><span class="stat" id="count-urgent">{{ count_urgent }}</span><span class="label">Priority 1 or 2 today</span></div>
+      <div><span class="stat" id="count-today">{{ count_today }}</span><span class="label">All today</span></div>
       <div><span class="stat" id="count-hour">{{ count_hour }}</span><span class="label">Last hour</span></div>
-      <div><span class="stat" id="count-today">{{ count_today }}</span><span class="label">Today</span></div>
     </div>
     <h3>Top rules today</h3>
     <ol id="top-rules" class="plain">
@@ -21,11 +23,15 @@
     {% include "_rules_summary.html" %}
     <p><a href="/rules">Manage rules</a></p>
     <h3>Journal</h3>
-    <p>{% if journal %}{{ journal.notes_written }} notes written{% if journal.error %}, <span class="bad-text">last write failed</span>{% endif %}. <a href="/journal">Details</a>{% else %}Off (no vault set).{% endif %}</p>
+    <p>{% if journal %}{{ journal.notes_written }} note{{ "" if journal.notes_written == 1 else "s" }} written{% if journal.error %}, <span class="bad-text">last write failed</span>{% endif %}. <a href="/journal">Details</a>{% else %}Off (no vault set).{% endif %}</p>
     <h3>Notifications</h3>
     <p>{% if notify %}{{ notify.toasts_shown }} toasts shown ({{ notify.threshold }}).{% else %}Off.{% endif %}</p>
   </section>
 </div>
+<section class="card wide">
+  <div class="row"><h2>Alerts per hour</h2><span class="muted">Last 24 hours · {{ chart.total }} in total</span></div>
+  {% include "_hour_chart.html" %}
+</section>
 <section class="card wide">
   <div class="row"><h2>Latest alerts</h2><a href="/alerts">All alerts</a></div>
   <div class="scroll">

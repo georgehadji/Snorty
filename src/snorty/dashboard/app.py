@@ -42,11 +42,22 @@ def _overview_data(svc: Services, now: datetime) -> dict[str, Any]:
     for sid, count in today[:5]:
         latest = svc.repo.query(sid=sid, since=midnight, limit=1)
         top.append(TopRule(sid, latest[0].msg if latest else "", count))
+    total = sum(n for _, n in today)
+    urgent = svc.repo.count(since=midnight, min_priority=2)
+    first = top[0] if top else None
+    chart_from = now - timedelta(hours=25)
     return {
         "count_hour": svc.repo.count(since=now - timedelta(hours=1)),
-        "count_today": sum(n for _, n in today),
+        "count_today": total,
+        "count_urgent": urgent,
+        "finding": views.overview_finding(
+            total, urgent, first.msg if first else "", first.count if first else 0
+        ),
         "top_rules": top,
-        "rows": views.group_rows(svc.repo.query(limit=10), svc.tz),
+        "chart": views.hourly_chart(
+            svc.repo.counts_by_hour(since=chart_from, tz=svc.tz), now, svc.tz
+        ),
+        "rows": views.group_rows(svc.repo.query(limit=80), svc.tz)[:8],
     }
 
 

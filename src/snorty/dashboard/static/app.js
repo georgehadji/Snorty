@@ -51,7 +51,7 @@ document.addEventListener("htmx:beforeSwap", (event) => {
     return `${Math.floor(secs / 3600)} h ago`;
   }
   function refreshTimes() {
-    document.querySelectorAll("td.when time").forEach((el) => {
+    document.querySelectorAll("time.rel").forEach((el) => {
       const text = relative(el.dateTime);
       if (text) el.textContent = text;
     });
@@ -79,7 +79,9 @@ document.addEventListener("htmx:beforeSwap", (event) => {
       badge.className = "count";
       top.children[2].append(" ", badge);
     }
-    badge.textContent = `×${count}`;
+    const secs = Number(tr.dataset.epoch) - Number(top.dataset.first);
+    const span = secs < 60 ? "" : secs < 3600 ? ` over ${Math.round(secs / 60)} min` : ` over ${Math.floor(secs / 3600)} h`;
+    badge.textContent = `×${count}${span}`;
     flash(top);
   }
 
@@ -107,9 +109,7 @@ document.addEventListener("htmx:beforeSwap", (event) => {
   function setLive(on) {
     const el = document.getElementById("live");
     if (!el) return;
-    el.hidden = false;
-    el.dataset.live = on ? "on" : "off";
-    el.querySelector(".txt").textContent = on ? "Live" : "Paused";
+    el.hidden = on;  // shown only while the stream is down
   }
 
   function connect() {

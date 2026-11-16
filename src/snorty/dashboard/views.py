@@ -104,6 +104,8 @@ class AlertRow:
     key: str = ""  # alerts with the same key are the same repeating event
     count: int = 1  # how many alerts this row stands for
     first_time: str = ""  # time of the oldest alert in a group
+    first_epoch: int = 0  # the oldest alert of a group, in seconds
+    span: str = ""  # how long the group lasted, e.g. "12 min"; empty under a minute
 
 
 def alert_row(a: Alert, tz: tzinfo) -> AlertRow:
@@ -120,6 +122,7 @@ def alert_row(a: Alert, tz: tzinfo) -> AlertRow:
         classification=a.classification or "",
         iso=a.ts.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         epoch=int(a.ts.timestamp()),
+        first_epoch=int(a.ts.timestamp()),
         key=f"{a.sid}|{endpoint(a.src_ip, a.src_port)}|{endpoint(a.dst_ip, a.dst_port)}",
     )
 
@@ -127,17 +130,33 @@ def alert_row(a: Alert, tz: tzinfo) -> AlertRow:
 GROUP_GAP = timedelta(minutes=15)
 
 
+def fmt_span(delta: timedelta) -> str:
+    """A group's length in words; under a minute is empty so a quick burst shows only its count."""
+    secs = int(delta.total_seconds())
+    if secs < 60:
+        return ""
+    return f"{round(secs / 60)} min" if secs < 3600 else f"{secs // 3600} h"
+
+
 def group_rows(alerts: list[Alert], tz: tzinfo) -> list[AlertRow]:
     """Newest-first alerts to rows; neighbours that repeat the same event become one row."""
     rows: list[AlertRow] = []
+    newest: Alert | None = None  # the newest alert of rows[-1]
     last: Alert | None = None  # the oldest alert folded into rows[-1] so far
     for a in alerts:
         row = alert_row(a, tz)
         prev = rows[-1] if rows else None
-        if prev and last and prev.key == row.key and last.ts - a.ts <= GROUP_GAP:
-            rows[-1] = replace(prev, count=prev.count + 1, first_time=row.time)
+        if prev and newest and last and prev.key == row.key and last.ts - a.ts <= GROUP_GAP:
+            rows[-1] = replace(
+                prev,
+                count=prev.count + 1,
+                first_time=row.time,
+                first_epoch=row.epoch,
+                span=fmt_span(newest.ts - a.ts),
+            )
         else:
             rows.append(row)
+            newest = a
         last = a
     return rows
 
@@ -180,6 +199,7 @@ def sensor_card(st: SensorStatus, tz: tzinfo) -> SensorCard:
 @dataclass(frozen=True, slots=True)
 class RulesSummary:
     updated: str
+    updated_iso: str  # for relative time in the browser; empty when never updated
     count: str
     result: str
 
@@ -187,6 +207,7 @@ class RulesSummary:
 def rules_summary(state: RulesState) -> RulesSummary:
     return RulesSummary(
         updated=state.updated_at[:19].replace("T", " ") if state.updated_at else "never",
+        updated_iso=state.updated_at or "",
         count=str(state.rule_count) if state.rule_count is not None else "unknown",
         result=state.result or "",
     )
@@ -261,3 +282,59 @@ def lab_view(result: LabResult, tz: tzinfo) -> LabView:
     hits = [(h.sid, h.msg, h.line, h.count) for h in result.hits]
     shown = [alert_row(a, tz) for a in result.matches[:MAX_LAB_ROWS]]
     return LabView(result.ok, problems, result.error, hits, shown, len(result.matches))
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+
+def overview_finding(total: int, urgent: int, top_msg: str, top_count: int) -> str:
+    """The one sentence under the Overview title: does anything need attention today?"""
+    if total == 0:
+        return "No alerts today."
+    head = (
+        "No priority 1 or 2 alerts today."
+        if urgent == 0
+        else f"{_plural(urgent, 'alert')} of priority 1 or 2 today."
+    )
+    return f"{head} Most frequent: {top_msg} (×{top_count})." if top_msg else head
+
+
+@dataclass(frozen=True, slots=True)
+class ChartBar:
+    x: int  # left edge in the 240-wide plot
+    top: float  # y of the bar's top in the 100-high plot
+    height: float
+    tip: str
+
+
+@dataclass(frozen=True, slots=True)
+class HourlyChart:
+    bars: list[ChartBar]
+    ticks: list[str]  # y labels, top to bottom
+    labels: list[tuple[int, str]]  # (first grid column, text) along the x axis
+    total: int
+
+
+_NICE_TOPS = (4, 10, 20, 40, 100, 200, 400, 1000, 2000, 4000, 10000)
+
+
+def hourly_chart(counts: list[tuple[datetime, int]], now: datetime, tz: tzinfo) -> HourlyChart:
+    """Bars for the last 24 hours, one per hour, newest on the right; empty hours are zero."""
+    end = now.astimezone(tz).replace(minute=0, second=0, microsecond=0)
+    hours = [(end.astimezone(UTC) - timedelta(hours=i)).astimezone(tz) for i in range(23, -1, -1)]
+    by_hour = {k: n for k, n in counts}
+    values = [by_hour.get(h, 0) for h in hours]
+    peak = max(values)
+    top = next((m for m in _NICE_TOPS if peak <= m), peak)
+    bars = [
+        ChartBar(
+            x=i * 10,
+            top=100 - 100 * v / top,
+            height=100 * v / top,
+            tip=f"{h:%H}:00 — {_plural(v, 'alert')}",
+        )
+        for i, (h, v) in enumerate(zip(hours, values, strict=True))
+    ]
+    labels = [(i + 1, f"{hours[i]:%H}:00") for i in (0, 6, 12, 18)]
+    return HourlyChart(bars, [str(top), str(top // 2), "0"], labels, sum(values))

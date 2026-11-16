@@ -97,6 +97,13 @@ def test_count_matches_the_sum_of_counts_by_sid_in_any_range(repo: AlertReposito
     assert repo.count(since=T0 + timedelta(days=1)) == 0
 
 
+def test_count_can_be_limited_to_urgent_priorities(repo: AlertRepository) -> None:
+    repo.add_many([make_alert(i, priority=p) for i, p in enumerate((1, 2, 3, 3))])
+    assert repo.count(min_priority=2) == 2
+    assert repo.count(min_priority=1) == 1
+    assert repo.count() == 4
+
+
 def test_counts_by_hour_buckets_in_given_zone(repo: AlertRepository) -> None:
     tz = timezone(timedelta(hours=5, minutes=30))  # half-hour offset: hour buckets != UTC hours
     # 12:00 UTC = 17:30 local; 12:20 = 17:50; 12:40 = 18:10

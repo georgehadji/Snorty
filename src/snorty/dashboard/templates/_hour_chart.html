@@ -1,0 +1,10 @@
+<div class="hour-chart" role="img" aria-label="Alerts per hour over the last 24 hours, {{ chart.total }} in total">
+  <div class="yticks" aria-hidden="true">{% for t in chart.ticks %}<span>{{ t }}</span>{% endfor %}</div>
+  <svg class="plot" viewBox="0 0 240 100" preserveAspectRatio="none" aria-hidden="true">
+    <line x1="0" y1="0.5" x2="240" y2="0.5" class="grid-line" vector-effect="non-scaling-stroke"/>
+    <line x1="0" y1="50" x2="240" y2="50" class="grid-line" vector-effect="non-scaling-stroke"/>
+    <line x1="0" y1="99.5" x2="240" y2="99.5" class="base-line" vector-effect="non-scaling-stroke"/>
+    {% for b in chart.bars %}{% if b.height > 0 %}<rect class="bar" x="{{ b.x + 1 }}" y="{{ '%.2f' % b.top }}" width="8" height="{{ '%.2f' % b.height }}"><title>{{ b.tip }}</title></rect>{% endif %}{% endfor %}
+  </svg>
+  <div class="xlabels" aria-hidden="true">{% for col, text in chart.labels %}<span class="c{{ col }}">{{ text }}</span>{% endfor %}</div>
+</div>

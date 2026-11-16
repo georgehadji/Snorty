@@ -6,7 +6,7 @@
   <dl>
     {% if card.interface %}<dt>Interface</dt><dd>{{ card.interface }}</dd>{% endif %}
     {% if card.since %}<dt>Running since</dt><dd>{{ card.since }}</dd>{% endif %}
-    <dt>Alerts seen</dt><dd>{{ card.alerts_seen }}{% if card.last_alert %} (last {{ card.last_alert }}){% endif %}</dd>
+    <dt>Seen this run</dt><dd>{{ card.alerts_seen }}{% if card.last_alert %} (last {{ card.last_alert }}){% endif %}</dd>
     {% if card.restarts %}<dt>Restarts</dt><dd>{{ card.restarts }}</dd>{% endif %}
   </dl>
   {% if card.error %}<p class="error">{{ card.error }}</p>{% endif %}

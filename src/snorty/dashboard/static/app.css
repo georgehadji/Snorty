@@ -76,16 +76,14 @@ nav a:hover { color: var(--text); }
 nav a[aria-current="page"] { color: var(--text); border-bottom: 2px solid var(--accent); }
 .top-right { display: flex; align-items: center; gap: var(--s4); margin-left: auto; font-size: 13px; }
 .status, .live { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; }
+.live { color: var(--warn); }
+.live[hidden] { display: none; }
 .status.ok { color: var(--ok); }
 .status.warn { color: var(--warn); }
 .status.bad { color: var(--bad); }
-.live[data-live="on"] { color: var(--ok); }
-.live[data-live="off"] { color: var(--warn); }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-.live[data-live="on"] .dot { animation: pulse 2.4s ease-in-out infinite; }
-@keyframes pulse { 50% { opacity: 0.35; } }
 
-main { max-width: 1100px; margin: 0 auto; padding: var(--s4); }
+main { max-width: 1280px; margin: 0 auto; padding: var(--s4); }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--s4); }
 .card {
   background: var(--surface);
@@ -95,18 +93,37 @@ main { max-width: 1100px; margin: 0 auto; padding: var(--s4); }
 }
 .card.wide { margin-top: var(--s4); }
 h2 { margin: 0; font-size: 15px; font-weight: 600; }
-h3 {
-  margin: var(--s4) 0 var(--s1);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
+h3 { margin: var(--s4) 0 var(--s1); font-size: 13px; font-weight: 600; color: var(--muted); }
+.title { margin: 0 0 var(--s4); }
+.title h1 { margin: 0; font-size: 22px; font-weight: 600; line-height: 1.25; }
+.sub { margin: 2px 0 0; color: var(--muted); }
 .row { display: flex; justify-content: space-between; align-items: center; gap: var(--s2); }
 dl { display: grid; grid-template-columns: auto 1fr; gap: var(--s1) var(--s4); margin: var(--s3) 0; }
 dt { color: var(--muted); }
 dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+
+/* Alerts per hour: bars in the one data hue, three faint lines, a signed scale. */
+.hour-chart { display: grid; grid-template-columns: auto 1fr; gap: 0 var(--s2); margin-top: var(--s3); }
+.hour-chart .yticks {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 140px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+}
+.hour-chart .plot { display: block; width: 100%; height: 140px; }
+.hour-chart .bar { fill: var(--accent); }
+.hour-chart .grid-line { stroke: var(--line); stroke-width: 1; }
+.hour-chart .base-line { stroke: var(--muted); stroke-width: 1; }
+.hour-chart .xlabels { grid-column: 2; display: grid; grid-template-columns: repeat(24, 1fr); margin-top: 6px; font-size: 12px; color: var(--muted); }
+.xlabels span { grid-row: 1; white-space: nowrap; }
+.xlabels .c1 { grid-column: 1 / span 6; }
+.xlabels .c7 { grid-column: 7 / span 6; }
+.xlabels .c13 { grid-column: 13 / span 6; }
+.xlabels .c19 { grid-column: 19 / span 6; }
 
 /* Headline numbers. */
 .stats { display: flex; gap: var(--s5); margin: var(--s3) 0 var(--s2); }
@@ -157,6 +174,12 @@ button.danger:hover:not(:disabled) {
   border-color: var(--bad);
 }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
+button.primary:disabled, button[type="submit"]:disabled {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--text);
+  font-weight: 400;
+}
 button.htmx-request { cursor: progress; opacity: 0.75; }
 button.htmx-request::after {
   content: "";
@@ -186,14 +209,7 @@ ol.plain li { padding: 2px 0; }
 .scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th {
-  color: var(--muted);
-  font-weight: 600;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-}
+th { color: var(--muted); font-weight: 500; font-size: 12px; white-space: nowrap; }
 tbody tr:hover td { background: var(--hover); }
 td:nth-child(3) { word-break: break-word; }
 /* Alert tables: keep times and addresses on one line and give the rule text room, so a narrow
@@ -232,7 +248,7 @@ tr.empty td { color: var(--muted); text-align: center; padding: 20px; }
   th { position: sticky; top: var(--top-h); background: var(--surface); z-index: 1; }
 }
 @media (max-width: 600px) {
-  main { padding: var(--s3); }
+  main { padding: var(--s4); }
   th, td { padding: 6px; }
   .top-right { margin-left: 0; }
 }

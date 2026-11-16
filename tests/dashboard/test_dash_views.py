@@ -8,8 +8,11 @@ from snorty.dashboard.views import (
     alert_row,
     edit_message,
     endpoint,
+    fmt_span,
     fmt_time,
     group_rows,
+    hourly_chart,
+    overview_finding,
     rules_summary,
     sensor_card,
     update_message,
@@ -130,3 +133,41 @@ def test_a_different_event_or_a_long_gap_starts_a_new_row() -> None:
     other = replace(base, ts=base.ts - timedelta(minutes=1), src_ip="9.9.9.9")
     late = replace(base, ts=base.ts - timedelta(hours=2))
     assert [r.count for r in group_rows([base, other, late], UTC)] == [1, 1, 1]
+
+
+def test_fmt_span_is_empty_under_a_minute_then_minutes_then_hours() -> None:
+    assert [fmt_span(timedelta(seconds=s)) for s in (0, 59, 60, 600, 3599, 3600, 7300)] == [
+        "",
+        "",
+        "1 min",
+        "10 min",
+        "60 min",
+        "1 h",
+        "2 h",
+    ]
+
+
+def test_group_span_runs_from_first_to_last_alert() -> None:
+    base = alert(1000001)
+    older = replace(base, ts=base.ts - timedelta(minutes=10))
+    row = group_rows([base, older], UTC)[0]
+    assert (row.count, row.span, row.first_epoch) == (2, "10 min", int(older.ts.timestamp()))
+
+
+def test_overview_finding_states_the_one_thing_to_know() -> None:
+    assert overview_finding(0, 0, "", 0) == "No alerts today."
+    assert overview_finding(5, 0, "", 0).startswith("No priority 1 or 2 alerts today.")
+    one = overview_finding(5, 1, "Scan", 4)
+    assert one.startswith("1 alert of priority 1 or 2 today.") and "Scan (×4)" in one
+    assert overview_finding(5, 3, "", 0).startswith("3 alerts of priority 1 or 2")
+
+
+def test_hourly_chart_has_24_bars_with_the_peak_scaled_to_a_round_top() -> None:
+    now = T0.replace(minute=30)
+    hour = now.replace(minute=0, second=0, microsecond=0)
+    chart = hourly_chart([(hour, 7), (hour - timedelta(hours=2), 3)], now, UTC)
+    assert len(chart.bars) == 24 and chart.total == 10
+    assert chart.ticks == ["10", "5", "0"]
+    assert (chart.bars[-1].height, chart.bars[-3].height, chart.bars[0].height) == (70, 30, 0)
+    assert chart.bars[-1].tip.endswith("7 alerts")
+    assert [c for c, _ in chart.labels] == [1, 7, 13, 19]

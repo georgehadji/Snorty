@@ -2,10 +2,10 @@
 <tr class="empty"><td colspan="7" class="error">{{ error }}</td></tr>
 {% else %}
 {% for r in rows %}
-<tr class="p{{ r.priority }}" data-alert data-key="{{ r.key }}" data-epoch="{{ r.epoch }}" data-count="{{ r.count }}">
-  <td class="when"><time datetime="{{ r.iso }}" title="{{ r.time }}">{{ r.time }}</time></td>
+<tr class="p{{ r.priority }}" data-alert data-key="{{ r.key }}" data-epoch="{{ r.epoch }}" data-count="{{ r.count }}" data-first="{{ r.first_epoch }}">
+  <td class="when"><time class="rel" datetime="{{ r.iso }}" title="{{ r.time }}">{{ r.time }}</time></td>
   <td><span class="badge p{{ r.priority }}">P{{ r.priority }}</span></td>
-  <td title="{{ r.msg }}">{{ r.msg_short }}{% if r.count > 1 %} <span class="count" title="first seen {{ r.first_time }}">×{{ r.count }}</span>{% endif %}</td>
+  <td title="{{ r.msg }}">{{ r.msg_short }}{% if r.count > 1 %} <span class="count" title="first seen {{ r.first_time }}">×{{ r.count }}{% if r.span %} over {{ r.span }}{% endif %}</span>{% endif %}</td>
   <td class="mono">{{ r.src }}</td>
   <td class="mono">{{ r.dst }}</td>
   <td class="mono">{{ r.sid }}</td>

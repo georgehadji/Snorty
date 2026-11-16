@@ -61,6 +61,26 @@ def test_overview_counts_top_rules_and_recent_alerts(tmp_path: Path) -> None:
     assert "×2" in top
 
 
+def test_overview_answers_the_one_question_and_draws_the_hour_chart(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    s.repo.add(alert(2001, msg="in the hour", priority=1, ts=T0 + timedelta(minutes=10)))
+    html = c.get("/").text
+    assert "<h1>Overview</h1>" in html
+    assert re.search(r'id="count-urgent">1<', html)
+    assert "1 alert of priority 1 or 2 today." in html
+    assert html.count('class="bar"') == 1 and "Alerts per hour" in html
+
+
+@pytest.mark.parametrize(
+    ("path", "title"),
+    [("/alerts", "Alerts"), ("/rules", "Rules"), ("/journal", "Journal"), ("/lab", "Lab")],
+)
+def test_every_page_has_one_h1(tmp_path: Path, path: str, title: str) -> None:
+    c, _ = make(tmp_path)
+    html = c.get(path).text
+    assert html.count("<h1") == 1 and f"<h1>{title}</h1>" in html
+
+
 def test_overview_with_no_alerts(tmp_path: Path) -> None:
     c, _ = make(tmp_path)
     html = c.get("/").text
