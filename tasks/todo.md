@@ -70,10 +70,10 @@ Same `service.py`; new tests in `tests/notify/test_service_resilience.py`.
 - Dependencies: Tasks 3-5 · Files: `notify/__main__.py`, `sensor/__main__.py`, `tests/notify/test_notify_cli.py`
 
 ## Task 7: Real checks and close-out (S)
-- [ ] Manual: `uv run python -m snorty.notify test` shows a toast on this PC (I report what appeared; Focus Assist state noted)
-- [ ] Manual: `uv run python -m snorty.sensor --notify --db <tmp>` runs, a loopback payload with `uid=0(root)` raises an alert and a toast, and a cancelled run leaves no `snort.exe` (same method as the sensor check)
-- [ ] Coverage for `snorty.notify` at least 90% from unit tests alone
-- [ ] `grep -r subprocess src/snorty` matches only `snort/` files; `snorty.notify` imports only `snorty.core`, stdlib and `winotify`
-- [ ] SPEC-notify.md Success Criteria boxes ticked; plan and todo boxes ticked except the "next module" one
-- [ ] Verify: `uv run pytest -q -m "not snort" --cov=snorty.notify`; `uv run ruff check src tests`; mypy as above
+- [x] Manual: `uv run python -m snorty.notify test` shows a toast on this PC (I report what appeared; Focus Assist state noted)
+- [x] Manual: `uv run python -m snorty.sensor --notify --db <tmp>` runs, a loopback payload with `uid=0(root)` raises an alert and a toast, and a cancelled run leaves no `snort.exe` (same method as the sensor check)
+- [x] Coverage for `snorty.notify` at least 90% from unit tests alone
+- [x] `grep -r subprocess src/snorty` matches only `snort/` files; `snorty.notify` imports only `snorty.core`, stdlib and `winotify`
+- [x] SPEC-notify.md Success Criteria boxes ticked; plan and todo boxes ticked except the "next module" one
+- [x] Verify: `uv run pytest -q -m "not snort" --cov=snorty.notify`; `uv run ruff check src tests`; mypy as above
 - Dependencies: Task 6

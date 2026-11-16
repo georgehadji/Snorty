@@ -38,7 +38,7 @@ User: the PC owner, who wants to know about serious alerts without watching a co
 3. Global cap (default 6 toasts per rolling 60 s): if reached, count it in the "other" tally and stop.
 4. Otherwise show a toast. Its text includes `+N more` (this SID's suppressed count since its last toast) and `+M other alerts` (global-cap tally), then both counters reset.
 
-**Toast content:** title `Snort P1: <msg>`; body `<proto> <src_ip>:<src_port> -> <dst_ip>:<dst_port>`, then `SID <gid>:<sid>`, then the time `HH:MM:SS` local, then the `+N` lines when present. Missing ports are omitted.
+**Toast content:** title `Snort P1: <msg>`; body `<proto> <src_ip>:<src_port> → <dst_ip>:<dst_port>`, then `SID <gid>:<sid> at HH:MM:SS` (local time), then the `+N` lines when present. Missing ports are omitted.
 
 **Sanitising:** every field is reduced to printable characters; quotes, backticks, `$`, `<`, `>`, `&`, `;`, `|`, `%` and control characters are replaced with a space; whitespace collapsed; title capped at 80 characters, body lines at 120.
 
@@ -98,17 +98,26 @@ def decide(self, sid: int, now: float) -> Decision: ...
 
 ## Success Criteria
 
-- [ ] 1. A live priority-1 alert gives exactly one toast containing its message, protocol, addresses, ports and SID.
-- [ ] 2. An alert with priority above `min_priority` gives no toast; changing `min_priority` changes the cut-off.
-- [ ] 3. 500 alerts of one SID inside the window give one toast; the first alert after the window gives a toast with `+499 more`.
-- [ ] 4. Alerts of many different SIDs never exceed the global cap per rolling 60 s; the dropped ones appear as `+M other alerts` on the next toast.
-- [ ] 5. A notifier that raises or exceeds its timeout is logged; the next alert still produces a toast.
-- [ ] 6. A notifier that blocks does not slow `bus.publish`; the consumer queue is bounded and drops oldest.
-- [ ] 7. `stop()` cancels the consumer and closes the subscription; no toast is shown after it returns; `start()` twice does not double-subscribe.
-- [ ] 8. Hostile alert text (shell and XML metacharacters, control characters, 10,000 characters) yields sanitised, length-capped toast text.
-- [ ] 9. The throttle's tables stay bounded (1,000 SIDs, expired entries removed).
-- [ ] 10. Manual: `python -m snorty.notify test` shows a toast on this PC; `python -m snorty.sensor --notify` runs and stops cleanly with no leftover `snort.exe`.
-- [ ] 11. `ruff check`, strict mypy on `snorty.notify`, coverage at least 90%; `snorty.notify` imports only `snorty.core` and stdlib besides `winotify`; no `subprocess` in our `src/snorty` outside `snort/`.
+- [x] 1. A live priority-1 alert gives exactly one toast containing its message, protocol, addresses, ports and SID.
+- [x] 2. An alert with priority above `min_priority` gives no toast; changing `min_priority` changes the cut-off.
+- [x] 3. 500 alerts of one SID inside the window give one toast; the first alert after the window gives a toast with `+499 more`.
+- [x] 4. Alerts of many different SIDs never exceed the global cap per rolling 60 s; the dropped ones appear as `+M other alerts` on the next toast.
+- [x] 5. A notifier that raises or exceeds its timeout is logged; the next alert still produces a toast.
+- [x] 6. A notifier that blocks does not slow `bus.publish`; the consumer queue is bounded and drops oldest.
+- [x] 7. `stop()` cancels the consumer and closes the subscription; no toast is shown after it returns; `start()` twice does not double-subscribe.
+- [x] 8. Hostile alert text (shell and XML metacharacters, control characters, 10,000 characters) yields sanitised, length-capped toast text.
+- [x] 9. The throttle's tables stay bounded (1,000 SIDs; expired entries removed unless they hold a suppressed count that has not been reported yet).
+- [x] 10. Manual: `python -m snorty.notify test` shows a toast on this PC; `python -m snorty.sensor --notify` runs and stops cleanly with no leftover `snort.exe`.
+- [x] 11. `ruff check`, strict mypy on `snorty.notify`, coverage at least 90%; `snorty.notify` imports only `snorty.core` and stdlib besides `winotify`; no `subprocess` in our `src/snorty` outside `snort/`.
+
+## Built-in deviations and findings (V1 close-out)
+
+- The arrow is `→` and the SID line reads `SID 1:5 at 01:02:03`: `sanitize` strips `>` and collapses spaces, and the adapter re-sanitises.
+- Added `NotifyConfig.show_timeout` (15 s) so a hung notifier cannot stall the consumer; the whole per-alert handling is guarded, so one bad alert never kills it.
+- Priority 0 (a rule with no `classtype`, e.g. the local test rule) passes the `priority <= min_priority` filter and toasts. ET rules carry classtypes.
+- `ConsoleNotifier` prints encoding-safe: the real check showed `print` crashing on a cp1252 console.
+- `python -m snorty.sensor --notify` cannot pick the loopback adapter (it has no IP); the real end-to-end check drove `Sensor` plus `NotifyService` from a script using the integration test's loopback selection. A toast fired from a real Snort alert; no `snort.exe` was left.
+- Windows Focus Assist can hide the toast from the screen; the call still succeeds.
 
 ## Out of Scope (Deferred)
 

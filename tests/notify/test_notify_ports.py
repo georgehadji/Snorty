@@ -61,3 +61,17 @@ async def test_default_send_builds_a_winotify_notification(
     monkeypatch.setattr("winotify.Notification", FakeNotification)
     await WinotifyNotifier(app_id="Snorty").show(TOAST)
     assert shown == [("Snorty", "Snort P1: x", "TCP 10.0.0.1:1 → 10.0.0.2:2\nSID 1:5 at 01:02:03")]
+
+
+async def test_console_default_survives_a_console_that_cannot_encode_the_arrow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import io
+
+    raw = io.BytesIO()
+    monkeypatch.setattr("sys.stdout", io.TextIOWrapper(raw, encoding="cp1252", errors="strict"))
+    await ConsoleNotifier().show(TOAST)
+    import sys
+
+    sys.stdout.flush()
+    assert b"Snort P1: x" in raw.getvalue()

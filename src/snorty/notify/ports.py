@@ -1,6 +1,7 @@
 """How a toast reaches the screen. The rest of the module only knows `Notifier`."""
 
 import asyncio
+import sys
 from collections.abc import Callable
 from typing import Protocol
 
@@ -11,10 +12,16 @@ class Notifier(Protocol):
     async def show(self, toast: Toast) -> None: ...
 
 
+def _print_safe(text: str) -> None:
+    """print() that cannot crash on a console whose encoding lacks the arrow (cp1252)."""
+    enc = sys.stdout.encoding or "utf-8"
+    print(text.encode(enc, "replace").decode(enc))
+
+
 class ConsoleNotifier:
     """Prints instead of showing a toast: for `--dry-run` and headless use."""
 
-    def __init__(self, out: Callable[[str], object] = print) -> None:
+    def __init__(self, out: Callable[[str], object] = _print_safe) -> None:
         self._out = out
 
     async def show(self, toast: Toast) -> None:

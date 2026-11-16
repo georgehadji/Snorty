@@ -43,10 +43,10 @@ check.
 
 ### Phase 3: CLI and real checks
 - [x] Task 6: `python -m snorty.notify test`, `--notify` on the sensor CLI
-- [ ] Task 7: manual real toast and real `--notify` run, close-out
+- [x] Task 7: manual real toast and real `--notify` run, close-out
 
 ### Checkpoint: Complete
-- [ ] Every Success Criteria box in SPEC-notify.md checked
+- [x] Every Success Criteria box in SPEC-notify.md checked
 - [ ] Then the next module spec (vault-journal or rule-lab)
 
 ## Risks and Mitigations
