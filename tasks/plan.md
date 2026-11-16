@@ -28,7 +28,7 @@ flag on the sensor CLI, then the manual real-vault check.
 ## Task List
 
 ### Phase 1: Pure logic
-- [ ] Task 1: `sanitize_cell` and `render`
+- [x] Task 1: `sanitize_cell` and `render`
 - [ ] Task 2: `merge` and `NoteConflict`
 
 ### Checkpoint: Pure logic

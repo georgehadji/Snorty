@@ -5,12 +5,12 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 1: sanitize_cell and render (M)
 `src/snorty/journal/__init__.py`, `render.py`.
-- [ ] `sanitize_cell(text, limit=120)`: printable only, whitespace collapsed; `|`, `[`, `]`, backtick, `<`, `>`, `%%` and a word-initial `#` neutralised; capped at `limit`
-- [ ] `render(day, alerts, tz, total=None)` gives the managed block: begin marker, `## Snort alerts`, count line (`N alerts · P1 a · P2 b · P3 c · updated HH:MM` in `tz`), `### Top rules` (10), `### Top addresses` (10 sources, 10 destinations), `### By hour` (24 rows, local hours), `### Priority 1 alerts` (50 rows newest first, then `…and N more`, or `None.`), end marker; ties ordered by key so output is stable
-- [ ] `total` larger than `len(alerts)` adds `truncated: N alerts not shown in tables`
-- [ ] Golden-text test for a fixed alert set, empty day, 60 P1 alerts cut at 50, ties, 23:59 vs 00:01 local hour buckets
-- [ ] Hostile text (pipe, brackets, backtick, `#tag`, `%% x %%`, an end marker, newlines, 10,000 chars, non-ASCII) cannot add a column, link, tag, comment, HTML or marker line
-- [ ] Verify: `uv run pytest tests/journal/test_journal_render.py -q`
+- [x] `sanitize_cell(text, limit=120)`: printable only, whitespace collapsed; `|`, `[`, `]`, backtick, `<`, `>`, `%%` and a word-initial `#` neutralised; capped at `limit`
+- [x] `render(day, alerts, tz, total=None)` gives the managed block: begin marker, `## Snort alerts`, count line (`N alerts · P1 a · P2 b · P3 c · updated HH:MM` in `tz`), `### Top rules` (10), `### Top addresses` (10 sources, 10 destinations), `### By hour` (24 rows, local hours), `### Priority 1 alerts` (50 rows newest first, then `…and N more`, or `None.`), end marker; ties ordered by key so output is stable
+- [x] `total` larger than `len(alerts)` adds `truncated: N alerts not shown in tables`
+- [x] Golden-text test for a fixed alert set, empty day, 60 P1 alerts cut at 50, ties, 23:59 vs 00:01 local hour buckets
+- [x] Hostile text (pipe, brackets, backtick, `#tag`, `%% x %%`, an end marker, newlines, 10,000 chars, non-ASCII) cannot add a column, link, tag, comment, HTML or marker line
+- [x] Verify: `uv run pytest tests/journal/test_journal_render.py -q`
 - Dependencies: none · Files: `render.py`, `tests/journal/test_journal_render.py`
 
 ## Task 2: merge and NoteConflict (S)
