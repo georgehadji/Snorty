@@ -18,11 +18,7 @@
   </section>
   <section class="card">
     <h2>Rules</h2>
-    <dl>
-      <dt>Last update</dt><dd>{{ rules.updated }}</dd>
-      <dt>Rule count</dt><dd>{{ rules.count }}</dd>
-      {% if rules.result %}<dt>Result</dt><dd>{{ rules.result }}</dd>{% endif %}
-    </dl>
+    {% include "_rules_summary.html" %}
     <p><a href="/rules">Manage rules</a></p>
     <h3>Journal</h3>
     <p>{% if journal_on %}On. <a href="/journal">Details</a>{% else %}Off (no vault set).{% endif %}</p>

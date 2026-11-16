@@ -8,13 +8,15 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from snorty.core.events import AlertRaised, Event, SensorStateChanged
 from snorty.dashboard import views
 from snorty.dashboard.security import SecurityMiddleware
 from snorty.dashboard.services import Services, get_services
+from snorty.dashboard.sse import HEARTBEAT_SECONDS, Render, sse_frames
 
 _HERE = Path(__file__).parent
 Svc = Annotated[Services, Depends(get_services)]
@@ -64,6 +66,7 @@ def build_app(
     token: str,
     port: int,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    heartbeat: float = HEARTBEAT_SECONDS,
 ) -> FastAPI:
     app = FastAPI(title="Snorty", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.services = services
@@ -74,6 +77,24 @@ def build_app(
 
     def page(request: Request, name: str, *, status: int = 200, **context: object) -> HTMLResponse:
         return templates.TemplateResponse(request, name, context, status_code=status)
+
+    def fragment(name: str, **context: object) -> str:
+        return templates.get_template(name).render(context)
+
+    def renderer(svc: Services, f: views.AlertFilters) -> Render:
+        async def render(event: Event) -> tuple[str, str] | None:
+            if isinstance(event, AlertRaised):
+                if not views.alert_matches(f, event.alert):
+                    return None
+                row = views.alert_row(event.alert, svc.tz)
+                return "alert", fragment("_alert_rows.html", rows=[row], paged=True)
+            if isinstance(event, SensorStateChanged):
+                card = views.sensor_card(svc.sensor.status(), svc.tz)
+                return "sensor", fragment("_sensor_card.html", card=card)
+            rules = views.rules_summary(await svc.rules.status())
+            return "rules", fragment("_rules_summary.html", rules=rules)
+
+        return render
 
     @app.get("/healthz")
     async def healthz() -> dict[str, bool]:
@@ -120,5 +141,17 @@ def build_app(
             return page(request, "_alert_rows.html", status=422, error=str(exc), rows=[])
         rows, more = await asyncio.to_thread(_alert_page, svc, f, clock())
         return page(request, "_alert_rows.html", rows=rows, more=more, paged=f.page > 1)
+
+    @app.get("/events")
+    async def events(request: Request, svc: Svc) -> Response:
+        try:
+            f = views.parse_alert_filters(request.query_params)
+        except ValueError as exc:
+            return PlainTextResponse(str(exc), status_code=422)
+        return StreamingResponse(
+            sse_frames(lambda: svc.bus.subscribe(100), renderer(svc, f), heartbeat=heartbeat),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
 
     return app

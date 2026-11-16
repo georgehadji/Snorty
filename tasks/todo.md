@@ -50,14 +50,14 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. E
 
 ## Task 6: live SSE (M)
 `sse.py` (or in `app.py`), `static/app.js`, `test_dash_sse.py`.
-- [ ] `GET /events`: one `bus.subscribe()` per client; `AlertRaised` renders a row fragment, `SensorStateChanged` renders the sensor card, `RulesUpdated` the rules card; 15 s comment heartbeat; subscription closed in `finally` on disconnect
-- [ ] `app.js` (CSP-clean, external file): EventSource that prepends rows to the Alerts table (cap 200 rows) and swaps cards by id; reconnects on drop
-- [ ] Tests on the async generator directly: publish gives fragment; disconnect closes the subscription; slow consumer keeps only the newest N and memory stays bounded; heartbeat with injected sleep
-- [ ] Verify: `uv run pytest tests/dashboard/test_dash_sse.py -q`
+- [x] `GET /events`: one `bus.subscribe()` per client; `AlertRaised` renders a row fragment, `SensorStateChanged` renders the sensor card, `RulesUpdated` the rules card; 15 s comment heartbeat; subscription closed in `finally` on disconnect
+- [x] `app.js` (CSP-clean, external file): EventSource that prepends rows to the Alerts table (cap 200 rows) and swaps cards by id; reconnects on drop
+- [x] Tests on the async generator directly: publish gives fragment; disconnect closes the subscription; slow consumer keeps only the newest N and memory stays bounded; heartbeat with injected sleep
+- [x] Verify: `uv run pytest tests/dashboard/test_dash_sse.py -q`
 - Dependencies: Tasks 4, 5 · Files: 3-4
 
 ### Checkpoint: Tasks 4-6
-- [ ] Criteria 1-6 covered by tests; unit suite green; open the app against fakes in the built-in browser pane and see the Overview and Alerts pages render (screenshot, no console errors)
+- [x] Criteria 1-6 covered by tests; unit suite green; open the app against fakes in the built-in browser pane and see the Overview and Alerts pages render (screenshot, no console errors)
 
 ## Task 7: Rules page and Mute (M)
 `templates/rules.html`, `_rules_card.html`, `views.py`, `app.py`, tests.

@@ -35,7 +35,7 @@ Build `snorty.dashboard`: the one local web app that runs Snorty. Foundations fi
 ### Phase 2: Skeleton and first pages
 - [x] Task 4: `build_app`, base template, vendored htmx, `/healthz`, Overview with sensor card and Start/Stop/Restart
 - [x] Task 5: Alerts page, rows fragment, filters, paging, hostile-text escaping
-- [ ] Task 6: live SSE (`/events`) for alert, sensor and rules fragments
+- [x] Task 6: live SSE (`/events`) for alert, sensor and rules fragments
 
 ### Checkpoint: Live view
 - [ ] Spec criteria 1-6 covered by passing tests; page works in the browser pane against fake services

@@ -2,7 +2,7 @@
 {% set active = "alerts" %}
 {% block title %}Alerts · Snorty{% endblock %}
 {% block main %}
-<form class="card filters" action="/alerts" method="get"
+<form id="alert-filters" class="card filters" action="/alerts" method="get"
       hx-get="/alerts/rows" hx-target="#alert-rows" hx-swap="innerHTML" hx-trigger="change, submit">
   <label>SID
     <input name="sid" inputmode="numeric" pattern="[0-9]*" value="{{ f.sid if f.sid is not none else '' }}" placeholder="any">

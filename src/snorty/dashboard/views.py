@@ -43,6 +43,11 @@ class AlertFilters:
         return urlencode(params)
 
 
+def alert_matches(f: AlertFilters, a: Alert) -> bool:
+    """Whether a live alert belongs in a table filtered by `f` (range and page do not apply)."""
+    return (f.sid is None or a.sid == f.sid) and (f.priority is None or a.priority <= f.priority)
+
+
 def parse_alert_filters(params: Mapping[str, str]) -> AlertFilters:
     """Blank or missing values mean the default. Raises ValueError with a user-safe message."""
     sid = params.get("sid", "")
