@@ -34,7 +34,7 @@ mute/unmute/home-net, then the CLI and real-Snort checks. Stdlib only.
 - [x] All unit tests green; ruff and strict mypy clean on `snorty.rules`
 
 ### Phase 2: Ports and update
-- [ ] Task 3: ports, `UrllibDownloader`, `SnortValidator`, `RulesConfig`, state file
+- [x] Task 3: ports, `UrllibDownloader`, `SnortValidator`, `RulesConfig`, state file
 - [ ] Task 4: `RulesService.update` happy path (stage, validate, swap, restart, state, event, up-to-date, stopped sensor)
 - [ ] Task 5: update failures and rollback (every step), concurrency lock
 

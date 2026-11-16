@@ -28,12 +28,12 @@ Pure functions in `src/snorty/rules/blocks.py`.
 
 ## Task 3: Ports, config, state (M)
 `ports.py`, `config.py`, `state.py`.
-- [ ] `Downloader` Protocol (`async get(url, max_bytes) -> bytes`); `UrllibDownloader` via `asyncio.to_thread`, HTTPS only, rejects over-cap bodies, raises `DownloadError` for HTTP and network errors; tested against a local `http.server`
-- [ ] `Validator` Protocol (`async check(conf: Path) -> ConfigCheck`); `SnortValidator(paths, runner)` picks the loopback (else first) interface, calls `check_config(..., conf=conf)`
-- [ ] `SensorControl` Protocol (`state`, `async restart()`)
-- [ ] `RulesConfig` frozen dataclass: `paths`, `url`, `min_ratio=0.5`, `health_timeout=60.0`, `max_download=100 MB`, `home_net_default`
-- [ ] `RulesState` + `load_state` / `save_state` (`rules-state.json` beside the rules dir, atomic write, missing or corrupt file gives empty state)
-- [ ] Verify: `uv run pytest tests/rules -q -m "not snort"`
+- [x] `Downloader` Protocol (`async get(url, max_bytes) -> bytes`); `UrllibDownloader` via `asyncio.to_thread`, HTTPS only, rejects over-cap bodies, raises `DownloadError` for HTTP and network errors; tested against a local `http.server`
+- [x] `Validator` Protocol (`async check(conf: Path) -> ConfigCheck`); `SnortValidator(paths, runner)` picks the loopback (else first) interface, calls `check_config(..., conf=conf)`
+- [x] `SensorControl` Protocol (`state`, `async restart()`)
+- [x] `RulesConfig` frozen dataclass: `paths`, `url`, `min_ratio=0.5`, `health_timeout=60.0`, `max_download=100 MB`, `home_net_default`
+- [x] `RulesState` + `load_state` / `save_state` (`rules-state.json` beside the rules dir, atomic write, missing or corrupt file gives empty state)
+- [x] Verify: `uv run pytest tests/rules -q -m "not snort"`
 - Dependencies: none · Files: `ports.py`, `config.py`, `state.py`, `tests/rules/test_ports.py`, `test_state.py`
 
 ## Task 4: Update, happy path (M)
