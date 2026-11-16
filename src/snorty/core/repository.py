@@ -76,6 +76,8 @@ class AlertRepository:
             self._conn.execute("PRAGMA synchronous=NORMAL")
             self._conn.execute("PRAGMA busy_timeout=5000")
             self._conn.executescript(_SCHEMA)
+            # rows stored before the parser mapped Snort's priority 0 to the lowest level
+            self._conn.execute("UPDATE alerts SET priority = 3 WHERE priority = 0")
 
     def close(self) -> None:
         with self._lock:

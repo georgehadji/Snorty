@@ -32,7 +32,7 @@ def test_real_line_fields() -> None:
         rev=1,
         msg="NIDS test - uid=0(root) response",
         classification=None,
-        priority=0,
+        priority=3,
         proto="TCP",
         src_ip="127.0.0.1",
         src_port=18080,

@@ -6,6 +6,10 @@ from pathlib import Path
 
 from snorty.core.models import Alert
 
+# Snort prints Priority: 0 for a rule with no classtype or priority; treat it as the lowest level
+# so severity filters, toasts and the journal never see a "more severe than 1" alert.
+UNCLASSIFIED_PRIORITY = 3
+
 _FAST = re.compile(
     r"^(?P<ts>\S+)\s+\[\*\*\] \[(?P<gid>\d+):(?P<sid>\d+):(?P<rev>\d+)\] "
     r"(?P<msg>.*?) \[\*\*\]"
@@ -40,7 +44,7 @@ def parse_line(line: str, *, default_year: int, tz: tzinfo) -> Alert | None:
         rev=int(m["rev"]),
         msg=m["msg"],
         classification=m["cls"],
-        priority=int(m["prio"]),
+        priority=int(m["prio"]) or UNCLASSIFIED_PRIORITY,
         proto=m["proto"],
         src_ip=src[0],
         src_port=src[1],

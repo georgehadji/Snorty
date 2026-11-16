@@ -153,3 +153,18 @@ def test_add_new_returns_only_new_alerts_in_order(repo: AlertRepository) -> None
     new = repo.add_new(first + [make_alert(9), make_alert(9)])
     assert new == [first[0], first[2], make_alert(9)]
     assert repo.add_new(first) == []
+
+
+def test_old_priority_zero_rows_are_moved_to_the_lowest_level(tmp_path: Path) -> None:
+    db = tmp_path / "old.db"
+    AlertRepository(db).close()
+    with closing(sqlite3.connect(db)) as conn:
+        conn.execute(
+            "INSERT INTO alerts (ts, gid, sid, rev, msg, classification, priority, proto, "
+            "src_ip, src_port, dst_ip, dst_port, raw) "
+            "VALUES ('2026-01-01T00:00:00+00:00', 1, 1000001, 1, 'm', NULL, 0, 'ICMP', "
+            "'1.1.1.1', NULL, '2.2.2.2', NULL, 'old line')"
+        )
+        conn.commit()
+    with closing(AlertRepository(db)) as repo:
+        assert [a.priority for a in repo.query()] == [3]
