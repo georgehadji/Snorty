@@ -103,6 +103,10 @@ table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { color: var(--muted); font-weight: 600; font-size: 13px; white-space: nowrap; }
 td:nth-child(3) { word-break: break-word; }
+/* Alert tables: keep times and addresses on one line and give the rule text room, so a narrow
+   screen scrolls the table sideways instead of squeezing the rule into one letter per line. */
+table.alerts td.mono { white-space: nowrap; }
+table.alerts td:nth-child(3) { min-width: 16rem; }
 tr.empty td { color: var(--muted); text-align: center; padding: 20px; }
 .badge { padding: 1px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; border: 1px solid currentColor; }
 .badge.p1 { color: var(--p1); }

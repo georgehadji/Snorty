@@ -155,3 +155,11 @@ def test_form_values_stay_selected(tmp_path: Path) -> None:
     assert 'value="2001"' in html
     assert re.search(r'<option value="2" selected', html)
     assert re.search(r'<option value="7d" selected', html)
+
+
+def test_alert_tables_carry_the_class_that_keeps_narrow_screens_readable(tmp_path: Path) -> None:
+    """app.css keeps times on one line and gives the rule column room under `table.alerts`."""
+    c, _ = make(tmp_path)
+    assert '<table class="alerts">' in c.get("/alerts").text
+    assert '<table class="alerts">' in c.get("/").text
+    assert "table.alerts" in (Path("src/snorty/dashboard/static/app.css")).read_text("utf-8")

@@ -21,7 +21,7 @@
   {% endif %}
   {% if lab.matches %}
   <h3>Matches</h3>
-  <div class="scroll"><table>
+  <div class="scroll"><table class="alerts">
     <thead><tr><th>Time</th><th>P</th><th>Rule</th><th>Source</th><th>Destination</th></tr></thead>
     <tbody>{% for r in lab.matches %}
       <tr class="p{{ r.priority }}"><td class="mono">{{ r.time }}</td><td><span class="badge p{{ r.priority }}">P{{ r.priority }}</span></td><td title="{{ r.msg }}">{{ r.msg_short }}</td><td class="mono">{{ r.src }}</td><td class="mono">{{ r.dst }}</td></tr>
