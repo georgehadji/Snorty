@@ -38,7 +38,7 @@ Build `snorty.dashboard`: the one local web app that runs Snorty. Foundations fi
 - [x] Task 6: live SSE (`/events`) for alert, sensor and rules fragments
 
 ### Checkpoint: Live view
-- [ ] Spec criteria 1-6 covered by passing tests; page works in the browser pane against fake services
+- [x] Spec criteria 1-6 covered by passing tests; page works in the browser pane against fake services
 
 ### Phase 3: Remaining slices
 - [ ] Task 7: Rules page (status, update now, mute/unmute, HOME_NET) with in-flight guard; Alerts-row Mute button
