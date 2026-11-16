@@ -196,6 +196,9 @@ class RulesService:
 
     # --- mute, unmute, HOME_NET -------------------------------------------------------
 
+    async def status(self) -> RulesState:
+        return await asyncio.to_thread(load_state, self._config.state_path)
+
     async def muted(self) -> list[MutedRule]:
         text = await asyncio.to_thread(read_text, self._config.threshold_conf)
         return read_block(text)
