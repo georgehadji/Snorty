@@ -46,6 +46,16 @@ def collect(
     return alerts, total
 
 
+def build_note(
+    repo: AlertRepository, existing: str | None, day: date, cfg: JournalConfig
+) -> str | None:
+    """The day's note text, or None when there is nothing to say and nothing of ours to update."""
+    alerts, total = collect(repo, day, cfg.tz, cfg.page_size, cfg.max_rows)
+    if not alerts and (existing is None or BEGIN not in existing):
+        return None
+    return merge(existing, render(day, alerts, cfg.tz, total), day)
+
+
 class JournalService:
     def __init__(
         self,
@@ -115,11 +125,7 @@ class JournalService:
             await self.flush()
 
     def _write_day(self, day: date) -> None:
-        cfg = self._config
-        alerts, total = collect(self._repo, day, cfg.tz, cfg.page_size, cfg.max_rows)
         existing = self._store.read(day)
-        if not alerts and (existing is None or BEGIN not in existing):
-            return  # nothing to say and nothing of ours to update
-        text = merge(existing, render(day, alerts, cfg.tz, total), day)
-        if text != existing:
+        text = build_note(self._repo, existing, day, self._config)
+        if text is not None and text != existing:
             self._store.write(day, text)

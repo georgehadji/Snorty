@@ -2,7 +2,6 @@ import asyncio
 from pathlib import Path
 
 import pytest
-from notify_fakes import RecordingNotifier
 
 import snorty.sensor.__main__ as cli
 
@@ -20,6 +19,11 @@ class StubSensor:
 
 
 cli_order: list[str] = []
+
+
+class Quiet:
+    async def show(self, toast: object) -> None:
+        pass
 
 
 class StubNotify:
@@ -41,7 +45,7 @@ def _stubs(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_notify_starts_before_the_sensor_and_stops_after(tmp_path: Path) -> None:
-    code = asyncio.run(cli.run(tmp_path / "a.db", None, notify=True, notifier=RecordingNotifier()))
+    code = asyncio.run(cli.run(tmp_path / "a.db", None, notify=True, notifier=Quiet()))
     assert code == 0
     assert cli_order == ["notify.start", "sensor.start", "sensor.stop", "notify.stop"]
 

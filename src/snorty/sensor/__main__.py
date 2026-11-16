@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import contextlib
+import os
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -10,6 +11,8 @@ from pathlib import Path
 from snorty.core.bus import EventBus, Subscription
 from snorty.core.events import AlertRaised, SensorStateChanged
 from snorty.core.repository import AlertRepository
+from snorty.journal.ports import NoteStore, VaultNoteStore
+from snorty.journal.service import JournalConfig, JournalService
 from snorty.notify.ports import Notifier, WinotifyNotifier
 from snorty.notify.service import NotifyService
 from snorty.sensor import Sensor, SensorConfig, SnortAdapter
@@ -30,10 +33,17 @@ async def _print_events(events: Subscription) -> None:
 
 
 async def run(
-    db: Path, interface_ip: str | None, *, notify: bool = False, notifier: Notifier | None = None
+    db: Path,
+    interface_ip: str | None,
+    *,
+    notify: bool = False,
+    notifier: Notifier | None = None,
+    journal: bool = False,
+    journal_store: NoteStore | None = None,
 ) -> int:
     bus = EventBus()
     repo = AlertRepository(db)
+    tz = datetime.now().astimezone().tzinfo or UTC
     config = SensorConfig(paths=SnortPaths(), interface_ip=interface_ip)
     sensor = Sensor(
         config,
@@ -42,13 +52,19 @@ async def run(
         bus,
         clock=time.monotonic,
         sleep=asyncio.sleep,
-        tz=datetime.now().astimezone().tzinfo or UTC,
+        tz=tz,
     )
     toasts = NotifyService(bus, notifier or WinotifyNotifier()) if notify else None
+    journals = None
+    if journal:
+        assert journal_store is not None
+        journals = JournalService(bus, repo, journal_store, JournalConfig(tz=tz))
     printer = asyncio.create_task(_print_events(bus.subscribe()))
     try:
         if toasts:
             await toasts.start()
+        if journals:
+            await journals.start()
         await sensor.start()
         print("sensor running; Ctrl+C to stop", flush=True)
         while sensor.state.name not in ("FAILED", "STOPPED"):
@@ -56,6 +72,8 @@ async def run(
         return 1 if sensor.state.name == "FAILED" else 0
     finally:
         await asyncio.shield(sensor.stop())
+        if journals:
+            await journals.stop()
         if toasts:
             await toasts.stop()
         await asyncio.sleep(0)  # let the printer show the final transitions
@@ -68,9 +86,23 @@ def main() -> int:
     parser.add_argument("--db", type=Path, default=Path("snorty.db"))
     parser.add_argument("--interface-ip", default=None, help="pin the capture interface by IP")
     parser.add_argument("--notify", action="store_true", help="toast on priority-1 alerts")
+    parser.add_argument("--journal", action="store_true", help="write a daily Obsidian note")
+    parser.add_argument("--vault", help="vault folder for --journal, default $OBSIDIAN_VAULT_PATH")
     args = parser.parse_args()
+    vault = args.vault or os.environ.get("OBSIDIAN_VAULT_PATH")
+    if args.journal and not vault:
+        parser.error("--journal needs a vault: pass --vault or set OBSIDIAN_VAULT_PATH")
+    store = VaultNoteStore(vault) if args.journal and vault else None
     with contextlib.suppress(KeyboardInterrupt):
-        return asyncio.run(run(args.db, args.interface_ip, notify=args.notify))
+        return asyncio.run(
+            run(
+                args.db,
+                args.interface_ip,
+                notify=args.notify,
+                journal=args.journal,
+                journal_store=store,
+            )
+        )
     return 0
 
 

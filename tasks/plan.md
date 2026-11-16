@@ -43,7 +43,7 @@ flag on the sensor CLI, then the manual real-vault check.
 - [x] Spec criteria 1-10 each covered by a passing test; unit suite under 3 s
 
 ### Phase 3: CLI and real checks
-- [ ] Task 6: `python -m snorty.journal write`, `--journal` on the sensor CLI
+- [x] Task 6: `python -m snorty.journal write`, `--journal` on the sensor CLI
 - [ ] Task 7: manual real-vault write and real `--journal` run, close-out
 
 ### Checkpoint: Complete

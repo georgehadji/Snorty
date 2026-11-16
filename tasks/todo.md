@@ -56,11 +56,11 @@ Same `service.py`; `tests/journal/test_journal_resilience.py`.
 
 ## Task 6: CLI and sensor wiring (M)
 `src/snorty/journal/__main__.py`; `src/snorty/sensor/__main__.py`.
-- [ ] `python -m snorty.journal write [--date YYYY-MM-DD] [--db PATH] [--vault PATH] [--dry-run]`: vault from `--vault` or `OBSIDIAN_VAULT_PATH`, error with exit 2 if neither; writes one note (or prints it); exit 0, or 1 with the error
-- [ ] `python -m snorty.sensor --journal` composes a `JournalService` on the same bus and repository, started before the sensor and stopped after it; combines with `--notify`
-- [ ] `snorty.sensor` package modules (not `__main__`) do not import `snorty.journal` (grep-checked)
-- [ ] Unit tests with a temp DB and `MemoryNoteStore`; the sensor change covered by a smoke test with stubs like `test_cli_notify.py`
-- [ ] Verify: `uv run pytest tests/journal tests/sensor -q -m "not snort"`
+- [x] `python -m snorty.journal write [--date YYYY-MM-DD] [--db PATH] [--vault PATH] [--dry-run]`: vault from `--vault` or `OBSIDIAN_VAULT_PATH`, error with exit 2 if neither; writes one note (or prints it); exit 0, or 1 with the error
+- [x] `python -m snorty.sensor --journal` composes a `JournalService` on the same bus and repository, started before the sensor and stopped after it; combines with `--notify`
+- [x] `snorty.sensor` package modules (not `__main__`) do not import `snorty.journal` (grep-checked)
+- [x] Unit tests with a temp DB and `MemoryNoteStore`; the sensor change covered by a smoke test with stubs like `test_cli_notify.py`
+- [x] Verify: `uv run pytest tests/journal tests/sensor -q -m "not snort"`
 - Dependencies: Tasks 3-5 · Files: `journal/__main__.py`, `sensor/__main__.py`, `tests/journal/test_journal_cli.py`, `tests/sensor/test_cli_journal.py`
 
 ## Task 7: Real checks and close-out (S)
