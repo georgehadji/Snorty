@@ -1,67 +1,68 @@
-# Implementation Plan: vault-journal
+# Implementation Plan: rule-lab
 
-Source spec: [SPEC-vault-journal.md](../SPEC-vault-journal.md) · Module map: [CAPABILITY-MAP.md](../CAPABILITY-MAP.md)
+Source spec: [SPEC-rule-lab.md](../SPEC-rule-lab.md) · Module map: [CAPABILITY-MAP.md](../CAPABILITY-MAP.md)
 Task list: [tasks/todo.md](todo.md)
-Previous modules: alert-core, snort-adapter, sensor, rules, notify, done (their plans and tasks are in git history; notify's last at `a94c930`).
+Previous modules: alert-core, snort-adapter, sensor, rules, notify, vault-journal, done (their plans and tasks are in git history; vault-journal's last at `1a5a933`).
 
 ## Overview
 
-Build `snorty.journal`: one Obsidian note per local day, regenerated from the alert
-repository, with a managed block between two marker lines and your own text left alone.
-Pure logic first (sanitise and render, then merge), then the note-store port with the
-path-confined vault adapter, then the service (dirty days, debounced flush, start
-regeneration, stop flush), then resilience and paging, then the CLI and the `--journal`
-flag on the sensor CLI, then the manual real-vault check.
+Build `snorty.lab`: test a user-written Snort rule against a pcap in a sandbox that never
+touches the live Snort files. Pure logic first (lint the rules, rewrite the config, build
+test pcaps), then the service pipeline (lint, sandbox, `snort -T`, `snort -r`, summarize)
+with a fake `Runner`, then the sandbox-safety guarantees (cleanup on every exit path, stale
+files, one job at a time, live files untouched), then the CLI, then real Snort checks and
+the manual run.
 
 ## Architecture Decisions
 
-- **Functional core.** `render(day, alerts, tz, total) -> str` and `merge(existing, block, day) -> str` are pure and deterministic; every rule is tested with plain strings.
-- **Repository is the source of truth.** Each flush rebuilds the whole day from `AlertRepository` (paged, 1,000 per page, 100,000 cap), so backlog, dropped events and restarts converge. Bus events only mark a day dirty.
-- **One consumer task, one flush timer.** `start()` subscribes before returning, regenerates today and yesterday, then loops: wait for the interval (injected `sleep`), flush dirty days. `stop()` flushes once, cancels the task, closes the subscription. Second `start()` is a no-op.
-- **`NoteStore` port** (`read(day)`, `write(day, text)`); `VaultNoteStore` confines every path to `<vault>\Security\Snort\`, writes temp file + `os.replace`, never creates the vault root. `MemoryNoteStore` for tests.
-- **Failures never escape.** A failed write or conflict is logged; the day stays dirty and is retried at the next flush. Unchanged result means no write.
-- **Sanitise alert text for Markdown** at the cell level so rule messages cannot add columns, links, tags, comments, HTML or our marker lines.
-- **`journal` imports only `snorty.core`** plus stdlib. The sensor CLI composes it; the `sensor` package does not import `journal`.
-- **Dependencies:** none. `snorty.journal.*` added to the strict mypy override.
-- Test file basenames are unique across test dirs: `test_journal_render.py`, `test_journal_merge.py`, `test_journal_store.py`, `test_journal_service.py`, `test_journal_resilience.py`, `test_journal_cli.py`, `journal_fakes.py`.
+- **Pipeline as data.** `LabService.run(job) -> LabResult`; every user mistake (bad rule, bad pcap, Snort rule error) is a field of the result, never an exception. Only programming errors raise.
+- **Pure core, imperative sandbox.** `lint`, `build_lab_conf`, `build_pcap`, `summarize` are pure. `LabSandbox` is the only code that writes files: a temp folder (rules file, logs) and `snorty-lab-<id>.conf` beside `snort.conf`; both removed in `finally`, also on cancel.
+- **Reuse the adapter.** `check_config`, `run_pcap`, `list_interfaces`, `pick_interface`, `Runner` from `snorty.snort`. No new Snort command line, no `subprocess` in `lab`. If `run_pcap` or `check_config` need a small change (for example a different `-T` interface choice), it goes in `snort/` with its own test.
+- **Realistic config.** Derive from the live `snort.conf`: drop rules, preprocessor-rules and `threshold.conf` includes, add one lab include. Preprocessors stay so `flow:` and `http_*` behave as live.
+- **Error mapping.** Snort names `lab.rules(N)`; results report "rule line N" using the user's own line numbers (the lab file is the user's text unchanged).
+- **One job at a time** via `asyncio.Lock`. Stale `snorty-lab-*.conf` (older than 1 hour) are removed at job start.
+- **`lab` imports only `snorty.core`, `snorty.snort` and stdlib.** CLI is the only composition point.
+- **No new dependency.** `snorty.lab.*` added to the strict mypy override.
+- Test file basenames unique: `test_lab_lint.py`, `test_lab_conf.py`, `test_lab_pcapgen.py`, `test_lab_service.py`, `test_lab_sandbox.py`, `test_lab_cli.py`, `test_lab_real.py`, `lab_fakes.py`.
 
 ## Task List
 
 ### Phase 1: Pure logic
-- [x] Task 1: `sanitize_cell` and `render`
-- [x] Task 2: `merge` and `NoteConflict`
+- [ ] Task 1: `lint` (rules, problems, caps)
+- [ ] Task 2: `build_lab_conf`
+- [ ] Task 3: pcap generator (`build_pcap`, `tcp_packet`, `udp_packet`, handshake)
 
 ### Checkpoint: Pure logic
-- [x] All unit tests green; ruff and strict mypy clean on `snorty.journal`
+- [ ] All unit tests green; ruff and strict mypy clean on `snorty.lab`
 
-### Phase 2: Port and service
-- [x] Task 3: `NoteStore`, `VaultNoteStore`, `MemoryNoteStore`
-- [x] Task 4: `JournalService` (dirty days, flush, start regeneration, stop flush)
-- [x] Task 5: resilience and paging (failed write retry, no-write when unchanged, cap, non-blocking publish)
+### Phase 2: Pipeline and sandbox
+- [ ] Task 4: models, `summarize`, `LabService` pipeline with a fake `Runner`
+- [ ] Task 5: sandbox safety (cleanup on every exit, stale files, lock, live files untouched)
 
 ### Checkpoint: Service
-- [x] Spec criteria 1-10 each covered by a passing test; unit suite under 3 s
+- [ ] Spec criteria 1-8 and 10 each covered by a passing test; unit suite under 3 s
 
 ### Phase 3: CLI and real checks
-- [x] Task 6: `python -m snorty.journal write`, `--journal` on the sensor CLI
-- [x] Task 7: manual real-vault write and real `--journal` run, close-out
+- [ ] Task 6: `python -m snorty.lab check | run | make-pcap`
+- [ ] Task 7: real Snort tests, manual run, close-out
 
 ### Checkpoint: Complete
-- [x] Every Success Criteria box in SPEC-vault-journal.md checked
-- [ ] Then the next module spec (rule-lab or dashboard)
+- [ ] Every Success Criteria box in SPEC-rule-lab.md checked
+- [ ] Then the next module spec (dashboard)
 
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Rule text breaks the note or our markers | High | Cell sanitiser; hostile-text tests including an end marker in a message |
-| Overwriting your own text | High | Replace only between markers; refuse on broken markers; byte-for-byte test over 10 regenerations |
-| Write escapes `Security/Snort/` (`..`, symlink) | High | Resolve and check containment; escape tests |
-| Half-written note read by Obsidian | Med | Temp file + `os.replace` |
-| Local day boundary wrong (UTC storage) | Med | Day range computed in local zone then converted; midnight test |
-| Huge day (millions of rows) | Med | Page 1,000 at a time, 100,000 cap, totals from the database |
-| Obsidian sync conflict on the open note | Low | Write only when the text changes; atomic replace |
+| A lab run changes live Snort files | High | Lab writes only a temp folder and one `snorty-lab-*.conf`; hash tests on every exit path; real-Snort test repeats the check |
+| User rule text smuggles config directives | High | Lint allows only `alert`/`log`/`pass` rule lines; refuses `include`, `var`, `config`, `preprocessor`; refused before Snort runs |
+| Hostile or huge pcap | Med | 50 MB cap, read only, Snort timeout, temp log folder |
+| Temp config left behind after a crash | Med | `finally` cleanup plus stale-file sweep at the next job |
+| Preprocessors make `-T` slow (seconds per run) | Low | One `-T` and one `-r` per job; timeouts; measured in Task 7 |
+| Temp path with spaces breaks Snort `include` | Low | Detect and report; assumption 8 |
+| Generated packets do not reach `flow:established` rules | Med | `--handshake` option; real Snort test in Task 7 |
+| Windows interface choice for `-T` | Low | Reuse `pick_interface`; same method the rules module uses |
 
 ## Open Questions
 
-None blocking. Defaults taken (approved): template summary, 5-minute flush, frontmatter `type: snort-journal`, `tags: [security, snort]`, `ai-first: true`.
+None blocking. Defaults taken (approved): own pcaps plus generator, no downloads or recording; `alert`/`log`/`pass` only; live mutes ignored and preprocessors kept; promote-to-live deferred.

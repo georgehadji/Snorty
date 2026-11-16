@@ -1,73 +1,83 @@
-# Tasks: vault-journal
+# Tasks: rule-lab
 
-Plan: [plan.md](plan.md) · Spec: [SPEC-vault-journal.md](../SPEC-vault-journal.md)
+Plan: [plan.md](plan.md) · Spec: [SPEC-rule-lab.md](../SPEC-rule-lab.md)
 Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one commit.
 
-## Task 1: sanitize_cell and render (M)
-`src/snorty/journal/__init__.py`, `render.py`.
-- [x] `sanitize_cell(text, limit=120)`: printable only, whitespace collapsed; `|`, `[`, `]`, backtick, `<`, `>`, `%%` and a word-initial `#` neutralised; capped at `limit`
-- [x] `render(day, alerts, tz, total=None)` gives the managed block: begin marker, `## Snort alerts`, count line (`N alerts · P1 a · P2 b · P3 c · updated HH:MM` in `tz`), `### Top rules` (10), `### Top addresses` (10 sources, 10 destinations), `### By hour` (24 rows, local hours), `### Priority 1 alerts` (50 rows newest first, then `…and N more`, or `None.`), end marker; ties ordered by key so output is stable
-- [x] `total` larger than `len(alerts)` adds `truncated: N alerts not shown in tables`
-- [x] Golden-text test for a fixed alert set, empty day, 60 P1 alerts cut at 50, ties, 23:59 vs 00:01 local hour buckets
-- [x] Hostile text (pipe, brackets, backtick, `#tag`, `%% x %%`, an end marker, newlines, 10,000 chars, non-ASCII) cannot add a column, link, tag, comment, HTML or marker line
-- [x] Verify: `uv run pytest tests/journal/test_journal_render.py -q`
-- Dependencies: none · Files: `render.py`, `tests/journal/test_journal_render.py`
+## Task 1: lint (M)
+`src/snorty/lab/__init__.py`, `lint.py`; add `snorty.lab.*` to the strict mypy override.
+- [ ] `lint(text) -> LintResult(rules: tuple[LabRule(line, sid, msg)], problems: tuple[Problem(line, message)])`; line numbers are 1-based lines of the user's text; `ok` is true when there are no problems
+- [ ] Accepts `alert`/`log`/`pass` rules, blank lines, `#` comments, CRLF and LF; a rule may span lines ended with a trailing backslash (reported at its first line)
+- [ ] Refuses with a line number: any other line (`include`, `var`, `config`, `preprocessor`, `drop`, `reject`, free text), a rule with no `sid`, a duplicate `sid`, control characters or NUL
+- [ ] Refuses text over 64 KB and more than 200 rules, with one problem (line 0) saying why, without scanning the whole text first
+- [ ] `msg` is read from `msg:"..."` when present (for the result table), else empty
+- [ ] Verify: `uv run pytest tests/lab/test_lab_lint.py -q`
+- Dependencies: none · Files: `lint.py`, `tests/lab/test_lab_lint.py`
 
-## Task 2: merge and NoteConflict (S)
-Same `render.py` (or `merge.py` if it grows).
-- [x] `merge(existing, block, day)`: `None` gives frontmatter (`date`, `type: snort-journal`, `tags`, `ai-first: true`) + `# YYYY-MM-DD Snort journal` + block
-- [x] One begin and one end marker in order: replace only between them; no markers: append after a blank line; broken markers (duplicate, one only, reversed): raise `NoteConflict`
-- [x] User text and frontmatter byte for byte over 10 regenerations; identical result returns the same string
-- [x] Verify: `uv run pytest tests/journal/test_journal_merge.py -q`
-- Dependencies: Task 1 · Files: `render.py`, `tests/journal/test_journal_merge.py`
+## Task 2: build_lab_conf (S)
+`src/snorty/lab/conf.py`.
+- [ ] `build_lab_conf(live_conf_text, rules_path) -> str` removes every `include $RULE_PATH/<x>.rules`, `include $PREPROC_RULE_PATH/<x>.rules` and `include threshold.conf` line (any spacing, any case of the keyword) and appends `include <rules_path>` as the last line
+- [ ] Every other byte is kept, including line endings and comments; commented-out includes stay commented
+- [ ] A path with whitespace raises `ValueError` (assumption 8; the service turns it into `error`)
+- [ ] Golden test on a small sample conf; counts of removed lines asserted
+- [ ] Verify: `uv run pytest tests/lab/test_lab_conf.py -q`
+- Dependencies: none · Files: `conf.py`, `tests/lab/test_lab_conf.py`
 
-### Checkpoint: Tasks 1-2
-- [x] Tests green; `uv run ruff check src tests`; mypy clean (add `snorty.journal.*` to the strict override in `pyproject.toml`)
+## Task 3: pcap generator (M)
+`src/snorty/lab/pcapgen.py`.
+- [ ] `build_pcap(frames: Sequence[bytes], start: float = 0.0, step: float = 0.001) -> bytes`: classic libpcap, little-endian, Ethernet link type, snaplen 65535
+- [ ] `tcp_packet(src, sport, dst, dport, payload, *, seq, ack, flags)` and `udp_packet(...)`: Ethernet + IPv4 + TCP/UDP frames; IP header checksum correct; payload kept byte for byte
+- [ ] `tcp_session(src, sport, dst, dport, payload, handshake)` gives the frame list: payload only, or SYN, SYN-ACK, ACK, then data; `count` copies option on the data packet
+- [ ] Tests read the result back with a small reader in the test file (global header, record headers, frame lengths, IP/TCP/UDP fields, payload)
+- [ ] Rejects invalid IPs and ports with `ValueError`
+- [ ] Verify: `uv run pytest tests/lab/test_lab_pcapgen.py -q`
+- Dependencies: none · Files: `pcapgen.py`, `tests/lab/test_lab_pcapgen.py`
 
-## Task 3: Port and adapters (M)
-`src/snorty/journal/ports.py`.
-- [x] `NoteStore` Protocol: `read(day) -> str | None`, `write(day, text) -> None`
-- [x] `MemoryNoteStore` (dict, records writes)
-- [x] `VaultNoteStore(vault_root)`: path `<vault>/Security/Snort/YYYY-MM-DD.md`; creates `Security/Snort/` if missing; refuses a missing vault root; resolves the target and refuses anything outside the folder (`..`, absolute, symlink where the OS allows); writes a temp file in the same folder then `os.replace`; UTF-8, `\n` newlines
-- [x] Tests on a real temp folder, including escape attempts, atomic write (no temp file left, old text intact if the write fails), missing root
-- [x] Verify: `uv run pytest tests/journal/test_journal_store.py -q`
-- Dependencies: Task 2 · Files: `ports.py`, `tests/journal/test_journal_store.py`
+### Checkpoint: Tasks 1-3
+- [ ] Tests green; `uv run ruff check src tests`; `uv run mypy src/snorty/core src/snorty/snort src/snorty/sensor src/snorty/rules src/snorty/notify src/snorty/journal src/snorty/lab` clean
 
-## Task 4: JournalService (M)
-`service.py`: `JournalConfig(flush_interval=300, tz)`, `JournalService(bus, repo, store, config, *, clock, sleep)`; `journal_fakes.py`.
-- [x] `start()` subscribes before returning, regenerates today and yesterday from the repository, spawns the consumer task
-- [x] `AlertRaised` marks the alert's local day dirty; a flush rebuilds each dirty day (`collect` pages the repository, builds `render`, `merge`s with `store.read`, writes) and clears the flag
-- [x] At most one flush per interval; `stop()` flushes once then cancels and closes the subscription; `stop()` before `start()` and twice are harmless; `start()` twice does not double-subscribe
-- [x] Alerts the sensor ingested without announcing appear after `start()`
-- [x] Verify: `uv run pytest tests/journal/test_journal_service.py -q` (real `EventBus`, temp `AlertRepository`, `MemoryNoteStore`, fake clock and sleep)
-- Dependencies: Tasks 1-3 · Files: `service.py`, `tests/journal/journal_fakes.py`, `test_journal_service.py`
+## Task 4: Models, summarize, pipeline (L)
+`models.py`, `service.py`, `tests/lab/lab_fakes.py`. Read `snorty.snort.service.check_config`, `run_pcap`, `pick_interface` first; adapt only if needed (with a test in `tests/snort`).
+- [ ] `LabJob(rules_text, pcap)`, `RuleHit(sid, msg, line, count)`, `LabResult(ok, problems, error, hits, matches)` frozen dataclasses
+- [ ] `summarize(rules, alerts) -> tuple[RuleHit, ...]` (one hit per lab rule in rule order, zero counts included); matches sorted by time then sid
+- [ ] `LabService(paths, runner, *, tz, year)`; `run(job)`: lint stop, then pcap checks (missing, not a file, over 50 MB), then sandbox, `check_config` stop, `run_pcap`, summarize
+- [ ] Snort rule errors naming `lab.rules(N)` become `Problem(N, text)`; other `-T` errors become `error`
+- [ ] `run_pcap` failures and `SnortError` become `error` with Snort's last lines
+- [ ] Fake `Runner` scripts the `-T` and `-r` calls and writes a fixture `alert.ids` into the `-l` folder
+- [ ] Verify: `uv run pytest tests/lab/test_lab_service.py -q`
+- Dependencies: Tasks 1-2 · Files: `models.py`, `service.py`, `lab_fakes.py`, `test_lab_service.py`
 
-## Task 5: Resilience and paging (M)
-Same `service.py`; `tests/journal/test_journal_resilience.py`.
-- [x] A store that raises or a `NoteConflict` is logged, the day stays dirty and the next flush retries; nothing escapes the consumer
-- [x] Unchanged merged text causes no write
-- [x] A day over 100,000 rows (cap lowered by config in the test) gives the truncation line and the true total
-- [x] A blocking store does not slow `bus.publish` (1,000 publishes finish quickly)
-- [x] Verify: `uv run pytest tests/journal -q`
-- Dependencies: Task 4 · Files: `service.py`, `test_journal_resilience.py`
+## Task 5: Sandbox safety (M)
+`service.py` (the `LabSandbox` context manager), `tests/lab/test_lab_sandbox.py`.
+- [ ] `LabSandbox` creates the temp folder, writes `lab.rules` (the user's text, normalized to LF) and the temp config beside `snort.conf`; removes both in `finally`
+- [ ] Cleanup verified after success, lint failure, `-T` failure, `-r` failure, `TimeoutError` and `asyncio.CancelledError`
+- [ ] Hashes of a fake live tree (`snort.conf`, `rules\`, `threshold.conf`, `log\`) are identical before and after each of those paths
+- [ ] Stale `snorty-lab-*.conf` older than 1 hour are removed at job start; younger ones and unrelated files are left alone
+- [ ] Two jobs started together run one after the other (the lock), and a cancelled waiter does not block later jobs
+- [ ] A temp path with spaces gives `error`, not a Snort run
+- [ ] Verify: `uv run pytest tests/lab -q`
+- Dependencies: Task 4 · Files: `service.py`, `test_lab_sandbox.py`
 
-### Checkpoint: Tasks 3-5
-- [x] Spec criteria 1-10 each covered by a passing test; whole journal unit suite under 3 s; ruff and strict mypy clean
+### Checkpoint: Tasks 4-5
+- [ ] Spec criteria 1-8 and 10 each covered by a passing test; whole lab unit suite under 3 s; ruff and strict mypy clean
 
-## Task 6: CLI and sensor wiring (M)
-`src/snorty/journal/__main__.py`; `src/snorty/sensor/__main__.py`.
-- [x] `python -m snorty.journal write [--date YYYY-MM-DD] [--db PATH] [--vault PATH] [--dry-run]`: vault from `--vault` or `OBSIDIAN_VAULT_PATH`, error with exit 2 if neither; writes one note (or prints it); exit 0, or 1 with the error
-- [x] `python -m snorty.sensor --journal` composes a `JournalService` on the same bus and repository, started before the sensor and stopped after it; combines with `--notify`
-- [x] `snorty.sensor` package modules (not `__main__`) do not import `snorty.journal` (grep-checked)
-- [x] Unit tests with a temp DB and `MemoryNoteStore`; the sensor change covered by a smoke test with stubs like `test_cli_notify.py`
-- [x] Verify: `uv run pytest tests/journal tests/sensor -q -m "not snort"`
-- Dependencies: Tasks 3-5 · Files: `journal/__main__.py`, `sensor/__main__.py`, `tests/journal/test_journal_cli.py`, `tests/sensor/test_cli_journal.py`
+## Task 6: CLI (M)
+`src/snorty/lab/__main__.py`.
+- [ ] `check RULES_FILE`: lint and `snort -T` on the lab config; prints problems with line numbers; exit 0, or 1
+- [ ] `run RULES_FILE PCAP [--json]`: prints a hit table (SID, message, count) then matches (time, SID, message, source to destination), or the problems or error; `--json` prints the `LabResult` as JSON; exit 0 on `ok`, 1 otherwise
+- [ ] `make-pcap --out FILE --payload TEXT [--proto tcp|udp] [--src] [--sport] [--dst] [--dport] [--count] [--handshake]` writes a pcap and prints its path; exit 2 on bad arguments
+- [ ] Console output is encoding-safe (as in `notify` and `journal`)
+- [ ] Tests inject a fake `Runner` and use temp files; `make-pcap` output is read back by the test reader
+- [ ] Verify: `uv run pytest tests/lab -q`
+- Dependencies: Tasks 3-5 · Files: `__main__.py`, `tests/lab/test_lab_cli.py`
 
-## Task 7: Real checks and close-out (S)
-- [x] Manual: `uv run python -m snorty.journal write --db <db with real alerts>` creates today's note in the vault; a line typed outside the markers survives a second run (report what I saw)
-- [x] Manual: a real Snort loopback run with `JournalService` writes a note containing the alert, with no leftover `snort.exe`
-- [x] Coverage for `snorty.journal` at least 90% from unit tests alone (read from the json report)
-- [x] `grep -r subprocess src/snorty` matches only `snort/` files; `snorty.journal` imports only `snorty.core` and stdlib
-- [x] SPEC-vault-journal.md Success Criteria and deviations amended and ticked; plan and todo boxes ticked except the "next module" one
-- [x] Verify: `uv run pytest -q -m "not snort"`; `uv run ruff check src tests`; mypy as above
+## Task 7: Real checks and close-out (M)
+`tests/lab/test_lab_real.py` (marked `snort`).
+- [ ] Real: the lab config built from the real `snort.conf` passes `snort -T`
+- [ ] Real: a generated pcap triggers a lab rule on its payload; an unrelated rule shows 0; a deliberately broken rule gives an error on its line; `--handshake` makes a `flow:established` rule match
+- [ ] Real: hashes of live `snort.conf`, `rules\`, `threshold.conf` and `log\` unchanged; no `snorty-lab-*.conf` left; no `snort.exe` left
+- [ ] Manual: `uv run python -m snorty.lab run` on a rule you could have written and a generated pcap (I report the table and the run time)
+- [ ] Coverage for `snorty.lab` at least 90% from unit tests alone (read from the json report)
+- [ ] `grep -r subprocess src/snorty` matches only `snort/` files; `snorty.lab` imports only `snorty.core`, `snorty.snort` and stdlib
+- [ ] SPEC-rule-lab.md Success Criteria and deviations amended and ticked; plan and todo boxes ticked except the "next module" one
+- [ ] Verify: `uv run pytest -q -m "not snort"`; `uv run pytest tests/lab -q -m snort`; `uv run ruff check src tests`; mypy as above
 - Dependencies: Task 6
