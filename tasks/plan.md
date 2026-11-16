@@ -25,32 +25,32 @@ then the real-Snort integration tests and CLI. Stdlib only.
 ## Task List
 
 ### Phase 1: Pure logic and the port
-- [ ] Task 1: states, transition table, backoff and give-up policy
-- [ ] Task 2: tail reader (partial lines, CRLF, rotation, junk)
-- [ ] Task 3: `SnortPort`, `SnortAdapter`, `is_snort_running` in the adapter
+- [x] Task 1: states, transition table, backoff and give-up policy
+- [x] Task 2: tail reader (partial lines, CRLF, rotation, junk)
+- [x] Task 3: `SnortPort`, `SnortAdapter`, `is_snort_running` in the adapter
 
 ### Checkpoint A (after Tasks 1–3)
-- [ ] All unit tests green; ruff and strict mypy clean on core, snort, sensor
+- [x] All unit tests green; ruff and strict mypy clean on core, snort, sensor
 
 ### Phase 2: The Sensor class, against fakes
-- [ ] Task 4: lifecycle (start, stop, state events, interface choice, pid file, stale refusal, status)
-- [ ] Task 5: ingest (tailer task, backlog vs live, repository via `to_thread`, unparsed count, final drain)
-- [ ] Task 6: supervision (crash restart with backoff, give-up, stable reset, network change, `restart()`)
+- [x] Task 4: lifecycle (start, stop, state events, interface choice, pid file, stale refusal, status)
+- [x] Task 5: ingest (tailer task, backlog vs live, repository via `to_thread`, unparsed count, final drain)
+- [x] Task 6: supervision (crash restart with backoff, give-up, stable reset, network change, `restart()`)
 
 ### Checkpoint B (after Tasks 4–6)
-- [ ] Every acceptance criterion 1–10 has a passing fake-port test; unit suite under 2 s
+- [x] Every acceptance criterion 1–10 has a passing fake-port test; unit suite under 2 s
 
 ### Phase 3: Real Snort and CLI
-- [ ] Task 7: `python -m snorty.sensor` CLI and `@pytest.mark.snort` integration tests (live alert, clean stop, crash restart)
+- [x] Task 7: `python -m snorty.sensor` CLI and `@pytest.mark.snort` integration tests (live alert, clean stop, crash restart)
 
 ### Checkpoint C (after Task 7)
-- [ ] Integration tests green on this PC; manual run of the CLI shows RUNNING and a stored alert
+- [x] Integration tests green on this PC; manual run of the CLI shows RUNNING and a stored alert
 
 ### Phase 4: Gates
-- [ ] Task 8: coverage ≥ 90%, strict mypy, containment checks, spec boxes ticked
+- [x] Task 8: coverage ≥ 90%, strict mypy, containment checks, spec boxes ticked
 
 ### Checkpoint D: module complete
-- [ ] Every Success Criteria box in SPEC-sensor.md checked
+- [x] Every Success Criteria box in SPEC-sensor.md checked
 - [ ] Then the next module spec (rules, notify, vault-journal or rule-lab)
 
 ## Risks and Mitigations

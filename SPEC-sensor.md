@@ -26,7 +26,7 @@ It never runs a subprocess itself (that is `snorty.snort`) and never parses text
 6. **Backlog vs live.** Lines already in `alert.ids` when the sensor starts (the *backlog*) are stored silently: no `AlertRaised`. Lines that arrive after the first end-of-file are *live*. An `AlertRaised` is published only when the repository says the row is new, so a restart never re-announces old alerts.
 7. **Crash recovery.** Snort exiting while `RUNNING` (not requested) → `STARTING` with the reason (exit code) and a wait of 2 s, 4 s, 8 s, … up to 60 s. After `max_restarts` (default 5) failures in a row → `FAILED`. A run that stays up 60 s resets the counter.
 8. **Network change.** Every `network_check_interval` (default 30 s) the sensor compares `find_local_ip()` with the bound interface's IP; if they differ (Wi-Fi roam, Ethernet plugged in) it restarts onto the new interface with reason `"network changed"`. Not done when `interface_ip` is set.
-9. **Status.** `status()` returns a frozen snapshot: state, reason, interface, pid, started_at, alerts_seen, last_alert_ts, unparsed, restarts, dropped (bus), last_error.
+9. **Status.** `status()` returns a frozen snapshot: state, reason, interface, pid, started_at, alerts_seen, last_alert_ts, unparsed, restarts, last_error. (Bus drops are per subscriber, `Subscription.dropped`; the bus keeps no aggregate, so the sensor does not report one.)
 10. **Single instance.** `start()` refuses (→ `FAILED("Snort already running (pid N)")`) when the pid file `<log_dir>/snorty-sensor.pid` names a live `snort.exe`. The pid file is written on start and removed on a clean stop.
 11. **CLI.** `uv run python -m snorty.sensor [--db PATH] [--interface-ip IP]` runs the sensor in the foreground, prints one line per state change and per live alert, and exits 0 on Ctrl+C after a clean stop.
 
@@ -157,11 +157,11 @@ Logging with `logging.getLogger("snorty.sensor")`; never `print` outside `__main
 
 ## Success Criteria
 
-- [ ] `uv run pytest tests/sensor -m "not snort"` passes in under 2 s.
-- [ ] `uv run pytest tests/sensor -m snort` passes on this PC (live alert, clean stop, crash restart).
-- [ ] `uv run python -m snorty.sensor` on this PC reaches RUNNING, stores a triggered alert in the SQLite file, and exits 0 on Ctrl+C with Snort gone from Task Manager.
-- [ ] Restarting the sensor over an existing `alert.ids` creates no duplicate rows and no `AlertRaised` for old lines.
-- [ ] `ruff check`, `mypy src/snorty/core src/snorty/snort src/snorty/sensor` clean; coverage ≥ 90%.
+- [x] `uv run pytest tests/sensor -m "not snort"` passes in under 2 s.
+- [x] `uv run pytest tests/sensor -m snort` passes on this PC (live alert, clean stop, crash restart).
+- [x] `uv run python -m snorty.sensor` on this PC reaches RUNNING, stores a triggered alert in the SQLite file, and exits 0 on Ctrl+C with Snort gone from Task Manager.
+- [x] Restarting the sensor over an existing `alert.ids` creates no duplicate rows and no `AlertRaised` for old lines.
+- [x] `ruff check`, `mypy src/snorty/core src/snorty/snort src/snorty/sensor` clean; coverage ≥ 90%.
 
 ## Out of Scope (Deferred)
 

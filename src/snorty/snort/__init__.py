@@ -12,6 +12,7 @@ from snorty.snort.models import (
 from snorty.snort.runner import Runner, SubprocessRunner
 from snorty.snort.service import (
     check_config,
+    is_snort_running,
     list_interfaces,
     run_pcap,
     start_live,
@@ -29,6 +30,7 @@ __all__ = [
     "SubprocessRunner",
     "check_config",
     "find_local_ip",
+    "is_snort_running",
     "list_interfaces",
     "parse_interfaces",
     "pick_interface",
