@@ -1,70 +1,67 @@
-# Implementation Plan: sensor
+# Implementation Plan: rules
 
-Source spec: [SPEC-sensor.md](../SPEC-sensor.md) · Module map: [CAPABILITY-MAP.md](../CAPABILITY-MAP.md)
+Source spec: [SPEC-rules.md](../SPEC-rules.md) · Module map: [CAPABILITY-MAP.md](../CAPABILITY-MAP.md)
 Task list: [tasks/todo.md](todo.md)
-Previous modules: alert-core and snort-adapter, done (their plans and tasks are in git history, last at `5ed4ab5`).
+Previous modules: alert-core, snort-adapter, sensor, done (their plans and tasks are in git history, sensor's last at `cb15bc8`).
 
 ## Overview
 
-Build `snorty.sensor`: a supervisor that keeps Snort running through the adapter, tails
-`alert.ids`, stores and announces alerts, restarts on crash or network change, and has a
-CLI. Pure decision logic first (states, backoff, tailing), then the `Sensor` class built
-up in three slices (lifecycle, ingest, supervision) against a fake port and fake clock,
-then the real-Snort integration tests and CLI. Stdlib only.
+Build `snorty.rules`: update the ET Open ruleset with stage, validate, swap, health-gate and
+rollback; mute/unmute SIDs through a managed block in `threshold.conf`; manage the one
+`HOME_NET` line. Pure text and tar logic first, then ports, then the update transaction
+(happy path, then every failure with a byte-identical-rollback assertion), then
+mute/unmute/home-net, then the CLI and real-Snort checks. Stdlib only.
 
 ## Architecture Decisions
 
-- **Time is injected.** `Sensor` takes `clock` (monotonic seconds) and `sleep` callables, so backoff, stable-run reset and the network-check timer are tested in milliseconds with no real waiting.
-- **`SnortPort` Protocol** is the only way the sensor touches Snort. `SnortAdapter` wraps `snorty.snort`. Tests use a `FakePort` that can be told to fail, exit, or change IP.
-- **Stale-instance check needs a process lookup**, which must live in `snorty.snort` (subprocess containment). Task 3 adds `is_snort_running(pid, runner)` there (via `tasklist`), then exposes it on the port.
-- **Tailer is polling and pure-ish:** `read_new_lines(path, state)` reads bytes from an offset and returns complete lines plus the new state; the sensor owns the loop. No file-watcher dependency.
-- **Backlog = everything before the first end-of-file.** Stored via the repository; events only for rows the repository reports as new and only for live lines.
-- **One supervisor task** owns all state changes (commands go through an `asyncio.Lock`); the tailer task only ingests.
-- Spec's package layout and commands are used as written.
+- **Pure core, imperative shell.** Text rewriting (`blocks.py`) and tar handling (`archive.py`) do no network and never touch the live directory; the service composes them with injected ports.
+- **Ports:** `Downloader` (bytes with a size cap), `Validator` (`snort -T` on a conf path), `SensorControl` (`state`, `restart()`; `Sensor` already satisfies it). Fakes in tests; real adapters `UrllibDownloader` and `SnortValidator`.
+- **`snort -T` needs `-i N`.** `SnortValidator` lists interfaces and uses the loopback one (any works for a syntax check), then calls `snorty.snort.check_config(..., conf=path)`. Subprocess containment is unchanged.
+- **Validate by temp conf, never the live one.** The staging conf is a copy of `snort.conf` with `var RULE_PATH` (update) or `include threshold.conf` (mute) or `ipvar HOME_NET` (home-net) rewritten to the candidate. The candidate is committed only after `-T` passes.
+- **Swap is three renames with undo**, kept inside one function with a failure-injection hook (`rename` callable injected) so every partial state is tested.
+- **Rollback is the health gate:** after the restart the sensor must reach RUNNING within `health_timeout`; otherwise `rules.prev` is restored and the sensor restarted again.
+- **Marker-delimited block** is the single source of truth for mutes; no database copy.
+- **One `asyncio.Lock`** serialises every mutating operation. File work runs in `asyncio.to_thread`.
+- Package layout and commands as in the spec.
 
 ## Task List
 
-### Phase 1: Pure logic and the port
-- [x] Task 1: states, transition table, backoff and give-up policy
-- [x] Task 2: tail reader (partial lines, CRLF, rotation, junk)
-- [x] Task 3: `SnortPort`, `SnortAdapter`, `is_snort_running` in the adapter
+### Phase 1: Pure logic
+- [ ] Task 1: managed block, `set_home_net`, conf rewrites (`blocks.py`)
+- [ ] Task 2: md5 parse, safe tar extraction, rule count, sanity check (`archive.py`)
 
-### Checkpoint A (after Tasks 1–3)
-- [x] All unit tests green; ruff and strict mypy clean on core, snort, sensor
+### Checkpoint: Pure logic
+- [ ] All unit tests green; ruff and strict mypy clean on `snorty.rules`
 
-### Phase 2: The Sensor class, against fakes
-- [x] Task 4: lifecycle (start, stop, state events, interface choice, pid file, stale refusal, status)
-- [x] Task 5: ingest (tailer task, backlog vs live, repository via `to_thread`, unparsed count, final drain)
-- [x] Task 6: supervision (crash restart with backoff, give-up, stable reset, network change, `restart()`)
+### Phase 2: Ports and update
+- [ ] Task 3: ports, `UrllibDownloader`, `SnortValidator`, `RulesConfig`, state file
+- [ ] Task 4: `RulesService.update` happy path (stage, validate, swap, restart, state, event, up-to-date, stopped sensor)
+- [ ] Task 5: update failures and rollback (every step), concurrency lock
 
-### Checkpoint B (after Tasks 4–6)
-- [x] Every acceptance criterion 1–10 has a passing fake-port test; unit suite under 2 s
+### Checkpoint: Update
+- [ ] Every failure injection leaves `rules/` byte-identical; unit suite under 3 s
 
-### Phase 3: Real Snort and CLI
-- [x] Task 7: `python -m snorty.sensor` CLI and `@pytest.mark.snort` integration tests (live alert, clean stop, crash restart)
+### Phase 3: Mute and home-net
+- [ ] Task 6: `mute`, `unmute`, `muted`, `set_home_net` through validate and atomic commit
 
-### Checkpoint C (after Task 7)
-- [x] Integration tests green on this PC; manual run of the CLI shows RUNNING and a stored alert
+### Phase 4: CLI and real checks
+- [ ] Task 7: CLI, `@pytest.mark.snort` validation test, manual real update on this PC
+- [ ] Task 8: close-out (coverage, containment, spec boxes ticked)
 
-### Phase 4: Gates
-- [x] Task 8: coverage ≥ 90%, strict mypy, containment checks, spec boxes ticked
-
-### Checkpoint D: module complete
-- [x] Every Success Criteria box in SPEC-sensor.md checked
-- [x] Then the next module spec (rules, notify, vault-journal or rule-lab)
+### Checkpoint: Complete
+- [ ] Every Success Criteria box in SPEC-rules.md checked
+- [ ] Then the next module spec (notify, vault-journal or rule-lab)
 
 ## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
-|---|---|---|
-| Async supervision races (stop during start, crash during stop) | High | Single supervisor task, one lock, table-driven transitions, a test for each pair in the "STARTING → STOPPING" and "RUNNING → STARTING" rows |
-| Fake-clock tests drift from real behaviour | Med | Integration crash/restart test uses the real clock with shortened `config` timings (backoff base 0.2 s) |
-| Tailer loses or duplicates lines on rotation | High | Task 2 tests every case; repository `UNIQUE(raw)` makes duplicates harmless; lost lines covered by "shrink then re-read from 0" |
-| Killing the Snort pid in the crash test affects the wrong process | Med | The test kills only the pid it got from `status()` after starting its own temp-dir instance |
-| `tasklist` output differs by Windows locale | Low | Request CSV (`/FO CSV /NH`) and match the pid column, not text; unknown output means "not running" |
-| Blocking the event loop with sqlite or file reads | Med | All repository and file calls via `asyncio.to_thread`; a test asserts the loop stays responsive during a large ingest |
-| Orphan Snort after Snorty crashes | Med | Pid file plus refuse-to-start (approved); message names the pid |
+|------|--------|------------|
+| ET archive layout differs from assumption (rules in `rules/` subfolder) | Med | `safe_members` matches on basename `*.rules`; test with nested and flat archives |
+| `-T` takes minutes on 52k rules | Med | Validator timeout 180 s already in `check_config`; update runs in the background; CLI prints progress |
+| Real update changes alert volume | Low | `muted` / `mute` available; `rules.prev` for rollback |
+| Rename fails while Snort holds files open | Med | Sensor is restarted after the swap, not before; swap is directory renames, and Snort has the rules in memory. If Windows refuses, the undo path runs and the failure is reported |
+| Hostile or truncated archive | High | md5, size cap, path checks, overlay-only into a staging dir, rule-count sanity |
 
 ## Open Questions
 
-- None. Spec open questions were resolved on approval.
+None blocking. Defaults taken: all-private HOME_NET, 04:00 update time (dashboard concern), `C:\Snort` confirmed writable.
