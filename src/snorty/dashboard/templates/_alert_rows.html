@@ -1,3 +1,6 @@
+{% if error %}
+<tr class="empty"><td colspan="6" class="error">{{ error }}</td></tr>
+{% else %}
 {% for r in rows %}
 <tr class="p{{ r.priority }}">
   <td class="mono">{{ r.time }}</td>
@@ -8,5 +11,9 @@
   <td class="mono">{{ r.sid }}</td>
 </tr>
 {% else %}
-<tr class="empty"><td colspan="6">No alerts yet.</td></tr>
+{% if not paged %}<tr class="empty"><td colspan="6">No alerts yet.</td></tr>{% endif %}
 {% endfor %}
+{% if more %}
+<tr id="more" class="empty"><td colspan="6"><button hx-get="/alerts/rows?{{ more }}" hx-target="#more" hx-swap="outerHTML">Load more</button></td></tr>
+{% endif %}
+{% endif %}

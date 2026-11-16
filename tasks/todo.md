@@ -42,10 +42,10 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. E
 
 ## Task 5: Alerts page (M)
 `templates/alerts.html`, `_alert_rows.html`, `views.py`, `app.py`, `test_dash_routes.py`.
-- [ ] `GET /alerts` and `GET /alerts/rows` with `sid`, `priority`, `range`, `page`; results match `AlertRepository.query` (page size 50, offset); invalid values give 422 with an inline message
-- [ ] Rows show local time `YYYY-MM-DD HH:MM:SS`, priority badge, message, src and dst, sid; each row has a Mute button slot (wired in Task 7)
-- [ ] Hostile text (`<script>`, quotes, 10 000-char message, non-ASCII) is escaped or truncated with the full text in a `title`
-- [ ] Verify: `uv run pytest tests/dashboard/test_dash_routes.py -q`
+- [x] `GET /alerts` and `GET /alerts/rows` with `sid`, `priority`, `range`, `page`; results match `AlertRepository.query` (page size 50, offset); invalid values give 422 with an inline message
+- [x] Rows show local time `YYYY-MM-DD HH:MM:SS`, priority badge, message, src and dst, sid; each row has a Mute button slot (wired in Task 7)
+- [x] Hostile text (`<script>`, quotes, 10 000-char message, non-ASCII) is escaped or truncated with the full text in a `title`
+- [x] Verify: `uv run pytest tests/dashboard/test_dash_routes.py -q`
 - Dependencies: Task 4 · Files: 4-5
 
 ## Task 6: live SSE (M)

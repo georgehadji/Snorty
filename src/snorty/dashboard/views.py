@@ -1,13 +1,62 @@
 """Pure view-models: turn domain objects into plain values the templates print."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, tzinfo
+from datetime import datetime, timedelta, tzinfo
+from urllib.parse import urlencode
 
 from snorty.core.models import Alert
+from snorty.dashboard.security import valid_priority, valid_range, valid_sid
 from snorty.rules.state import RulesState
 from snorty.sensor import SensorStatus, State
 
 MSG_MAX = 120
+PAGE_SIZE = 50
+MAX_PAGE = 10_000
+_RANGE_DELTA = {
+    "1h": timedelta(hours=1),
+    "24h": timedelta(hours=24),
+    "7d": timedelta(days=7),
+    "all": None,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class AlertFilters:
+    sid: int | None
+    priority: int | None  # shows priorities up to this number (1 = most severe only)
+    range: str
+    page: int
+
+    def since(self, now: datetime) -> datetime | None:
+        delta = _RANGE_DELTA[self.range]
+        return now - delta if delta else None
+
+    def query_string(self, page: int) -> str:
+        params: dict[str, str | int] = {}
+        if self.sid is not None:
+            params["sid"] = self.sid
+        if self.priority is not None:
+            params["priority"] = self.priority
+        params["range"] = self.range
+        params["page"] = page
+        return urlencode(params)
+
+
+def parse_alert_filters(params: Mapping[str, str]) -> AlertFilters:
+    """Blank or missing values mean the default. Raises ValueError with a user-safe message."""
+    sid = params.get("sid", "")
+    priority = params.get("priority", "")
+    page = params.get("page", "")
+    if page and not (page.isascii() and page.isdigit() and 0 < int(page) <= MAX_PAGE):
+        raise ValueError(f"page must be a whole number from 1 to {MAX_PAGE}")
+    return AlertFilters(
+        sid=valid_sid(sid) if sid else None,
+        priority=valid_priority(priority) if priority else None,
+        range=valid_range(params.get("range") or "24h"),
+        page=int(page) if page else 1,
+    )
+
 
 _TONE = {
     State.STOPPED: "idle",
