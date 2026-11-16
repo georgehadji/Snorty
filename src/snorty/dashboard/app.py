@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 from snorty.core.events import AlertRaised, Event, SensorStateChanged
 from snorty.dashboard import views
 from snorty.dashboard.journal_routes import add_journal_routes
+from snorty.dashboard.lab_routes import add_lab_routes
 from snorty.dashboard.rules_routes import add_rules_routes
 from snorty.dashboard.security import SecurityMiddleware
 from snorty.dashboard.services import Services, Svc
@@ -166,4 +167,5 @@ def build_app(
 
     add_rules_routes(app, ui)
     add_journal_routes(app, ui)
+    add_lab_routes(app, ui)
     return app

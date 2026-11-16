@@ -57,3 +57,29 @@ document.addEventListener("htmx:beforeSwap", (event) => {
     form.addEventListener("submit", connect);
   }
 })();
+
+// Pcap upload: send the chosen file as a raw body, then show the result and refresh the picker.
+(() => {
+  const input = document.getElementById("pcap-upload");
+  if (!input) return;
+  input.addEventListener("change", async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const headers = JSON.parse(document.body.getAttribute("hx-headers") || "{}");
+    const url = "/lab/pcaps?name=" + encodeURIComponent(file.name);
+    const t = document.createElement("template");
+    try {
+      const response = await fetch(url, { method: "POST", headers, body: file });
+      t.innerHTML = (await response.text()).trim();
+    } catch (err) {
+      t.innerHTML = '<div id="flash" class="flash bad" role="status">Upload failed.</div>';
+    }
+    for (const el of Array.from(t.content.children)) {
+      const current = el.id && document.getElementById(el.id);
+      if (!current) continue;
+      current.replaceWith(el);
+      if (window.htmx) window.htmx.process(el);
+    }
+    input.value = "";
+  });
+})();

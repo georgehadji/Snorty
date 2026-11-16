@@ -44,10 +44,10 @@ Build `snorty.dashboard`: the one local web app that runs Snorty. Foundations fi
 - [x] Task 7: Rules page (status, update now, mute/unmute, HOME_NET) with in-flight guard; Alerts-row Mute button
 - [x] Task 8: daily rules-update schedule
 - [x] Task 9: Journal page (small read-only `status()` on journal and notify services)
-- [ ] Task 10: Lab page (check, run, pcap list, upload, generate)
+- [x] Task 10: Lab page (check, run, pcap list, upload, generate)
 
 ### Checkpoint: All pages
-- [ ] Spec criteria 1-12 covered by passing tests; unit suite still fast
+- [x] Spec criteria 1-12 covered by passing tests; unit suite still fast
 
 ### Phase 4: Run and close out
 - [ ] Task 11: `python -m snorty.dashboard` CLI, logging, shutdown; real Snort tests

@@ -82,15 +82,15 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. E
 
 ## Task 10: Lab page (L)
 `templates/lab.html`, `_lab_result.html`, `views.py`, `app.py`, `pcaps.py`, `test_dash_lab.py`.
-- [ ] `pcaps.py`: `list_pcaps(dir)`, `save_pcap(dir, name, data)` (name regex, resolved path must stay inside `dir`, junction and symlink refused, 50 MB cap, atomic write), `generate_pcap(dir, name, params)` using `make_frames` and `build_pcap`
-- [ ] `GET /lab`: textarea, pcap picker (names only), Check and Run buttons, generator form, upload control
-- [ ] `POST /lab/check`, `/lab/run`: text capped at 64 KB; problems shown as "rule line N: ..."; hits table with zero-hit rules; matches list; running guard
-- [ ] `POST /lab/pcaps?name=` raw upload; `POST /lab/pcaps/generate`; refusals for `..`, absolute names, over 50 MB, wrong extension
-- [ ] Verify: `uv run pytest tests/dashboard/test_dash_lab.py -q`
+- [x] `pcaps.py`: `list_pcaps(dir)`, `save_pcap(dir, name, data)` (name regex, resolved path must stay inside `dir`, junction and symlink refused, 50 MB cap, atomic write), `generate_pcap(dir, name, params)` using `make_frames` and `build_pcap`
+- [x] `GET /lab`: textarea, pcap picker (names only), Check and Run buttons, generator form, upload control
+- [x] `POST /lab/check`, `/lab/run`: text capped at 64 KB; problems shown as "rule line N: ..."; hits table with zero-hit rules; matches list; running guard
+- [x] `POST /lab/pcaps?name=` raw upload; `POST /lab/pcaps/generate`; refusals for `..`, absolute names, over 50 MB, wrong extension
+- [x] Verify: `uv run pytest tests/dashboard/test_dash_lab.py -q`
 - Dependencies: Task 4 · Files: 5
 
 ### Checkpoint: Tasks 7-10
-- [ ] Criteria 1-12 covered; full unit suite green and under 15 s; ruff and strict mypy clean
+- [x] Criteria 1-12 covered; full unit suite green and under 15 s; ruff and strict mypy clean
 
 ## Task 11: CLI and real tests (L)
 `__main__.py`, logging setup, `tests/dashboard/test_dash_real.py` (marker `snort`), `test_dash_cli.py`.

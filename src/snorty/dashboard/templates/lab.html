@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% set active = "lab" %}
+{% block title %}Lab · Snorty{% endblock %}
+{% block main %}
+<section class="card">
+  <h2>Try a rule</h2>
+  <p class="muted">Rules run on a private copy of the Snort config against a pcap. The live sensor and rules are not touched.</p>
+  <form class="stack">
+    <label for="rules">Rules (one per line, at most 64 KB)</label>
+    <textarea id="rules" name="rules" rows="8" spellcheck="false" class="mono"></textarea>
+    <div class="actions">
+      <label>Pcap {% include "_pcap_picker.html" %}</label>
+      <button type="button" hx-post="/lab/check" hx-target="#lab-result" hx-swap="outerHTML">Check</button>
+      <button type="button" hx-post="/lab/run" hx-target="#lab-result" hx-swap="outerHTML">Run</button>
+    </div>
+  </form>
+  <div id="lab-result" role="status"></div>
+</section>
+<div class="grid" style="margin-top: 16px">
+  <section class="card">
+    <h2>Make a pcap</h2>
+    <form class="stack" hx-post="/lab/pcaps/generate" hx-target="#flash" hx-swap="outerHTML">
+      <label>Name <input name="name" value="test.pcap" required></label>
+      <label>Protocol <select name="proto"><option>tcp</option><option>udp</option></select></label>
+      <label>Source <input name="src" value="10.0.0.5" required></label>
+      <label>Source port <input name="sport" value="40000" inputmode="numeric" required></label>
+      <label>Destination <input name="dst" value="10.0.0.9" required></label>
+      <label>Destination port <input name="dport" value="80" inputmode="numeric" required></label>
+      <label>Payload text <input name="payload" value="abc"></label>
+      <label>Packets <input name="count" value="1" inputmode="numeric" required></label>
+      <label class="check"><input type="checkbox" name="handshake" checked> TCP handshake first</label>
+      <button type="submit">Generate</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Upload a pcap</h2>
+    <p class="muted">Classic .pcap files up to 50 MB. They are saved in the Snorty data folder.</p>
+    <input type="file" id="pcap-upload" accept=".pcap">
+  </section>
+</div>
+{% endblock %}

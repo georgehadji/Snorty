@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 from snorty.core.models import Alert
 from snorty.dashboard.security import valid_priority, valid_range, valid_sid
 from snorty.journal.service import JournalStatus
+from snorty.lab.models import LabResult
 from snorty.notify.service import NotifyStatus
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
@@ -212,3 +213,22 @@ class NotifyView:
 def notify_view(status: NotifyStatus) -> NotifyView:
     p = status.min_priority
     return NotifyView(status.toasts_shown, "priority 1 only" if p <= 1 else f"priority 1 to {p}")
+
+
+@dataclass(frozen=True, slots=True)
+class LabView:
+    ok: bool
+    problems: list[str]
+    error: str | None
+    hits: list[tuple[int, str, int, int]]  # sid, msg, rule line, count
+    matches: list[AlertRow]
+
+
+def lab_view(result: LabResult, tz: tzinfo) -> LabView:
+    problems = [
+        f"rule line {p.line}: {p.message}" if p.line else p.message for p in result.problems
+    ]
+    hits = [(h.sid, h.msg, h.line, h.count) for h in result.hits]
+    return LabView(
+        result.ok, problems, result.error, hits, [alert_row(a, tz) for a in result.matches]
+    )
