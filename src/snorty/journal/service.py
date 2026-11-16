@@ -98,7 +98,11 @@ class JournalService:
         """Rewrite every day that changed since the last flush."""
         for day in sorted(self._dirty):
             self._dirty.discard(day)
-            await asyncio.to_thread(self._write_day, day)
+            try:
+                await asyncio.to_thread(self._write_day, day)
+            except Exception:  # one bad day must not stop the rest, or the next flush
+                log.exception("could not write the journal note for %s", day)
+                self._dirty.add(day)
 
     async def _consume(self, sub: Subscription) -> None:
         async for event in sub:

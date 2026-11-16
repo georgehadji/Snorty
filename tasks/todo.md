@@ -44,15 +44,15 @@ Same `render.py` (or `merge.py` if it grows).
 
 ## Task 5: Resilience and paging (M)
 Same `service.py`; `tests/journal/test_journal_resilience.py`.
-- [ ] A store that raises or a `NoteConflict` is logged, the day stays dirty and the next flush retries; nothing escapes the consumer
-- [ ] Unchanged merged text causes no write
-- [ ] A day over 100,000 rows (cap lowered by config in the test) gives the truncation line and the true total
-- [ ] A blocking store does not slow `bus.publish` (1,000 publishes finish quickly)
-- [ ] Verify: `uv run pytest tests/journal -q`
+- [x] A store that raises or a `NoteConflict` is logged, the day stays dirty and the next flush retries; nothing escapes the consumer
+- [x] Unchanged merged text causes no write
+- [x] A day over 100,000 rows (cap lowered by config in the test) gives the truncation line and the true total
+- [x] A blocking store does not slow `bus.publish` (1,000 publishes finish quickly)
+- [x] Verify: `uv run pytest tests/journal -q`
 - Dependencies: Task 4 · Files: `service.py`, `test_journal_resilience.py`
 
 ### Checkpoint: Tasks 3-5
-- [ ] Spec criteria 1-10 each covered by a passing test; whole journal unit suite under 3 s; ruff and strict mypy clean
+- [x] Spec criteria 1-10 each covered by a passing test; whole journal unit suite under 3 s; ruff and strict mypy clean
 
 ## Task 6: CLI and sensor wiring (M)
 `src/snorty/journal/__main__.py`; `src/snorty/sensor/__main__.py`.

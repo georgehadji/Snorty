@@ -37,10 +37,10 @@ flag on the sensor CLI, then the manual real-vault check.
 ### Phase 2: Port and service
 - [x] Task 3: `NoteStore`, `VaultNoteStore`, `MemoryNoteStore`
 - [x] Task 4: `JournalService` (dirty days, flush, start regeneration, stop flush)
-- [ ] Task 5: resilience and paging (failed write retry, no-write when unchanged, cap, non-blocking publish)
+- [x] Task 5: resilience and paging (failed write retry, no-write when unchanged, cap, non-blocking publish)
 
 ### Checkpoint: Service
-- [ ] Spec criteria 1-10 each covered by a passing test; unit suite under 3 s
+- [x] Spec criteria 1-10 each covered by a passing test; unit suite under 3 s
 
 ### Phase 3: CLI and real checks
 - [ ] Task 6: `python -m snorty.journal write`, `--journal` on the sensor CLI
