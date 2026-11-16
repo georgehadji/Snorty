@@ -132,6 +132,13 @@ class AlertRepository:
             rows = self._conn.execute(sql, [*args, limit, offset]).fetchall()
         return [_alert(r) for r in rows]
 
+    def count(self, since: datetime | None = None, until: datetime | None = None) -> int:
+        """How many alerts are in the range; cheaper than summing counts_by_sid."""
+        where, args = _range(since, until)
+        with self._lock:
+            row = self._conn.execute(f"SELECT COUNT(*) FROM alerts{where}", args).fetchone()
+        return int(row[0])
+
     def counts_by_sid(
         self, since: datetime | None = None, until: datetime | None = None
     ) -> list[tuple[int, int]]:

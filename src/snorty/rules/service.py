@@ -109,7 +109,7 @@ class RulesService:
             return UpdateReport("up_to_date", state.rule_count, expected, 0, "already up to date")
 
         tarball = await self._downloader.get(cfg.url, cfg.max_download)
-        if hashlib.md5(tarball).hexdigest() != expected:  # noqa: S324
+        if await asyncio.to_thread(lambda: hashlib.md5(tarball).hexdigest()) != expected:  # noqa: S324
             raise ValueError("md5 mismatch")
 
         self._step = "stage"
@@ -241,7 +241,7 @@ class RulesService:
             try:
                 old = await asyncio.to_thread(read_text, target)
                 new = apply_block(old, edit(read_block(old)))
-                conf_text = read_text(self._config.paths.conf)
+                conf_text = await asyncio.to_thread(read_text, self._config.paths.conf)
 
                 def stage_text(candidate: Path) -> str:
                     return rewrite_include(conf_text, "threshold.conf", str(candidate))

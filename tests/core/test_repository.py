@@ -88,6 +88,15 @@ def test_counts_by_sid_most_frequent_first(repo: AlertRepository) -> None:
     assert repo.counts_by_sid(since=T0 + timedelta(seconds=10)) == [(8, 1)]
 
 
+def test_count_matches_the_sum_of_counts_by_sid_in_any_range(repo: AlertRepository) -> None:
+    repo.add_many([make_alert(i, sid=7) for i in range(3)])
+    repo.add_many([make_alert(10 + i, sid=8) for i in range(2)])
+    assert repo.count() == 5
+    assert repo.count(since=T0 + timedelta(seconds=10)) == 2
+    assert repo.count(until=T0 + timedelta(seconds=10)) == 3
+    assert repo.count(since=T0 + timedelta(days=1)) == 0
+
+
 def test_counts_by_hour_buckets_in_given_zone(repo: AlertRepository) -> None:
     tz = timezone(timedelta(hours=5, minutes=30))  # half-hour offset: hour buckets != UTC hours
     # 12:00 UTC = 17:30 local; 12:20 = 17:50; 12:40 = 18:10

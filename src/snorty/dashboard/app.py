@@ -42,7 +42,7 @@ def _overview_data(svc: Services, now: datetime) -> dict[str, Any]:
         latest = svc.repo.query(sid=sid, since=midnight, limit=1)
         top.append(TopRule(sid, latest[0].msg if latest else "", count))
     return {
-        "count_hour": sum(n for _, n in svc.repo.counts_by_sid(since=now - timedelta(hours=1))),
+        "count_hour": svc.repo.count(since=now - timedelta(hours=1)),
         "count_today": sum(n for _, n in today),
         "top_rules": top,
         "rows": [views.alert_row(a, svc.tz) for a in svc.repo.query(limit=10)],

@@ -44,4 +44,4 @@ async def run_daily(
         try:
             await action()
         except Exception:
-            log.exception("scheduled rules update failed")
+            log.exception("scheduled job failed")

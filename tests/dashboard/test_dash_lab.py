@@ -296,3 +296,9 @@ def test_a_flood_of_matches_shows_the_first_rows_and_the_true_total(tmp_path: Pa
         html = wait_done(c)
     assert html.count('<tr class="p') == views.MAX_LAB_ROWS
     assert f"Showing the first {views.MAX_LAB_ROWS} of {n} matches" in html
+
+
+def test_an_oversize_form_is_refused_while_reading_it(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    r = c.post("/lab/check", content=b"rules=" + b"x" * (300 * 1024), headers=FORM)
+    assert r.status_code == 422 and "form is too large" in r.text and lab(s).calls == []

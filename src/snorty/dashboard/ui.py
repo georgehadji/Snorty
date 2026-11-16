@@ -7,7 +7,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from snorty.dashboard.security import parse_form
+from snorty.dashboard.security import MAX_FORM_BYTES, parse_form
 from snorty.dashboard.views import Message
 
 
@@ -32,4 +32,19 @@ class Ui:
 
     @staticmethod
     async def form(request: Request) -> dict[str, str]:
-        return parse_form(await request.body())
+        return parse_form(await read_body(request, MAX_FORM_BYTES, "form is too large"))
+
+
+async def read_body(request: Request, limit: int, too_big: str) -> bytes:
+    """The raw request body, refused as soon as it passes `limit` bytes."""
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        raise ValueError(too_big)
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit:
+            raise ValueError(too_big)
+        chunks.append(chunk)
+    return b"".join(chunks)

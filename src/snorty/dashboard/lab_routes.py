@@ -8,26 +8,11 @@ from fastapi.responses import HTMLResponse
 from snorty.dashboard import pcaps, views
 from snorty.dashboard.jobs import Job
 from snorty.dashboard.services import Svc
-from snorty.dashboard.ui import Ui
+from snorty.dashboard.ui import Ui, read_body
 from snorty.lab.lint import MAX_BYTES as RULES_MAX_BYTES
 from snorty.lab.models import LabJob, LabResult
 
 _PROTOS = ("tcp", "udp")
-
-
-async def _body(request: Request, limit: int) -> bytes:
-    """The raw request body, refused as soon as it passes `limit` bytes."""
-    declared = request.headers.get("content-length", "")
-    if declared.isdigit() and int(declared) > limit:
-        raise ValueError("pcap is over 50 MB")
-    chunks: list[bytes] = []
-    size = 0
-    async for chunk in request.stream():
-        size += len(chunk)
-        if size > limit:
-            raise ValueError("pcap is over 50 MB")
-        chunks.append(chunk)
-    return b"".join(chunks)
 
 
 def _number(form: dict[str, str], key: str, label: str) -> int:
@@ -96,8 +81,8 @@ def add_lab_routes(app: FastAPI, ui: Ui) -> None:
     @app.post("/lab/pcaps", response_class=HTMLResponse)
     async def upload(request: Request, svc: Svc, name: str = "") -> HTMLResponse:
         try:
-            data = await _body(request, pcaps.MAX_PCAP_BYTES)
-            pcaps.save_pcap(svc.pcap_dir, name, data)
+            data = await read_body(request, pcaps.MAX_PCAP_BYTES, "pcap is over 50 MB")
+            await asyncio.to_thread(pcaps.save_pcap, svc.pcap_dir, name, data)  # up to 50 MB
         except ValueError as exc:
             return bad(request, exc)
         return saved(request, svc, name, "Uploaded")
