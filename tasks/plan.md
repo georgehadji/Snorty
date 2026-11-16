@@ -43,7 +43,7 @@ the manual run.
 - [x] Spec criteria 1-8 and 10 each covered by a passing test; unit suite under 3 s
 
 ### Phase 3: CLI and real checks
-- [ ] Task 6: `python -m snorty.lab check | run | make-pcap`
+- [x] Task 6: `python -m snorty.lab check | run | make-pcap`
 - [ ] Task 7: real Snort tests, manual run, close-out
 
 ### Checkpoint: Complete

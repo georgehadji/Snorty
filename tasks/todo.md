@@ -62,12 +62,12 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 6: CLI (M)
 `src/snorty/lab/__main__.py`.
-- [ ] `check RULES_FILE`: lint and `snort -T` on the lab config; prints problems with line numbers; exit 0, or 1
-- [ ] `run RULES_FILE PCAP [--json]`: prints a hit table (SID, message, count) then matches (time, SID, message, source to destination), or the problems or error; `--json` prints the `LabResult` as JSON; exit 0 on `ok`, 1 otherwise
-- [ ] `make-pcap --out FILE --payload TEXT [--proto tcp|udp] [--src] [--sport] [--dst] [--dport] [--count] [--handshake]` writes a pcap and prints its path; exit 2 on bad arguments
-- [ ] Console output is encoding-safe (as in `notify` and `journal`)
-- [ ] Tests inject a fake `Runner` and use temp files; `make-pcap` output is read back by the test reader
-- [ ] Verify: `uv run pytest tests/lab -q`
+- [x] `check RULES_FILE`: lint and `snort -T` on the lab config; prints problems with line numbers; exit 0, or 1
+- [x] `run RULES_FILE PCAP [--json]`: prints a hit table (SID, message, count) then matches (time, SID, message, source to destination), or the problems or error; `--json` prints the `LabResult` as JSON; exit 0 on `ok`, 1 otherwise
+- [x] `make-pcap --out FILE --payload TEXT [--proto tcp|udp] [--src] [--sport] [--dst] [--dport] [--count] [--handshake]` writes a pcap and prints its path; exit 2 on bad arguments
+- [x] Console output is encoding-safe (as in `notify` and `journal`)
+- [x] Tests inject a fake `Runner` and use temp files; `make-pcap` output is read back by the test reader
+- [x] Verify: `uv run pytest tests/lab -q`
 - Dependencies: Tasks 3-5 · Files: `__main__.py`, `tests/lab/test_lab_cli.py`
 
 ## Task 7: Real checks and close-out (M)

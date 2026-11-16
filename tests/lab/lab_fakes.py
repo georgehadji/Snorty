@@ -93,7 +93,7 @@ class FakeSnort:
         if "-r" in argv:
             self._note_conf(argv)
             log_dir = Path(argv[argv.index("-l") + 1])
-            (log_dir / "alert.ids").write_text(self.alert_text)
+            (log_dir / "alert.ids").write_bytes(self.alert_text.encode("utf-8"))
             self.active += 1
             self.max_active = max(self.max_active, self.active)
             try:

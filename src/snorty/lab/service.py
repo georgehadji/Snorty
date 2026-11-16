@@ -6,7 +6,7 @@ import re
 import shutil
 import tempfile
 import time
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime, tzinfo
 from pathlib import Path
 from types import TracebackType
@@ -121,15 +121,30 @@ class LabService:
             return LabResult(False, problems=checked.problems)
         if (problem := _pcap_problem(job.pcap)) is not None:
             return LabResult(False, error=problem)
+        return await self._in_sandbox(
+            job.rules_text, lambda box: self._run_in(box, checked.rules, job.pcap)
+        )
+
+    async def check(self, rules_text: str) -> LabResult:
+        """Lint and `snort -T` only: do these rules load? No pcap is read."""
+        checked = lint(rules_text)
+        if not checked.ok:
+            return LabResult(False, problems=checked.problems)
+        return await self._in_sandbox(rules_text, lambda box: self._check_in(box, checked.rules))
+
+    async def _in_sandbox(
+        self, rules_text: str, work: Callable[[LabSandbox], Awaitable[LabResult]]
+    ) -> LabResult:
         async with self._lock:  # one job at a time
             try:
                 sweep_stale(self._paths.conf.parent)
-                with LabSandbox(self._paths, job.rules_text) as box:
-                    return await self._run_in(box, checked.rules, job.pcap)
+                with LabSandbox(self._paths, rules_text) as box:
+                    return await work(box)
             except (OSError, ValueError, SnortError) as exc:
                 return LabResult(False, error=f"could not run the lab: {exc}")
 
-    async def _run_in(self, box: LabSandbox, rules: Sequence[LabRule], pcap: Path) -> LabResult:
+    async def _validate(self, box: LabSandbox) -> LabResult | None:
+        """`snort -T` on the sandbox config: None if it passes, else the failure as a result."""
         interfaces = await list_interfaces(self._paths, self._runner)
         if not interfaces:
             return LabResult(False, error="no network interface found for snort -T")
@@ -147,6 +162,16 @@ class LabService:
             if problems:  # Snort's generic "Fatal Error, Quitting" line adds nothing
                 other = [e for e in other if not e.startswith("Fatal Error, Quitting")]
             return LabResult(False, tuple(problems), "; ".join(other) or None)
+        return None
+
+    async def _check_in(self, box: LabSandbox, rules: Sequence[LabRule]) -> LabResult:
+        if (failed := await self._validate(box)) is not None:
+            return failed
+        return LabResult(True, hits=summarize(rules, ())[0])
+
+    async def _run_in(self, box: LabSandbox, rules: Sequence[LabRule], pcap: Path) -> LabResult:
+        if (failed := await self._validate(box)) is not None:
+            return failed
         alerts = await run_pcap(
             self._paths,
             pcap,
