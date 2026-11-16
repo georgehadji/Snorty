@@ -32,7 +32,10 @@ dev = [
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-markers = ["snort: integration test that needs the Snort install at C:\\Snort"]
+markers = [
+    "snort: integration test that needs the Snort install at C:\\Snort",
+    "tshark: integration test that needs Wireshark's tshark (skipped when it is not installed)",
+]
 
 [tool.ruff]
 line-length = 100
@@ -66,11 +69,12 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "only snort runs processes"
+name = "only the process adapters (snort, wireshark) run processes"
 type = "forbidden"
 source_modules = [
     "snorty.core", "snorty.sensor", "snorty.rules", "snorty.notify", "snorty.journal",
-    "snorty.lab", "snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless",
+    "snorty.lab", "snorty.packets", "snorty.dashboard", "snorty.compose", "snorty.services",
+    "snorty.headless",
 ]
 forbidden_modules = ["subprocess"]
 allow_indirect_imports = true
@@ -80,14 +84,20 @@ name = "feature modules never reach up into the UI or the wiring"
 type = "forbidden"
 source_modules = [
     "snorty.snort", "snorty.sensor", "snorty.rules", "snorty.notify", "snorty.journal",
-    "snorty.lab",
+    "snorty.lab", "snorty.packets", "snorty.wireshark",
 ]
 forbidden_modules = ["snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless"]
 # the sensor's `-m` shim hands off to the headless runner; it is an entry point, not a dependency
 ignore_imports = ["snorty.sensor.__main__ -> snorty.headless"]
 
 [[tool.importlinter.contracts]]
+name = "packets is the port side: it never imports its adapters"
+type = "forbidden"
+source_modules = ["snorty.packets"]
+forbidden_modules = ["snorty.wireshark", "snorty.snort"]
+
+[[tool.importlinter.contracts]]
 name = "sibling features do not know each other"
 type = "independence"
-modules = ["snorty.sensor", "snorty.notify", "snorty.journal", "snorty.lab"]
+modules = ["snorty.sensor", "snorty.notify", "snorty.journal", "snorty.lab", "snorty.packets"]
 ignore_imports = ["snorty.sensor.__main__ -> snorty.headless"]

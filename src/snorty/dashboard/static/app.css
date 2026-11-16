@@ -163,6 +163,11 @@ dl.detail dd { margin: 0; }
 .sensor { display: flex; flex-direction: column; }
 .sensor .actions { margin-top: auto; padding-top: var(--s3); }
 
+/* Pcap inspection */
+table.packets td.num, table.packets th:nth-child(1), table.packets th:nth-child(6) { text-align: right; }
+table.packets td.mono { white-space: nowrap; }
+pre.hex { margin: 0 0 var(--s2); overflow-x: auto; font-size: 12px; line-height: 1.4; }
+
 /* Headline numbers. */
 .stats { display: flex; gap: var(--s5); margin: var(--s3) 0 var(--s2); }
 .stat { display: block; font-size: 2rem; font-weight: 600; line-height: 1.1; }

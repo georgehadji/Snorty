@@ -22,6 +22,7 @@ class DashConfig:
     port: int = 8765
     interface_ip: str | None = None
     vault: str | None = None
+    wireshark_dir: str | None = None  # folder holding tshark.exe; default: found automatically
     notify: bool = True
     journal: bool = True
     autostart_sensor: bool = False
@@ -44,7 +45,7 @@ def _check(key: str, value: object) -> object:
     elif key == "retention_days":
         if type(value) is not int or not 0 <= value <= 36500:
             raise ConfigError("retention_days must be a whole number from 0 to 36500")
-    elif key in ("interface_ip", "vault"):
+    elif key in ("interface_ip", "vault", "wireshark_dir"):
         if not isinstance(value, str):
             raise ConfigError(f"{key} must be text")
     elif key == "rules_update_at":

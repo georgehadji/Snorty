@@ -108,6 +108,7 @@ async def run(
         interface_ip=cfg.interface_ip,
         notify=cfg.notify,
         journal_store=note_store(cfg),
+        wireshark_dir=Path(cfg.wireshark_dir) if cfg.wireshark_dir else None,
     )
     services = runtime.services
     app = build_app(services, token=new_token(), port=cfg.port)

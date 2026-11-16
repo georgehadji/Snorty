@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta, tzinfo
+from typing import Literal
 from urllib.parse import urlencode
 
 from snorty.core.models import Alert
@@ -10,6 +11,7 @@ from snorty.dashboard.security import valid_priority, valid_range, valid_sid
 from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabResult
 from snorty.notify.service import NotifyStatus
+from snorty.packets import Decoded, DecodeResult, Failed, PacketView, Unavailable
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
 from snorty.sensor import SensorStatus, State
@@ -340,3 +342,22 @@ def hourly_chart(counts: list[tuple[datetime, int]], now: datetime, tz: tzinfo) 
     ]
     labels = [(i + 1, f"{hours[i]:%H}:00") for i in (0, 6, 12, 18)]
     return HourlyChart(bars, [str(top), str(top // 2), "0"], labels, sum(values))
+
+
+@dataclass(frozen=True, slots=True)
+class PacketsView:
+    state: Literal["ok", "unavailable", "error"]
+    message: str
+    packets: tuple[PacketView, ...] = ()
+
+
+def packets_view(result: DecodeResult) -> PacketsView:
+    match result:
+        case Decoded(packets=found) as ok:
+            shown = _plural(len(found), "packet")
+            note = f"Showing the first {shown}." if ok.more else f"{shown.capitalize()}."
+            return PacketsView("ok", note if found else "The pcap holds no packets.", found)
+        case Unavailable(reason=why):
+            return PacketsView("unavailable", why)
+        case Failed(message=why):
+            return PacketsView("error", why)

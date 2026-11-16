@@ -10,6 +10,7 @@ from snorty.core.repository import AlertRepository
 from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabJob, LabResult
 from snorty.notify.service import NotifyStatus
+from snorty.packets import Capabilities, Decoded, DecodeResult, Layer, PacketView
 from snorty.rules.blocks import MutedRule
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
@@ -169,6 +170,34 @@ class FakeLab:
         return self.result
 
 
+class FakePackets:
+    def __init__(self) -> None:
+        self.calls: list[tuple[Path, int]] = []
+        self.result: DecodeResult = Decoded(
+            (
+                PacketView(
+                    1,
+                    "0.000000",
+                    "ICMP",
+                    "10.0.0.1",
+                    "10.0.0.2",
+                    74,
+                    "type 8 code 0",
+                    (Layer("ip", (("ip.ttl", "64"),)),),
+                    "0000  45 00",
+                ),
+            ),
+            limit=200,
+        )
+
+    def capabilities(self) -> Capabilities:
+        return Capabilities(decode=True)
+
+    async def decode(self, pcap: Path, limit: int = 200) -> DecodeResult:
+        self.calls.append((pcap, limit))
+        return self.result
+
+
 def make_services(tmp_path: Path) -> Services:
     return Services(
         sensor=FakeSensor(),
@@ -180,4 +209,5 @@ def make_services(tmp_path: Path) -> Services:
         bus=EventBus(),
         tz=UTC,
         data_dir=tmp_path,
+        packets=FakePackets(),
     )

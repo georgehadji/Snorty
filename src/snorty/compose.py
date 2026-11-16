@@ -1,6 +1,7 @@
 """Builds the real Snorty services from paths and options (used by the dashboard)."""
 
 import asyncio
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -15,12 +16,14 @@ from snorty.journal.service import JournalConfig, JournalService
 from snorty.lab.service import LabService
 from snorty.notify.ports import Notifier, WinotifyNotifier
 from snorty.notify.service import NotifyService
+from snorty.packets import NoDecoder, PacketService
 from snorty.rules.config import RulesConfig
 from snorty.rules.ports import SnortValidator, UrllibDownloader
 from snorty.rules.service import RulesService
 from snorty.sensor import Sensor, SensorConfig, SnortAdapter
 from snorty.services import Services
 from snorty.snort import Interface, SnortPaths, SubprocessRunner
+from snorty.wireshark import TsharkDecoder, find_tools
 
 
 @dataclass(slots=True)
@@ -58,6 +61,7 @@ def compose(
     journal_store: NoteStore | None = None,
     paths: SnortPaths | None = None,
     select_interface: Callable[[list[Interface]], Interface | None] | None = None,
+    wireshark_dir: Path | None = None,
 ) -> Runtime:
     """Wire every module together. The journal runs only when a note store is given."""
     paths = paths or SnortPaths()
@@ -90,5 +94,7 @@ def compose(
     journal = (
         JournalService(bus, repo, journal_store, JournalConfig(tz=tz)) if journal_store else None
     )
-    services = Services(sensor, rules, journal, toasts, lab, repo, bus, tz, data_dir)
+    tools = find_tools(configured=wireshark_dir, env=os.environ)
+    packets = PacketService(TsharkDecoder(tools.tshark) if tools.tshark else NoDecoder())
+    services = Services(sensor, rules, journal, toasts, lab, repo, bus, tz, data_dir, packets)
     return Runtime(services, toasts, journal)

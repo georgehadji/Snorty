@@ -13,9 +13,11 @@
       <label>Pcap {% include "_pcap_picker.html" %}</label>
       <button type="button" hx-post="/lab/check" hx-target="#lab-result" hx-swap="outerHTML">Check</button>
       <button type="button" hx-post="/lab/run" hx-target="#lab-result" hx-swap="outerHTML">Run</button>
+      <button type="button" hx-get="/packets/pcap" hx-include="[name=pcap]" hx-target="#packets-result" hx-swap="outerHTML" title="Decode the packets of this pcap with Wireshark's tshark">Inspect</button>
     </div>
   </form>
   <div id="lab-result" role="status"></div>
+  <div id="packets-result" role="status"></div>
 </section>
 <div class="grid gap-top">
   <section class="card">

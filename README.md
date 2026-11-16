@@ -47,6 +47,7 @@ vault = "C:/Users/you/Vault"      # default: the OBSIDIAN_VAULT_PATH environment
 notify = true
 journal = true
 autostart_sensor = false
+wireshark_dir = "C:/Program Files/Wireshark"  # optional; tshark is found automatically
 rules_update_at = "03:00"         # local HH:MM; "" turns the daily rules update off
 retention_days = 90               # alerts older than this are deleted; 0 keeps everything
 ```
