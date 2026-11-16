@@ -87,17 +87,23 @@ class AlertRepository:
 
     def add_many(self, alerts: Iterable[Alert]) -> int:
         """Store alerts in one transaction; returns how many were new."""
+        return len(self.add_new(alerts))
+
+    def add_new(self, alerts: Iterable[Alert]) -> list[Alert]:
+        """Store alerts in one transaction; returns the ones that were new, in order."""
         sql = f"INSERT OR IGNORE INTO alerts ({_COLUMNS}) VALUES ({', '.join('?' * 13)})"
+        new: list[Alert] = []
         with self._lock:
-            before = self._conn.total_changes
             self._conn.execute("BEGIN")
             try:
-                self._conn.executemany(sql, (_row(a) for a in alerts))
+                for alert in alerts:
+                    if self._conn.execute(sql, _row(alert)).rowcount == 1:
+                        new.append(alert)
             except BaseException:
                 self._conn.execute("ROLLBACK")
                 raise
             self._conn.execute("COMMIT")
-            return self._conn.total_changes - before
+        return new
 
     def query(
         self,

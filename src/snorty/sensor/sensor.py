@@ -6,11 +6,14 @@ from datetime import datetime, tzinfo
 from pathlib import Path
 
 from snorty.core.bus import EventBus
-from snorty.core.events import SensorStateChanged
+from snorty.core.events import AlertRaised, SensorStateChanged
+from snorty.core.models import Alert
+from snorty.core.parser import parse_line
 from snorty.core.repository import AlertRepository
 from snorty.sensor.config import SensorConfig
 from snorty.sensor.port import RunningSnort, SnortPort
 from snorty.sensor.states import State, check_transition
+from snorty.sensor.tail import TailState, read_new_lines
 from snorty.snort.interfaces import pick_interface
 from snorty.snort.models import Interface, SnortError
 
@@ -76,6 +79,10 @@ class Sensor:
         self._select_interface = select_interface
         self._wall = wall or (lambda: datetime.now(tz))
         self._pid_path = config.paths.log_dir / "snorty-sensor.pid"
+        self._alert_path = config.paths.log_dir / "alert.ids"
+        self._tail = TailState()
+        self._backlog_done = False
+        self._ingest_task: asyncio.Task[None] | None = None
 
         self._state = State.STOPPED
         self._reason: str | None = None
@@ -159,6 +166,7 @@ class Sensor:
                 await self._shutdown("stop requested")
                 return
             self._transition(State.RUNNING, None)
+            self._ingest_task = asyncio.create_task(self._ingest_loop(), name="sensor-ingest")
             await self._monitor()
         except Exception as e:  # keep the sensor object usable whatever goes wrong
             log.exception("sensor supervisor crashed")
@@ -173,6 +181,11 @@ class Sensor:
         chosen = await self._choose_interface()
         if isinstance(chosen, str):
             return chosen
+        if not self._backlog_done:
+            # Read what is already in alert.ids *before* Snort can add to it, so an alert
+            # written right after startup is never mistaken for backlog.
+            await self._poll_once()
+            self._backlog_done = True
         try:
             proc = await self._port.start(chosen)
         except SnortError as e:
@@ -214,6 +227,7 @@ class Sensor:
             result = await self._port.stop(proc, self._config.stop_timeout)
             if result.how == "killed":
                 note = "snort ignored Ctrl+Break and was killed"
+            await self._stop_ingest()
         await self._release_process()
         self._transition(State.STOPPED, note)
 
@@ -225,6 +239,8 @@ class Sensor:
                 await self._port.stop(proc, self._config.stop_timeout)
             except Exception:
                 log.exception("could not stop snort while aborting")
+        if proc is not None:
+            await self._stop_ingest()
         await self._release_process()
         self._last_error = self._last_error or reason
         if self._state is State.RUNNING:
@@ -238,3 +254,58 @@ class Sensor:
         if self._proc is not None:
             await asyncio.to_thread(_remove_pid, self._pid_path)
         self._proc = None
+
+    # --- ingest -----------------------------------------------------------------------
+
+    async def _ingest_loop(self) -> None:
+        while True:
+            try:
+                await self._poll_once()
+            except Exception as e:  # a bad poll must not stop ingestion; it is retried
+                log.exception("alert ingest failed; will retry")
+                self._last_error = repr(e)
+            await self._sleep(self._config.poll_interval)
+
+    async def _stop_ingest(self) -> None:
+        """Stop the ingest loop, then read whatever Snort wrote just before it stopped."""
+        task, self._ingest_task = self._ingest_task, None
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        try:
+            await self._poll_once()
+        except Exception as e:
+            log.exception("final alert pass failed")
+            self._last_error = repr(e)
+
+    async def _poll_once(self) -> None:
+        """Read new lines, store them, announce the new ones. The tail position only
+        advances after a successful store, so a database error loses no lines."""
+        result = await asyncio.to_thread(read_new_lines, self._alert_path, self._tail)
+        if result.rotated:
+            log.warning("alert file was rotated or truncated; reading it from the start")
+        if result.lines:
+            new, bad = await asyncio.to_thread(self._store_lines, result.lines, self._wall().year)
+            self._unparsed += bad
+            self._alerts_seen += len(new)
+            if new:
+                newest = max(a.ts for a in new)
+                if self._last_alert_ts is None or newest > self._last_alert_ts:
+                    self._last_alert_ts = newest
+            if self._backlog_done or result.rotated:
+                for alert in new:
+                    self._bus.publish(AlertRaised(alert))
+        self._tail = result.state
+
+    def _store_lines(self, lines: list[str], year: int) -> tuple[list[Alert], int]:
+        """Runs in a worker thread: parse and store. Returns (new alerts, unparsed count)."""
+        alerts: list[Alert] = []
+        bad = 0
+        for text in lines:
+            alert = parse_line(text, default_year=year, tz=self._tz)
+            if alert is None:
+                bad += 1
+                log.warning("unparsed alert line: %.120s", text)
+            else:
+                alerts.append(alert)
+        return self._repo.add_new(alerts), bad

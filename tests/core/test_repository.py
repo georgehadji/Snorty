@@ -136,3 +136,11 @@ def test_failed_add_many_rolls_back(repo: AlertRepository) -> None:
     with pytest.raises(RuntimeError):
         repo.add_many(gen())
     assert repo.query() == []
+
+
+def test_add_new_returns_only_new_alerts_in_order(repo: AlertRepository) -> None:
+    first = [make_alert(i) for i in range(3)]
+    repo.add(first[1])
+    new = repo.add_new(first + [make_alert(9), make_alert(9)])
+    assert new == [first[0], first[2], make_alert(9)]
+    assert repo.add_new(first) == []
