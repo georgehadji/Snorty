@@ -5,11 +5,11 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 1: Toast, sanitize, build_toast (S)
 `src/snorty/notify/toast.py`.
-- [ ] `Toast(title, lines)` frozen dataclass
-- [ ] `sanitize(text, limit)`: control characters and `" ' ` $ < > & ; | %` and backslash replaced by a space, whitespace collapsed, truncated to `limit`; non-ASCII letters kept
-- [ ] `build_toast(alert, same_sid=0, other=0, tz)` gives title `Snort P{priority}: {msg}` (cap 80); lines `{proto} {src_ip}:{src_port} -> {dst_ip}:{dst_port}` (ports omitted when missing), `SID {gid}:{sid}  {HH:MM:SS}` in the given zone, then `+{n} more` and `+{m} other alerts` only when non-zero; each line capped at 120
-- [ ] Hostile inputs in msg and addresses (`"; calc; "`, backticks, `$(...)`, `<b>`, newlines, 10,000 characters) produce sanitised, capped text
-- [ ] Verify: `uv run pytest tests/notify/test_toast.py -q`
+- [x] `Toast(title, lines)` frozen dataclass
+- [x] `sanitize(text, limit)`: control characters and `" ' ` $ < > & ; | %` and backslash replaced by a space, whitespace collapsed, truncated to `limit`; non-ASCII letters kept
+- [x] `build_toast(alert, same_sid=0, other=0, tz)` gives title `Snort P{priority}: {msg}` (cap 80); lines `{proto} {src_ip}:{src_port} -> {dst_ip}:{dst_port}` (ports omitted when missing), `SID {gid}:{sid}  {HH:MM:SS}` in the given zone, then `+{n} more` and `+{m} other alerts` only when non-zero; each line capped at 120
+- [x] Hostile inputs in msg and addresses (`"; calc; "`, backticks, `$(...)`, `<b>`, newlines, 10,000 characters) produce sanitised, capped text
+- [x] Verify: `uv run pytest tests/notify/test_toast.py -q`
 - Dependencies: none · Files: `src/snorty/notify/__init__.py`, `toast.py`, `tests/notify/test_toast.py`
 
 ## Task 2: Throttle (S)

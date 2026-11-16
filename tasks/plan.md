@@ -27,7 +27,7 @@ check.
 ## Task List
 
 ### Phase 1: Pure logic
-- [ ] Task 1: `Toast`, `sanitize`, `build_toast`
+- [x] Task 1: `Toast`, `sanitize`, `build_toast`
 - [ ] Task 2: `Throttle` and `Decision`
 
 ### Checkpoint: Pure logic
