@@ -36,7 +36,7 @@ the manual run.
 - [x] All unit tests green; ruff and strict mypy clean on `snorty.lab`
 
 ### Phase 2: Pipeline and sandbox
-- [ ] Task 4: models, `summarize`, `LabService` pipeline with a fake `Runner`
+- [x] Task 4: models, `summarize`, `LabService` pipeline with a fake `Runner`
 - [ ] Task 5: sandbox safety (cleanup on every exit, stale files, lock, live files untouched)
 
 ### Checkpoint: Service

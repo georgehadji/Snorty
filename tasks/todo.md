@@ -37,13 +37,13 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 4: Models, summarize, pipeline (L)
 `models.py`, `service.py`, `tests/lab/lab_fakes.py`. Read `snorty.snort.service.check_config`, `run_pcap`, `pick_interface` first; adapt only if needed (with a test in `tests/snort`).
-- [ ] `LabJob(rules_text, pcap)`, `RuleHit(sid, msg, line, count)`, `LabResult(ok, problems, error, hits, matches)` frozen dataclasses
-- [ ] `summarize(rules, alerts) -> tuple[RuleHit, ...]` (one hit per lab rule in rule order, zero counts included); matches sorted by time then sid
-- [ ] `LabService(paths, runner, *, tz, year)`; `run(job)`: lint stop, then pcap checks (missing, not a file, over 50 MB), then sandbox, `check_config` stop, `run_pcap`, summarize
-- [ ] Snort rule errors naming `lab.rules(N)` become `Problem(N, text)`; other `-T` errors become `error`
-- [ ] `run_pcap` failures and `SnortError` become `error` with Snort's last lines
-- [ ] Fake `Runner` scripts the `-T` and `-r` calls and writes a fixture `alert.ids` into the `-l` folder
-- [ ] Verify: `uv run pytest tests/lab/test_lab_service.py -q`
+- [x] `LabJob(rules_text, pcap)`, `RuleHit(sid, msg, line, count)`, `LabResult(ok, problems, error, hits, matches)` frozen dataclasses
+- [x] `summarize(rules, alerts) -> tuple[RuleHit, ...]` (one hit per lab rule in rule order, zero counts included); matches sorted by time then sid
+- [x] `LabService(paths, runner, *, tz, year)`; `run(job)`: lint stop, then pcap checks (missing, not a file, over 50 MB), then sandbox, `check_config` stop, `run_pcap`, summarize
+- [x] Snort rule errors naming `lab.rules(N)` become `Problem(N, text)`; other `-T` errors become `error`
+- [x] `run_pcap` failures and `SnortError` become `error` with Snort's last lines
+- [x] Fake `Runner` scripts the `-T` and `-r` calls and writes a fixture `alert.ids` into the `-l` folder
+- [x] Verify: `uv run pytest tests/lab/test_lab_service.py -q`
 - Dependencies: Tasks 1-2 · Files: `models.py`, `service.py`, `lab_fakes.py`, `test_lab_service.py`
 
 ## Task 5: Sandbox safety (M)
