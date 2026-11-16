@@ -6,8 +6,8 @@ import pytest
 from dash_fakes import alert
 from test_dash_routes import NOW, make
 
-from snorty.dashboard.services import Services
 from snorty.dashboard.views import AlertFilters, parse_alert_filters
+from snorty.services import Services
 
 
 def fill(s: Services, n: int, *, sid: int = 2001, priority: int = 1) -> None:

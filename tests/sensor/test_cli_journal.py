@@ -3,7 +3,8 @@ from pathlib import Path
 
 import pytest
 
-import snorty.sensor.__main__ as cli
+import snorty.compose as compose_mod
+import snorty.headless as cli
 from snorty.journal.ports import MemoryNoteStore
 
 order: list[str] = []
@@ -42,9 +43,9 @@ def stub_service(name: str) -> type:
 @pytest.fixture(autouse=True)
 def _stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     order.clear()
-    monkeypatch.setattr(cli, "Sensor", StubSensor)
-    monkeypatch.setattr(cli, "JournalService", stub_service("journal"))
-    monkeypatch.setattr(cli, "NotifyService", stub_service("notify"))
+    monkeypatch.setattr(compose_mod, "Sensor", StubSensor)
+    monkeypatch.setattr(compose_mod, "JournalService", stub_service("journal"))
+    monkeypatch.setattr(compose_mod, "NotifyService", stub_service("notify"))
 
 
 def test_journal_starts_before_the_sensor_and_stops_after(tmp_path: Path) -> None:

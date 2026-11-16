@@ -7,7 +7,6 @@ from pathlib import Path
 from snorty.core.bus import EventBus
 from snorty.core.models import Alert
 from snorty.core.repository import AlertRepository
-from snorty.dashboard.services import Services
 from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabJob, LabResult
 from snorty.notify.service import NotifyStatus
@@ -15,6 +14,7 @@ from snorty.rules.blocks import MutedRule
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
 from snorty.sensor import SensorStatus, State
+from snorty.services import Services
 
 T0 = datetime(2026, 11, 16, 12, 0, 0, tzinfo=UTC)
 

@@ -9,9 +9,9 @@ from starlette.testclient import TestClient
 from test_dash_routes import POST, make
 
 from snorty.dashboard import pcaps, views
-from snorty.dashboard.services import Services
 from snorty.lab.lint import Problem
 from snorty.lab.models import LabJob, LabResult, RuleHit
+from snorty.services import Services
 
 FORM = {**POST, "Content-Type": "application/x-www-form-urlencoded"}
 RULE = 'alert tcp any any -> any 80 (msg:"t"; content:"abc"; sid:1000001; rev:1;)'

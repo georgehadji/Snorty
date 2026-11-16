@@ -25,6 +25,7 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
     "httpx>=0.28.1",
+    "import-linter>=2.16",
 ]
 
 [tool.pytest.ini_options]
@@ -50,3 +51,43 @@ strict = true
 [[tool.mypy.overrides]]
 module = ["winotify", "winotify.*"]
 ignore_missing_imports = true
+
+[tool.importlinter]
+root_package = "snorty"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "core is the domain: it imports no other snorty module"
+type = "forbidden"
+source_modules = ["snorty.core"]
+forbidden_modules = [
+    "snorty.snort", "snorty.sensor", "snorty.rules", "snorty.notify", "snorty.journal",
+    "snorty.lab", "snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless",
+]
+
+[[tool.importlinter.contracts]]
+name = "only snort runs processes"
+type = "forbidden"
+source_modules = [
+    "snorty.core", "snorty.sensor", "snorty.rules", "snorty.notify", "snorty.journal",
+    "snorty.lab", "snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless",
+]
+forbidden_modules = ["subprocess"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "feature modules never reach up into the UI or the wiring"
+type = "forbidden"
+source_modules = [
+    "snorty.snort", "snorty.sensor", "snorty.rules", "snorty.notify", "snorty.journal",
+    "snorty.lab",
+]
+forbidden_modules = ["snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless"]
+# the sensor's `-m` shim hands off to the headless runner; it is an entry point, not a dependency
+ignore_imports = ["snorty.sensor.__main__ -> snorty.headless"]
+
+[[tool.importlinter.contracts]]
+name = "sibling features do not know each other"
+type = "independence"
+modules = ["snorty.sensor", "snorty.notify", "snorty.journal", "snorty.lab"]
+ignore_imports = ["snorty.sensor.__main__ -> snorty.headless"]

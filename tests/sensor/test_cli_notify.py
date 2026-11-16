@@ -3,7 +3,8 @@ from pathlib import Path
 
 import pytest
 
-import snorty.sensor.__main__ as cli
+import snorty.compose as compose_mod
+import snorty.headless as cli
 
 
 class StubSensor:
@@ -40,8 +41,8 @@ class StubNotify:
 @pytest.fixture(autouse=True)
 def _stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     cli_order.clear()
-    monkeypatch.setattr(cli, "Sensor", StubSensor)
-    monkeypatch.setattr(cli, "NotifyService", StubNotify)
+    monkeypatch.setattr(compose_mod, "Sensor", StubSensor)
+    monkeypatch.setattr(compose_mod, "NotifyService", StubNotify)
 
 
 def test_notify_starts_before_the_sensor_and_stops_after(tmp_path: Path) -> None:

@@ -19,9 +19,10 @@ from snorty.dashboard.journal_routes import add_journal_routes
 from snorty.dashboard.lab_routes import add_lab_routes
 from snorty.dashboard.rules_routes import add_rules_routes
 from snorty.dashboard.security import SecurityMiddleware
-from snorty.dashboard.services import Services, Svc
+from snorty.dashboard.services import Svc
 from snorty.dashboard.sse import HEARTBEAT_SECONDS, Render, sse_frames
 from snorty.dashboard.ui import Ui
+from snorty.services import Services
 
 _HERE = Path(__file__).parent
 

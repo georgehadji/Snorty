@@ -7,9 +7,9 @@ from dash_fakes import T0, FakeRules, FakeSensor, alert, make_services
 from starlette.testclient import TestClient
 
 from snorty.dashboard.app import build_app
-from snorty.dashboard.services import Services
 from snorty.rules.state import RulesState
 from snorty.sensor import State
+from snorty.services import Services
 
 TOKEN = "t" * 64
 PORT = 8765

@@ -4,9 +4,9 @@ from pathlib import Path
 from dash_fakes import FakeJournal, FakeNotify
 from test_dash_routes import POST, make
 
-from snorty.dashboard.services import Services
 from snorty.journal.service import JournalStatus
 from snorty.notify.service import NotifyStatus
+from snorty.services import Services
 
 
 def journal(s: Services) -> FakeJournal:

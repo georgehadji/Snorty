@@ -10,7 +10,6 @@ from pathlib import Path
 from snorty.core.bus import EventBus
 from snorty.core.localtz import LocalTimezone
 from snorty.core.repository import AlertRepository
-from snorty.dashboard.services import Services
 from snorty.journal.ports import NoteStore
 from snorty.journal.service import JournalConfig, JournalService
 from snorty.lab.service import LabService
@@ -20,6 +19,7 @@ from snorty.rules.config import RulesConfig
 from snorty.rules.ports import SnortValidator, UrllibDownloader
 from snorty.rules.service import RulesService
 from snorty.sensor import Sensor, SensorConfig, SnortAdapter
+from snorty.services import Services
 from snorty.snort import Interface, SnortPaths, SubprocessRunner
 
 
@@ -51,6 +51,7 @@ class Runtime:
 def compose(
     data_dir: Path,
     *,
+    db_path: Path | None = None,
     interface_ip: str | None = None,
     notify: bool = False,
     notifier: Notifier | None = None,
@@ -63,7 +64,7 @@ def compose(
     data_dir.mkdir(parents=True, exist_ok=True)
     tz = LocalTimezone()
     bus = EventBus()
-    repo = AlertRepository(data_dir / "snorty.db")
+    repo = AlertRepository(db_path or data_dir / "snorty.db")
     config = SensorConfig(paths=paths, interface_ip=interface_ip)
     sensor = Sensor(
         config,

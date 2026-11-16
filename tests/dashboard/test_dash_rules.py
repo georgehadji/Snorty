@@ -8,10 +8,10 @@ from dash_fakes import FakeRules, FakeSensor, alert
 from starlette.testclient import TestClient
 from test_dash_routes import NOW, POST, make
 
-from snorty.dashboard.services import Services
 from snorty.rules.blocks import MutedRule
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.sensor import State
+from snorty.services import Services
 
 
 def rules(s: Services) -> FakeRules:
