@@ -81,6 +81,17 @@ def test_every_page_has_one_h1(tmp_path: Path, path: str, title: str) -> None:
     assert html.count("<h1") == 1 and f"<h1>{title}</h1>" in html
 
 
+def test_pages_have_skip_link_named_nav_and_labelled_controls(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    s.repo.add(alert(2001, ts=T0 + timedelta(minutes=10)))
+    html = c.get("/").text
+    assert 'href="#main"' in html and 'id="main"' in html and 'aria-label="Main"' in html
+    assert 'aria-label="Mute rule 2001"' in html
+    assert "<th>" not in html and html.count('<th scope="col">') >= 6
+    assert "Actions</span></th>" in html
+    assert 'aria-label="Pcap file to upload"' in c.get("/lab").text
+
+
 def test_overview_with_no_alerts(tmp_path: Path) -> None:
     c, _ = make(tmp_path)
     html = c.get("/").text

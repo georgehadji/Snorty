@@ -55,6 +55,12 @@ body {
 }
 a { color: var(--accent); }
 
+/* Screen-reader only text, and a skip link that shows on keyboard focus. */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.skip { position: absolute; left: var(--s2); top: -4rem; z-index: 20; padding: var(--s2) var(--s3); background: var(--surface); border: 1px solid var(--accent); border-radius: var(--r); }
+.skip:focus { top: var(--s2); }
+main:focus { outline: none; }
+
 /* Header: brand, navigation, and the two always-visible status markers. */
 .top {
   position: sticky;
@@ -209,7 +215,7 @@ ol.plain { list-style: none; padding: 0; margin: 0; }
 ol.plain li { padding: 2px 0; }
 
 /* Tables */
-.scroll { overflow-x: auto; }
+.scroll { overflow-x: auto; position: relative; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { color: var(--muted); font-weight: 500; font-size: 12px; white-space: nowrap; }

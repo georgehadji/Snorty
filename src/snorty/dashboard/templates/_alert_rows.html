@@ -9,7 +9,7 @@
   <td class="mono">{{ r.src }}</td>
   <td class="mono">{{ r.dst }}</td>
   <td class="mono">{{ r.sid }}</td>
-  <td class="act"><button class="small" hx-post="/rules/mute/{{ r.sid }}" hx-target="#flash" hx-swap="outerHTML" title="Mute rule {{ r.sid }}">Mute</button></td>
+  <td class="act"><button class="small" hx-post="/rules/mute/{{ r.sid }}" hx-target="#flash" hx-swap="outerHTML" title="Mute rule {{ r.sid }}" aria-label="Mute rule {{ r.sid }}">Mute</button></td>
 </tr>
 {% else %}
 {% if not paged %}<tr class="empty none"><td colspan="7">No alerts yet.</td></tr>{% endif %}

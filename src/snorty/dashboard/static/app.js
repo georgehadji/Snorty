@@ -106,6 +106,21 @@ document.addEventListener("htmx:beforeSwap", (event) => {
     refreshTimes();
   }
 
+  // After "Load more", move focus to the first new row so keyboard users keep their place.
+  let loadedAfter = null;
+  document.addEventListener("htmx:beforeRequest", (e) => {
+    const more = e.detail.elt.closest("#more");
+    loadedAfter = more ? more.previousElementSibling : null;
+  });
+  document.addEventListener("htmx:afterSettle", () => {
+    const next = loadedAfter && loadedAfter.nextElementSibling;
+    loadedAfter = null;
+    if (next) {
+      next.tabIndex = -1;
+      next.focus();
+    }
+  });
+
   function setLive(on) {
     const el = document.getElementById("live");
     if (!el) return;

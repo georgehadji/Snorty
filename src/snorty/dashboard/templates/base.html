@@ -10,9 +10,10 @@
   <script src="/static/app.js" defer></script>
 </head>
 <body hx-headers='{"X-Snorty-Token": "{{ token }}"}'>
+  <a class="skip" href="#main">Skip to content</a>
   <header class="top">
     <a class="brand" href="/">Snorty</a>
-    <nav>
+    <nav aria-label="Main">
       <a href="/"{% if active == "overview" %} aria-current="page"{% endif %}>Overview</a>
       <a href="/alerts"{% if active == "alerts" %} aria-current="page"{% endif %}>Alerts</a>
       <a href="/rules"{% if active == "rules" %} aria-current="page"{% endif %}>Rules</a>
@@ -21,11 +22,11 @@
     </nav>
     {% set s = sensor_status() %}
     <div class="top-right">
-      <span id="live" class="live" hidden title="Live updates"><span class="dot"></span><span class="txt">Live updates paused</span></span>
-      <a id="top-status" class="status {{ s.tone }}" href="/" title="Sensor status"><span class="dot"></span><span class="txt">Sensor {{ s.state }}</span></a>
+      <span id="live" class="live" role="status" hidden title="Live updates"><span class="dot"></span><span class="txt">Live updates paused</span></span>
+      <a id="top-status" role="status" class="status {{ s.tone }}" href="/" title="Sensor status"><span class="dot"></span><span class="txt">Sensor {{ s.state }}</span></a>
     </div>
   </header>
-  <main>
+  <main id="main" tabindex="-1">
     <noscript><p class="note">Live updates and buttons need JavaScript.</p></noscript>
     <div id="flash" role="status" aria-live="polite"></div>
     {% block main %}{% endblock %}
