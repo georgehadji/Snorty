@@ -38,11 +38,11 @@ Pure functions in `src/snorty/rules/blocks.py`.
 
 ## Task 4: Update, happy path (M)
 `service.py`: `RulesService(config, downloader, validator, sensor, bus, *, clock)`.
-- [ ] Same md5 as `state.last_md5` gives `UpToDate`: tarball never fetched, no restart, no event swap; `force=True` overrides
-- [ ] Good update: overlay into `rules.new`, protected files untouched, temp conf validated, 3-step swap, old set in `rules.prev`, one `sensor.restart()`, state saved, `RulesUpdated(ok=True, rule_count, detail)` published
-- [ ] Sensor STOPPED before the update: no restart, no health gate
-- [ ] Returns an `UpdateReport` (outcome, rule_count, md5, skipped members)
-- [ ] Verify: `uv run pytest tests/rules/test_update.py -q` (fake downloader, fake validator, fake sensor, real temp dirs)
+- [x] Same md5 as `state.last_md5` gives `UpToDate`: tarball never fetched, no restart, no event swap; `force=True` overrides
+- [x] Good update: overlay into `rules.new`, protected files untouched, temp conf validated, 3-step swap, old set in `rules.prev`, one `sensor.restart()`, state saved, `RulesUpdated(ok=True, rule_count, detail)` published
+- [x] Sensor STOPPED before the update: no restart, no health gate
+- [x] Returns an `UpdateReport` (outcome, rule_count, md5, skipped members)
+- [x] Verify: `uv run pytest tests/rules/test_update.py -q` (fake downloader, fake validator, fake sensor, real temp dirs)
 - Dependencies: Tasks 1-3 · Files: `service.py`, `tests/rules/rules_fakes.py`, `test_update.py`
 
 ## Task 5: Update failures and rollback (M)

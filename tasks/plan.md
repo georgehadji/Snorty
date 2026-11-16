@@ -35,7 +35,7 @@ mute/unmute/home-net, then the CLI and real-Snort checks. Stdlib only.
 
 ### Phase 2: Ports and update
 - [x] Task 3: ports, `UrllibDownloader`, `SnortValidator`, `RulesConfig`, state file
-- [ ] Task 4: `RulesService.update` happy path (stage, validate, swap, restart, state, event, up-to-date, stopped sensor)
+- [x] Task 4: `RulesService.update` happy path (stage, validate, swap, restart, state, event, up-to-date, stopped sensor)
 - [ ] Task 5: update failures and rollback (every step), concurrency lock
 
 ### Checkpoint: Update
