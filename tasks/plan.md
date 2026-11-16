@@ -30,10 +30,10 @@ Build `snorty.dashboard`: the one local web app that runs Snorty. Foundations fi
 - [x] Task 3: shared `compose.py`, `Services`, sensor CLI moved onto it
 
 ### Checkpoint: Foundations
-- [ ] Full unit suite green (sensor CLI included); ruff and strict mypy clean
+- [x] Full unit suite green (sensor CLI included); ruff and strict mypy clean
 
 ### Phase 2: Skeleton and first pages
-- [ ] Task 4: `build_app`, base template, vendored htmx, `/healthz`, Overview with sensor card and Start/Stop/Restart
+- [x] Task 4: `build_app`, base template, vendored htmx, `/healthz`, Overview with sensor card and Start/Stop/Restart
 - [ ] Task 5: Alerts page, rows fragment, filters, paging, hostile-text escaping
 - [ ] Task 6: live SSE (`/events`) for alert, sensor and rules fragments
 

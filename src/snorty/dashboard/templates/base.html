@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false}'>
+  <title>{% block title %}Snorty{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body hx-headers='{"X-Snorty-Token": "{{ token }}"}'>
+  <header class="top">
+    <a class="brand" href="/">Snorty</a>
+    <nav>
+      <a href="/"{% if active == "overview" %} aria-current="page"{% endif %}>Overview</a>
+      <a href="/alerts"{% if active == "alerts" %} aria-current="page"{% endif %}>Alerts</a>
+      <a href="/rules"{% if active == "rules" %} aria-current="page"{% endif %}>Rules</a>
+      <a href="/journal"{% if active == "journal" %} aria-current="page"{% endif %}>Journal</a>
+      <a href="/lab"{% if active == "lab" %} aria-current="page"{% endif %}>Lab</a>
+    </nav>
+  </header>
+  <main>
+    <noscript><p class="note">Live updates and buttons need JavaScript.</p></noscript>
+    {% block main %}{% endblock %}
+  </main>
+</body>
+</html>

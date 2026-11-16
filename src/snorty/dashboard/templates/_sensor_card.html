@@ -1,0 +1,18 @@
+<section id="sensor-card" class="card sensor {{ card.tone }}">
+  <div class="row">
+    <h2>Sensor</h2>
+    <span class="pill {{ card.tone }}">{{ card.state|capitalize }}</span>
+  </div>
+  <dl>
+    {% if card.interface %}<dt>Interface</dt><dd>{{ card.interface }}</dd>{% endif %}
+    {% if card.since %}<dt>Running since</dt><dd>{{ card.since }}</dd>{% endif %}
+    <dt>Alerts seen</dt><dd>{{ card.alerts_seen }}{% if card.last_alert %} (last {{ card.last_alert }}){% endif %}</dd>
+    {% if card.restarts %}<dt>Restarts</dt><dd>{{ card.restarts }}</dd>{% endif %}
+  </dl>
+  {% if card.error %}<p class="error">{{ card.error }}</p>{% endif %}
+  <div class="actions">
+    <button hx-post="/sensor/start" hx-target="#sensor-card" hx-swap="outerHTML"{% if not card.can_start %} disabled{% endif %}>Start</button>
+    <button hx-post="/sensor/stop" hx-target="#sensor-card" hx-swap="outerHTML"{% if not card.can_stop %} disabled{% endif %}>Stop</button>
+    <button hx-post="/sensor/restart" hx-target="#sensor-card" hx-swap="outerHTML"{% if not card.can_restart %} disabled{% endif %}>Restart</button>
+  </div>
+</section>

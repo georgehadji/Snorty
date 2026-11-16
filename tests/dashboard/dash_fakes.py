@@ -16,9 +16,16 @@ from snorty.sensor import SensorStatus, State
 T0 = datetime(2026, 11, 16, 12, 0, 0, tzinfo=UTC)
 
 
-def alert(sid: int = 2000001, *, msg: str = "test alert", priority: int = 1, n: int = 0) -> Alert:
+def alert(
+    sid: int = 2000001,
+    *,
+    msg: str = "test alert",
+    priority: int = 1,
+    ts: datetime = T0,
+    src_port: int | None = 4444,
+) -> Alert:
     return Alert(
-        ts=T0.replace(second=n % 60, minute=n // 60),
+        ts=ts,
         gid=1,
         sid=sid,
         rev=1,
@@ -27,9 +34,10 @@ def alert(sid: int = 2000001, *, msg: str = "test alert", priority: int = 1, n: 
         priority=priority,
         proto="TCP",
         src_ip="10.0.0.1",
-        src_port=4444,
+        src_port=src_port,
         dst_ip="10.0.0.2",
         dst_port=80,
+        raw=f"{sid}|{ts.isoformat()}|{msg}|{priority}",
     )
 
 

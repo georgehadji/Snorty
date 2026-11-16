@@ -28,16 +28,16 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. E
 - Dependencies: Task 1 · Files: `compose.py`, `services.py`, `sensor/__main__.py`, `dash_fakes.py`
 
 ### Checkpoint: Tasks 1-3
-- [ ] Unit suite green; `uv run ruff check src tests`; mypy on all strict modules clean; sensor CLI test file passes without edits
+- [x] Unit suite green; `uv run ruff check src tests`; mypy on all strict modules clean; sensor CLI test file passes without edits
 
 ## Task 4: app skeleton and Overview (L)
 `app.py`, `views.py`, `templates/base.html`, `overview.html`, `_sensor_card.html`, `static/htmx.min.js`, `static/app.css`, tests `test_dash_views.py`, `test_dash_routes.py`.
-- [ ] `build_app(services, *, token, port) -> FastAPI`: security middleware, Jinja2 env (autoescape on), static mount, `GET /healthz`, `GET /`, `POST /sensor/start|stop|restart`
-- [ ] htmx downloaded once from its official release, version pinned, SHA-256 recorded in a comment file `static/htmx.VERSION`; token set once on `<body hx-headers>`
-- [ ] `views.sensor_card(status)`: state, since, restarts, last error, which buttons are enabled per state (no `IllegalTransition` path reachable from the UI)
-- [ ] Overview: sensor card, counts last hour and today, top 5 rules today, last 10 alerts, placeholders for rules and journal summary
-- [ ] Tests: page 200 with content; each POST calls the service once; disabled buttons per state; missing token 403; bad Host 400
-- [ ] Verify: `uv run pytest tests/dashboard -q`
+- [x] `build_app(services, *, token, port) -> FastAPI`: security middleware, Jinja2 env (autoescape on), static mount, `GET /healthz`, `GET /`, `POST /sensor/start|stop|restart`
+- [x] htmx downloaded once from its official release, version pinned, SHA-256 recorded in a comment file `static/htmx.VERSION`; token set once on `<body hx-headers>`
+- [x] `views.sensor_card(status)`: state, since, restarts, last error, which buttons are enabled per state (no `IllegalTransition` path reachable from the UI)
+- [x] Overview: sensor card, counts last hour and today, top 5 rules today, last 10 alerts, placeholders for rules and journal summary
+- [x] Tests: page 200 with content; each POST calls the service once; disabled buttons per state; missing token 403; bad Host 400
+- [x] Verify: `uv run pytest tests/dashboard -q`
 - Dependencies: Tasks 2, 3 · Files: about 8 (templates and static count as one group), tests
 
 ## Task 5: Alerts page (M)

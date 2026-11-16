@@ -1,0 +1,12 @@
+{% for r in rows %}
+<tr class="p{{ r.priority }}">
+  <td class="mono">{{ r.time }}</td>
+  <td><span class="badge p{{ r.priority }}">P{{ r.priority }}</span></td>
+  <td title="{{ r.msg }}">{{ r.msg_short }}</td>
+  <td class="mono">{{ r.src }}</td>
+  <td class="mono">{{ r.dst }}</td>
+  <td class="mono">{{ r.sid }}</td>
+</tr>
+{% else %}
+<tr class="empty"><td colspan="6">No alerts yet.</td></tr>
+{% endfor %}
