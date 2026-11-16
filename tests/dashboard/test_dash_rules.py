@@ -222,3 +222,29 @@ def test_rules_page_survives_unreadable_snort_files(tmp_path: Path) -> None:
     assert r.status_code == 200
     assert "Could not read the Snort settings: Permission denied" in r.text
     assert "Update now" in r.text and "Muted rules" not in r.text
+
+
+def test_mute_for_one_host_passes_the_scope_on(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    r = c.post("/rules/mute/2001?track=by_src&ip=10.0.0.5", headers=POST)
+    assert r.status_code == 200
+    assert rules(s).calls == [("mute", 2001, "", True, "by_src", "10.0.0.5")]
+    c.post("/rules/unmute/2001?track=by_src&ip=10.0.0.5", headers=POST)
+    assert rules(s).calls[-1] == ("unmute", 2001, True, "by_src", "10.0.0.5")
+
+
+@pytest.mark.parametrize(
+    "query", ["track=by_src", "ip=10.0.0.5", "track=x&ip=10.0.0.5", "track=by_src&ip=junk"]
+)
+def test_a_bad_scope_gives_422_and_calls_nothing(tmp_path: Path, query: str) -> None:
+    c, s = make(tmp_path)
+    r = c.post(f"/rules/mute/2001?{query}", headers=POST)
+    assert r.status_code == 422 and rules(s).calls == []
+
+
+def test_the_muted_card_says_what_each_mute_applies_to(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    rules(s).muted_rules = [MutedRule(2001), MutedRule(2001, "", "by_dst", "10.0.0.0/24")]
+    t = c.get("/rules").text
+    assert "every host" in t and "destination" in t and "10.0.0.0/24" in t
+    assert "/rules/unmute/2001?view=rules&amp;track=by_dst&amp;ip=10.0.0.0/24" in t

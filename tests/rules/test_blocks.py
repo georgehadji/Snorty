@@ -134,3 +134,30 @@ def test_get_home_net_reads_current_value() -> None:
     assert get_home_net(CONF) == "[192.168.1.0/24]"
     with pytest.raises(ValueError):
         get_home_net("# ipvar HOME_NET any\n")
+
+
+def test_a_mute_for_one_host_round_trips_beside_the_global_one() -> None:
+    entries = [
+        MutedRule(7, "everyone"),
+        MutedRule(7, "just this host", "by_src", "10.0.0.5"),
+        MutedRule(7, "", "by_dst", "192.168.0.0/24"),
+    ]
+    text = apply_block("", entries)
+    assert "suppress gen_id 1, sig_id 7, track by_src, ip 10.0.0.5\n" in text
+    assert "# 7 by_src 10.0.0.5: just this host\n" in text
+    assert sorted(read_block(text), key=lambda m: m.key[1:] and str(m.key[1:])) == sorted(
+        entries, key=lambda m: m.key[1:] and str(m.key[1:])
+    )
+
+
+def test_old_files_without_a_scope_still_read() -> None:
+    text = f"{START}\n# 9: old note\nsuppress gen_id 1, sig_id 9\n{END}\n"
+    assert read_block(text) == [MutedRule(9, "old note")]
+
+
+@pytest.mark.parametrize("ip", ["not-an-ip", "10.0.0.1, 10.0.0.2", "[10.0.0.1]", "10.0.0.1/99"])
+def test_a_scope_must_be_one_address_or_network(ip: str) -> None:
+    with pytest.raises(ValueError):
+        MutedRule(1, "", "by_src", ip)
+    with pytest.raises(ValueError):
+        MutedRule(1, "", "by_src", None)

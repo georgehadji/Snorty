@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 
 from snorty.dashboard import views
 from snorty.dashboard.jobs import Done, Errored, Idle, Job, Running
-from snorty.dashboard.security import valid_home_net, valid_sid
+from snorty.dashboard.security import valid_home_net, valid_scope, valid_sid
 from snorty.dashboard.services import Svc
 from snorty.dashboard.ui import Ui
 from snorty.rules.service import EditReport, UpdateReport
@@ -69,24 +69,30 @@ def add_rules_routes(app: FastAPI, ui: Ui) -> None:
         return ui.flash(request, msg, **context)
 
     @app.post("/rules/mute/{sid}", response_class=HTMLResponse)
-    async def mute(request: Request, sid: str, svc: Svc) -> HTMLResponse:
+    async def mute(
+        request: Request, sid: str, svc: Svc, track: str = "", ip: str = ""
+    ) -> HTMLResponse:
         try:
             number = valid_sid(sid)
+            scope = valid_scope(track, ip)
         except ValueError as exc:
             return bad(request, exc)
         was_running = svc.sensor.state in (State.RUNNING, State.STARTING)
         latest = await asyncio.to_thread(svc.repo.query, sid=number, limit=1)
         note = latest[0].msg[:NOTE_MAX] if latest else ""
-        return edit_result(request, await svc.rules.mute(number, note), was_running)
+        return edit_result(request, await svc.rules.mute(number, note, **scope), was_running)
 
     @app.post("/rules/unmute/{sid}", response_class=HTMLResponse)
-    async def unmute(request: Request, sid: str, svc: Svc, view: str = "") -> HTMLResponse:
+    async def unmute(
+        request: Request, sid: str, svc: Svc, view: str = "", track: str = "", ip: str = ""
+    ) -> HTMLResponse:
         try:
             number = valid_sid(sid)
+            scope = valid_scope(track, ip)
         except ValueError as exc:
             return bad(request, exc)
         was_running = svc.sensor.state in (State.RUNNING, State.STARTING)
-        report = await svc.rules.unmute(number)
+        report = await svc.rules.unmute(number, **scope)
         extra = {"muted": await svc.rules.muted(), "oob": True} if view == "rules" else {}
         return edit_result(request, report, was_running, **extra)
 

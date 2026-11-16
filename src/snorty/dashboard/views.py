@@ -117,6 +117,8 @@ class AlertRow:
     src: str
     dst: str
     classification: str
+    src_ip: str = ""  # the address alone, for muting by host
+    dst_ip: str = ""
     iso: str = ""  # UTC timestamp, for relative time in the browser
     epoch: int = 0  # the same moment in seconds, for merging live alerts into a group
     key: str = ""  # alerts with the same key are the same repeating event
@@ -142,6 +144,8 @@ def alert_row(a: Alert, tz: tzinfo) -> AlertRow:
         src=endpoint(a.src_ip, a.src_port),
         dst=endpoint(a.dst_ip, a.dst_port),
         classification=a.classification or "",
+        src_ip=a.src_ip,
+        dst_ip=a.dst_ip,
         raw=a.raw,
         id=a.id,
         packet_filter=alert_filter(a) or "",

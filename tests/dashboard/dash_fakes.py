@@ -27,7 +27,7 @@ from snorty.packets import (
     Summary,
     SummaryResult,
 )
-from snorty.rules.blocks import MutedRule
+from snorty.rules.blocks import MutedRule, Track
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
 from snorty.sensor import SensorStatus, State
@@ -133,15 +133,26 @@ class FakeRules:
     async def muted(self) -> list[MutedRule]:
         return list(self.muted_rules)
 
-    async def mute(self, sid: int, note: str = "", *, restart: bool = True) -> EditReport:
-        self.calls.append(("mute", sid, note, restart))
-        if all(m.sid != sid for m in self.muted_rules):
-            self.muted_rules.append(MutedRule(sid, note))
+    async def mute(
+        self,
+        sid: int,
+        note: str = "",
+        *,
+        restart: bool = True,
+        track: Track | None = None,
+        ip: str | None = None,
+    ) -> EditReport:
+        self.calls.append(("mute", sid, note, restart) + ((track, ip) if track else ()))
+        rule = MutedRule(sid, note, track, ip)
+        if all(m.key != rule.key for m in self.muted_rules):
+            self.muted_rules.append(rule)
         return self.edit_report
 
-    async def unmute(self, sid: int, *, restart: bool = True) -> EditReport:
-        self.calls.append(("unmute", sid, restart))
-        self.muted_rules = [m for m in self.muted_rules if m.sid != sid]
+    async def unmute(
+        self, sid: int, *, restart: bool = True, track: Track | None = None, ip: str | None = None
+    ) -> EditReport:
+        self.calls.append(("unmute", sid, restart) + ((track, ip) if track else ()))
+        self.muted_rules = [m for m in self.muted_rules if m.key != (sid, track, ip)]
         return self.edit_report
 
     async def home_net(self) -> tuple[str, str]:

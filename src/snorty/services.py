@@ -19,7 +19,7 @@ from snorty.packets import (
     RecordResult,
     SummaryResult,
 )
-from snorty.rules.blocks import MutedRule
+from snorty.rules.blocks import MutedRule, Track
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
 from snorty.sensor import SensorStatus, State
@@ -45,9 +45,19 @@ class RulesPort(Protocol):
 
     async def muted(self) -> list[MutedRule]: ...
 
-    async def mute(self, sid: int, note: str = "", *, restart: bool = True) -> EditReport: ...
+    async def mute(
+        self,
+        sid: int,
+        note: str = "",
+        *,
+        restart: bool = True,
+        track: Track | None = None,
+        ip: str | None = None,
+    ) -> EditReport: ...
 
-    async def unmute(self, sid: int, *, restart: bool = True) -> EditReport: ...
+    async def unmute(
+        self, sid: int, *, restart: bool = True, track: Track | None = None, ip: str | None = None
+    ) -> EditReport: ...
 
     async def home_net(self) -> tuple[str, str]: ...
 

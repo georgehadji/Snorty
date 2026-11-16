@@ -133,3 +133,20 @@ async def test_mute_waits_for_a_running_update(tmp_path: Path) -> None:
     assert (await update).outcome == "updated"
     assert (await mute).changed
     assert [m.sid for m in await rig.service.muted()] == [4]
+
+
+async def test_one_rule_can_be_muted_for_a_host_and_for_everyone(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    await rig.service.mute(7, "all")
+    report = await rig.service.mute(7, "host", track="by_src", ip="10.0.0.5")
+    assert report.ok and "source 10.0.0.5" in report.detail
+    assert len(await rig.service.muted()) == 2
+    assert b"track by_src, ip 10.0.0.5" in threshold(rig)
+    assert (await rig.service.unmute(7, track="by_src", ip="10.0.0.5")).changed
+    assert await rig.service.muted() == [MutedRule(7, "all")]
+
+
+async def test_a_bad_scope_changes_nothing(tmp_path: Path) -> None:
+    rig = Rig(tmp_path)
+    report = await rig.service.mute(7, track="by_src", ip="nope")
+    assert not report.ok and threshold(rig) == ORIGINAL

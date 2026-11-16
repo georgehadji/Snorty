@@ -4,26 +4,43 @@ Read files with `newline=""` so line endings survive; every edit here touches on
 lines it owns and leaves all other bytes alone.
 """
 
+import ipaddress
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal, cast
+
+from snorty.core.models import Suppression
 
 START = "# >>> snorty managed: do not edit between these markers >>>"
 END = "# <<< snorty managed <<<"
 
 # Snort rejects a trailing comment on a suppress line, so a note is its own line above it.
-_ENTRY = re.compile(r"^suppress gen_id 1, sig_id (\d+)$")
-_NOTE = re.compile(r"^# (\d+): (.*)$")
+# `track`/`ip` narrow a mute to one source or destination (an address or a CIDR network).
+_ENTRY = re.compile(r"^suppress gen_id 1, sig_id (\d+)(?:, track (by_src|by_dst), ip (\S+))?$")
+_NOTE = re.compile(r"^# (\d+)(?: (by_src|by_dst) (\S+))?: (.*)$")
+
+type Track = Literal["by_src", "by_dst"]
 
 
 @dataclass(frozen=True, slots=True)
 class MutedRule:
     sid: int
     note: str = ""
+    track: Track | None = None  # None: mute the rule for every host
+    ip: str | None = None
 
     def __post_init__(self) -> None:
         if self.sid < 1:
             raise ValueError(f"SID must be positive, got {self.sid}")
+        if (self.track is None) != (self.ip is None):
+            raise ValueError("track and ip must be given together")
+        if self.ip is not None:  # one address or network, never a list: Snort's lists need brackets
+            ipaddress.ip_network(self.ip, strict=False)
+
+    @property
+    def key(self) -> tuple[int, Track | None, str | None]:
+        return self.sid, self.track, self.ip
 
 
 def _eol(text: str) -> str:
@@ -50,25 +67,28 @@ def read_block(text: str) -> list[MutedRule]:
         return []
     out: list[MutedRule] = []
     inner = text[span[0] : span[1]].splitlines()[1:-1]
-    notes: dict[int, str] = {}
+    notes: dict[tuple[int, str | None, str | None], str] = {}
     for line in inner:
         if n := _NOTE.match(line):
-            notes[int(n[1])] = n[2]
+            notes[int(n[1]), n[2], n[3]] = n[4]
         elif m := _ENTRY.match(line):
-            out.append(MutedRule(int(m[1]), notes.get(int(m[1]), "")))
+            key = int(m[1]), m[2], m[3]
+            out.append(MutedRule(key[0], notes.get(key, ""), cast("Track | None", m[2]), m[3]))
         else:
             raise ValueError(f"unexpected line inside the managed block: {line!r}")
     return out
 
 
 def _render(entries: Sequence[MutedRule], eol: str) -> str:
-    by_sid = {e.sid: e for e in entries}  # last one wins
+    by_key = {e.key: e for e in entries}  # last one wins
     lines = [START]
-    for sid in sorted(by_sid):
-        note = " ".join(by_sid[sid].note.split())  # one line, no stray whitespace
+    for key in sorted(by_key, key=lambda k: (k[0], k[1] or "", k[2] or "")):
+        entry = by_key[key]
+        scope = f" {entry.track} {entry.ip}" if entry.track else ""
+        note = " ".join(entry.note.split())  # one line, no stray whitespace
         if note:
-            lines.append(f"# {sid}: {note}")
-        lines.append(f"suppress gen_id 1, sig_id {sid}")
+            lines.append(f"# {entry.sid}{scope}: {note}")
+        lines.append(Suppression(1, entry.sid, entry.track, entry.ip).to_threshold_line())
     lines.append(END)
     return eol.join(lines) + eol
 

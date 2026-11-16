@@ -1,12 +1,16 @@
 """Input checks and the local-only security shell (Host, Origin, token, headers)."""
 
 import hmac
+import ipaddress
 import logging
 import re
 import secrets
+from typing import TypedDict, cast
 from urllib.parse import parse_qs
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from snorty.rules.blocks import Track
 
 log = logging.getLogger(__name__)
 TOKEN_HEADER = "x-snorty-token"
@@ -38,6 +42,25 @@ def valid_sid(text: str) -> int:
     if not 0 < value <= _MAX_SID:
         raise ValueError("sid must be a positive whole number")
     return value
+
+
+class MuteScope(TypedDict, total=False):
+    """Keyword arguments that narrow a mute to one host; empty means every host."""
+
+    track: Track
+    ip: str
+
+
+def valid_scope(track: str, ip: str) -> MuteScope:
+    if not track and not ip:
+        return {}
+    if track not in ("by_src", "by_dst"):
+        raise ValueError("scope must be by_src or by_dst")
+    try:  # one address or network: Snort's bracketed lists are not offered
+        ipaddress.ip_network(ip, strict=False)
+    except ValueError:
+        raise ValueError("ip must be an address or a network such as 10.0.0.0/24") from None
+    return {"track": cast(Track, track), "ip": ip}
 
 
 def valid_priority(text: str) -> int:

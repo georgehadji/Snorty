@@ -19,6 +19,7 @@ from snorty.core.events import RulesUpdated
 from snorty.rules.archive import count_rules, extract_rules, parse_md5, sanity_ok
 from snorty.rules.blocks import (
     MutedRule,
+    Track,
     apply_block,
     get_home_net,
     read_block,
@@ -51,6 +52,12 @@ class EditReport:
     ok: bool
     changed: bool
     detail: str
+
+
+def _label(sid: int, track: Track | None, ip: str | None) -> str:
+    return (
+        f"{sid} for {'source' if track == 'by_src' else 'destination'} {ip}" if track else str(sid)
+    )
 
 
 def read_text(path: Path) -> str:
@@ -236,17 +243,40 @@ class RulesService:
         text = await asyncio.to_thread(read_text, self._config.threshold_conf)
         return read_block(text)
 
-    async def mute(self, sid: int, note: str = "", *, restart: bool = True) -> EditReport:
+    async def mute(
+        self,
+        sid: int,
+        note: str = "",
+        *,
+        restart: bool = True,
+        track: Track | None = None,
+        ip: str | None = None,
+    ) -> EditReport:
+        """Mute a rule for everyone, or only for one source or destination (`track` and `ip`)."""
+        try:
+            rule = MutedRule(sid, note, track, ip)
+        except ValueError as e:
+            return EditReport(False, False, str(e))
+
         def edit(entries: list[MutedRule]) -> list[MutedRule]:
-            return [e for e in entries if e.sid != sid] + [MutedRule(sid, note)]
+            return [e for e in entries if e.key != rule.key] + [rule]
 
-        return await self._edit_threshold(edit, f"muted {sid}", restart)
+        return await self._edit_threshold(edit, f"muted {_label(sid, track, ip)}", restart)
 
-    async def unmute(self, sid: int, *, restart: bool = True) -> EditReport:
+    async def unmute(
+        self,
+        sid: int,
+        *,
+        restart: bool = True,
+        track: Track | None = None,
+        ip: str | None = None,
+    ) -> EditReport:
+        key = (sid, track, ip)
+
         def edit(entries: list[MutedRule]) -> list[MutedRule]:
-            return [e for e in entries if e.sid != sid]
+            return [e for e in entries if e.key != key]
 
-        return await self._edit_threshold(edit, f"unmuted {sid}", restart)
+        return await self._edit_threshold(edit, f"unmuted {_label(sid, track, ip)}", restart)
 
     async def home_net(self) -> tuple[str, str]:
         """(current value in snort.conf, the value `set_home_net()` would write)."""

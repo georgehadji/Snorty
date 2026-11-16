@@ -2,13 +2,14 @@
   <h2>Muted rules</h2>
   {% if muted %}
   <table>
-    <thead><tr><th scope="col">SID</th><th scope="col">Note</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+    <thead><tr><th scope="col">SID</th><th scope="col">Applies to</th><th scope="col">Note</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
     <tbody>
       {% for m in muted %}
       <tr>
         <td class="mono">{{ m.sid }}</td>
+        <td>{% if m.track %}{{ "source" if m.track == "by_src" else "destination" }} <span class="mono">{{ m.ip }}</span>{% else %}every host{% endif %}</td>
         <td>{{ m.note }}</td>
-        <td><button class="small" hx-post="/rules/unmute/{{ m.sid }}?view=rules" hx-target="#flash" hx-swap="outerHTML">Unmute</button></td>
+        <td><button class="small" hx-post="/rules/unmute/{{ m.sid }}?view=rules{% if m.track %}&amp;track={{ m.track }}&amp;ip={{ m.ip|urlencode }}{% endif %}" hx-target="#flash" hx-swap="outerHTML">Unmute</button></td>
       </tr>
       {% endfor %}
     </tbody>
