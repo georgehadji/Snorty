@@ -174,3 +174,7 @@ Status: implemented. Criterion 14 was checked in the built-in browser in two par
 3. **Autostart of the sensor:** start Snort when the dashboard starts (`autostart_sensor = true`), or only when you press Start? Spec default: only when you press Start.
 4. **Rules update time:** daily at 03:00 local while the dashboard is open. Right, or another time, or manual only?
 5. **Port:** 8765 fine?
+
+## Alert retention
+
+The dashboard deletes alerts older than `retention_days` (default 90, `0` keeps everything; set in `snorty.toml`). It runs once at startup, because the PC is often off at night, and again daily at 03:30. This is the retention job that SPEC-sensor leaves to the dashboard. A failed delete is logged and the dashboard keeps running.

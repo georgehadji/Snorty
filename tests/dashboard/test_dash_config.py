@@ -13,6 +13,7 @@ def test_missing_file_gives_defaults(tmp_path: Path) -> None:
     cfg = load_config(tmp_path)
     assert cfg == DashConfig(data_dir=tmp_path)
     assert (cfg.port, cfg.rules_update_at, cfg.autostart_sensor) == (8765, "03:00", False)
+    assert cfg.retention_days == 90
 
 
 def test_file_values_are_read(tmp_path: Path) -> None:
@@ -47,6 +48,9 @@ def test_empty_update_time_disables_the_schedule(tmp_path: Path) -> None:
         "port = 70000",
         "port = true",
         "notify = 1",
+        "retention_days = -1",
+        'retention_days = "90"',
+        "retention_days = true",
         'rules_update_at = "25:00"',
         'rules_update_at = "3am"',
         "rules_update_at = 3",

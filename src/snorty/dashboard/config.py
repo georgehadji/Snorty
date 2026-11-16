@@ -26,6 +26,7 @@ class DashConfig:
     journal: bool = True
     autostart_sensor: bool = False
     rules_update_at: str = "03:00"  # local "HH:MM"; empty string disables the daily update
+    retention_days: int = 90  # alerts older than this are deleted; 0 keeps everything
 
 
 def default_data_dir() -> Path:
@@ -40,6 +41,9 @@ def _check(key: str, value: object) -> object:
     elif key in ("notify", "journal", "autostart_sensor"):
         if type(value) is not bool:
             raise ConfigError(f"{key} must be true or false")
+    elif key == "retention_days":
+        if type(value) is not int or not 0 <= value <= 36500:
+            raise ConfigError("retention_days must be a whole number from 0 to 36500")
     elif key in ("interface_ip", "vault"):
         if not isinstance(value, str):
             raise ConfigError(f"{key} must be text")

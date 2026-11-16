@@ -8,11 +8,13 @@ import logging.handlers
 import os
 import sys
 from collections.abc import Awaitable, Callable, Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI
 
 from snorty.compose import Runtime, compose
+from snorty.core.repository import AlertRepository
 from snorty.dashboard.app import build_app
 from snorty.dashboard.config import ConfigError, DashConfig, default_data_dir, load_config
 from snorty.dashboard.schedule import run_daily
@@ -78,6 +80,20 @@ def note_store(cfg: DashConfig) -> NoteStore | None:
     return VaultNoteStore(vault) if cfg.journal and vault else None
 
 
+async def prune_old(repo: AlertRepository, days: int) -> int:
+    """Delete alerts older than `days` days (0 keeps all). A failure is logged, not raised."""
+    if days <= 0:
+        return 0
+    try:
+        removed = await asyncio.to_thread(repo.prune, datetime.now(UTC) - timedelta(days=days))
+    except Exception:
+        log.exception("could not delete old alerts")
+        return 0
+    if removed:
+        log.info("deleted %d alerts older than %d days", removed, days)
+    return removed
+
+
 async def run(
     cfg: DashConfig, *, build: Build = compose, serve: Serve = serve_uvicorn, host: str = HOST
 ) -> int:
@@ -98,8 +114,16 @@ async def run(
     schedule = asyncio.create_task(
         run_daily(lambda: services.rules.update(), cfg.rules_update_at), name="rules-schedule"
     )
+    prune = asyncio.create_task(
+        run_daily(
+            lambda: prune_old(services.repo, cfg.retention_days),
+            "03:30" if cfg.retention_days else "",
+        ),
+        name="alert-prune",
+    )
     code = 0
     try:
+        await prune_old(services.repo, cfg.retention_days)  # the PC is often off at 03:30
         await runtime.start(sensor=cfg.autostart_sensor)
         print(f"Snorty dashboard: http://{HOST}:{cfg.port}/  (Ctrl+C to stop)", flush=True)
         await serve(app, host, cfg.port)
@@ -112,7 +136,8 @@ async def run(
         code = 1
     finally:
         schedule.cancel()
-        await asyncio.gather(schedule, return_exceptions=True)
+        prune.cancel()
+        await asyncio.gather(schedule, prune, return_exceptions=True)
         await runtime.stop()
         services.repo.close()
     return code

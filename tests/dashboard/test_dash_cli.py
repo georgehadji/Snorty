@@ -1,13 +1,15 @@
 import logging
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
-from dash_fakes import FakeSensor, make_services
+from dash_fakes import FakeSensor, alert, make_services
 from fastapi import FastAPI
 
 from snorty.compose import Runtime
-from snorty.dashboard.__main__ import HOST, LOG_NAME, main, run
+from snorty.core.repository import AlertRepository
+from snorty.dashboard.__main__ import HOST, LOG_NAME, main, prune_old, run
 from snorty.dashboard.config import DashConfig
 
 
@@ -169,3 +171,40 @@ def test_startup_prints_the_url_without_a_token(
     cli(tmp_path, rig, "--port", "9002")
     out = capsys.readouterr().out
     assert "http://127.0.0.1:9002/" in out and "token" not in out.lower()
+
+
+def seed(tmp_path: Path) -> None:
+    now = datetime.now(UTC)
+    repo = AlertRepository(tmp_path / "t.db")
+    repo.add(alert(sid=1, ts=now - timedelta(days=100)))
+    repo.add(alert(sid=2, ts=now - timedelta(days=1)))
+    repo.close()
+
+
+def stored_sids(tmp_path: Path) -> list[int]:
+    repo = AlertRepository(tmp_path / "t.db")
+    try:
+        return sorted(a.sid for a in repo.query(limit=10))
+    finally:
+        repo.close()
+
+
+def test_startup_deletes_alerts_older_than_the_retention(tmp_path: Path) -> None:
+    """Retention: the alert store must not grow without bound."""
+    seed(tmp_path)
+    assert cli(tmp_path, Rig(tmp_path)) == 0
+    assert stored_sids(tmp_path) == [2]
+
+
+def test_retention_zero_keeps_everything(tmp_path: Path) -> None:
+    seed(tmp_path)
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "snorty.toml").write_text("retention_days = 0\n", encoding="utf-8")
+    assert cli(tmp_path, Rig(tmp_path)) == 0
+    assert stored_sids(tmp_path) == [1, 2]
+
+
+async def test_a_failing_prune_is_logged_not_raised(tmp_path: Path) -> None:
+    repo = AlertRepository(tmp_path / "t.db")
+    repo.close()  # a closed connection makes prune raise
+    assert await prune_old(repo, 90) == 0
