@@ -50,7 +50,7 @@ mute/unmute/home-net, then the CLI and real-Snort checks. Stdlib only.
 
 ### Checkpoint: Complete
 - [x] Every Success Criteria box in SPEC-rules.md checked
-- [ ] Then the next module spec (notify, vault-journal or rule-lab)
+- [x] Then the next module spec (notify, vault-journal or rule-lab)
 
 ## Risks and Mitigations
 
