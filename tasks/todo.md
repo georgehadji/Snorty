@@ -69,8 +69,8 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. E
 
 ## Task 8: daily rules update (S)
 `schedule.py`, `test_dash_schedule.py`.
-- [ ] `run_daily(update, at, *, now, sleep)` fires once per local day at `HH:MM`; disabled when empty; never twice the same day (restart of the loop included); a failing update is logged and the loop continues; cancel exits cleanly
-- [ ] Verify: `uv run pytest tests/dashboard/test_dash_schedule.py -q`
+- [x] `run_daily(update, at, *, now, sleep)` fires once per local day at `HH:MM`; disabled when empty; never twice the same day (restart of the loop included); a failing update is logged and the loop continues; cancel exits cleanly
+- [x] Verify: `uv run pytest tests/dashboard/test_dash_schedule.py -q`
 - Dependencies: Task 1 · Files: `schedule.py`, test
 
 ## Task 9: Journal page (S)

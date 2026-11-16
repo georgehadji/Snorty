@@ -42,7 +42,7 @@ Build `snorty.dashboard`: the one local web app that runs Snorty. Foundations fi
 
 ### Phase 3: Remaining slices
 - [x] Task 7: Rules page (status, update now, mute/unmute, HOME_NET) with in-flight guard; Alerts-row Mute button
-- [ ] Task 8: daily rules-update schedule
+- [x] Task 8: daily rules-update schedule
 - [ ] Task 9: Journal page (small read-only `status()` on journal and notify services)
 - [ ] Task 10: Lab page (check, run, pcap list, upload, generate)
 
