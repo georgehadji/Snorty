@@ -50,7 +50,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
   font-variant-numeric: tabular-nums;
 }
 a { color: var(--accent); }
@@ -93,7 +93,10 @@ main { max-width: 1280px; margin: 0 auto; padding: var(--s4); }
 }
 .card.wide { margin-top: var(--s4); }
 h2 { margin: 0; font-size: 15px; font-weight: 600; }
-h3 { margin: var(--s4) 0 var(--s1); font-size: 13px; font-weight: 600; color: var(--muted); }
+h3 { margin: var(--s4) 0 var(--s1); font-size: 13px; font-weight: 600; }
+h1, h2, h3 { text-wrap: balance; }
+p { text-wrap: pretty; }
+.sub, .card p, .flash { max-width: 65ch; }
 .title { margin: 0 0 var(--s4); }
 .title h1 { margin: 0; font-size: 22px; font-weight: 600; line-height: 1.25; }
 .sub { margin: 2px 0 0; color: var(--muted); }
@@ -201,7 +204,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .error { color: var(--bad); margin: var(--s2) 0 0; word-break: break-word; }
 .muted { color: var(--muted); }
 .note { color: var(--warn); }
-.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; }
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 14px; }
 ol.plain { list-style: none; padding: 0; margin: 0; }
 ol.plain li { padding: 2px 0; }
 
@@ -212,6 +215,8 @@ th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--lin
 th { color: var(--muted); font-weight: 500; font-size: 12px; white-space: nowrap; }
 tbody tr:hover td { background: var(--hover); }
 td:nth-child(3) { word-break: break-word; }
+table.alerts th:nth-child(6), table.alerts td:nth-child(6) { text-align: right; }
+table.alerts td { line-height: 1.35; }
 /* Alert tables: keep times and addresses on one line and give the rule text room, so a narrow
    screen scrolls the table sideways instead of squeezing the rule into one letter per line. */
 table.alerts td.mono, table.alerts td.when { white-space: nowrap; }
