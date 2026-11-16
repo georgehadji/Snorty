@@ -15,14 +15,14 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 2: merge and NoteConflict (S)
 Same `render.py` (or `merge.py` if it grows).
-- [ ] `merge(existing, block, day)`: `None` gives frontmatter (`date`, `type: snort-journal`, `tags`, `ai-first: true`) + `# YYYY-MM-DD Snort journal` + block
-- [ ] One begin and one end marker in order: replace only between them; no markers: append after a blank line; broken markers (duplicate, one only, reversed): raise `NoteConflict`
-- [ ] User text and frontmatter byte for byte over 10 regenerations; identical result returns the same string
-- [ ] Verify: `uv run pytest tests/journal/test_journal_merge.py -q`
+- [x] `merge(existing, block, day)`: `None` gives frontmatter (`date`, `type: snort-journal`, `tags`, `ai-first: true`) + `# YYYY-MM-DD Snort journal` + block
+- [x] One begin and one end marker in order: replace only between them; no markers: append after a blank line; broken markers (duplicate, one only, reversed): raise `NoteConflict`
+- [x] User text and frontmatter byte for byte over 10 regenerations; identical result returns the same string
+- [x] Verify: `uv run pytest tests/journal/test_journal_merge.py -q`
 - Dependencies: Task 1 · Files: `render.py`, `tests/journal/test_journal_merge.py`
 
 ### Checkpoint: Tasks 1-2
-- [ ] Tests green; `uv run ruff check src tests`; mypy clean (add `snorty.journal.*` to the strict override in `pyproject.toml`)
+- [x] Tests green; `uv run ruff check src tests`; mypy clean (add `snorty.journal.*` to the strict override in `pyproject.toml`)
 
 ## Task 3: Port and adapters (M)
 `src/snorty/journal/ports.py`.

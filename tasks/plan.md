@@ -29,10 +29,10 @@ flag on the sensor CLI, then the manual real-vault check.
 
 ### Phase 1: Pure logic
 - [x] Task 1: `sanitize_cell` and `render`
-- [ ] Task 2: `merge` and `NoteConflict`
+- [x] Task 2: `merge` and `NoteConflict`
 
 ### Checkpoint: Pure logic
-- [ ] All unit tests green; ruff and strict mypy clean on `snorty.journal`
+- [x] All unit tests green; ruff and strict mypy clean on `snorty.journal`
 
 ### Phase 2: Port and service
 - [ ] Task 3: `NoteStore`, `VaultNoteStore`, `MemoryNoteStore`
