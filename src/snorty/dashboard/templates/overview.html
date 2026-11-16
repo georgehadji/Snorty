@@ -6,10 +6,10 @@
   {% include "_sensor_card.html" %}
   <section class="card">
     <h2>Alerts</h2>
-    <dl>
-      <dt>Last hour</dt><dd id="count-hour">{{ count_hour }}</dd>
-      <dt>Today</dt><dd id="count-today">{{ count_today }}</dd>
-    </dl>
+    <div class="stats">
+      <div><span class="stat" id="count-hour">{{ count_hour }}</span><span class="label">Last hour</span></div>
+      <div><span class="stat" id="count-today">{{ count_today }}</span><span class="label">Today</span></div>
+    </div>
     <h3>Top rules today</h3>
     <ol id="top-rules" class="plain">
       {% for t in top_rules %}<li><span class="mono">{{ t.sid }}</span> {{ t.msg }} <span class="muted">×{{ t.count }}</span></li>

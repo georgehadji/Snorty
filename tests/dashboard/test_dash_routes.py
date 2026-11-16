@@ -155,3 +155,20 @@ def test_static_files_are_served_locally(tmp_path: Path) -> None:
     html = c.get("/").text
     assert "http://" not in html.replace(f"http://127.0.0.1:{PORT}", "")
     assert "https://" not in html
+
+
+def test_every_page_header_shows_the_sensor_state(tmp_path: Path) -> None:
+    c, _ = make(tmp_path)
+    for path in ("/", "/alerts", "/rules", "/lab"):
+        html = c.get(path).text
+        assert 'id="top-status"' in html and "Sensor stopped" in html
+        assert 'id="live"' in html and "hidden" in html.split('id="live"')[1][:40]
+
+
+def test_repeated_alerts_show_one_row_with_a_count(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    for minute in range(3):
+        s.repo.add(alert(2001, msg="ping", ts=T0 + timedelta(minutes=minute)))
+    html = c.get("/alerts?range=all").text
+    assert html.count("data-alert") == 1 and "×3" in html
+    assert 'class="when"' in html and 'datetime="' in html

@@ -1,8 +1,8 @@
 """Pure view-models: turn domain objects into plain values the templates print."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass
-from datetime import datetime, timedelta, tzinfo
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta, tzinfo
 from urllib.parse import urlencode
 
 from snorty.core.models import Alert
@@ -99,6 +99,11 @@ class AlertRow:
     src: str
     dst: str
     classification: str
+    iso: str = ""  # UTC timestamp, for relative time in the browser
+    epoch: int = 0  # the same moment in seconds, for merging live alerts into a group
+    key: str = ""  # alerts with the same key are the same repeating event
+    count: int = 1  # how many alerts this row stands for
+    first_time: str = ""  # time of the oldest alert in a group
 
 
 def alert_row(a: Alert, tz: tzinfo) -> AlertRow:
@@ -113,7 +118,28 @@ def alert_row(a: Alert, tz: tzinfo) -> AlertRow:
         src=endpoint(a.src_ip, a.src_port),
         dst=endpoint(a.dst_ip, a.dst_port),
         classification=a.classification or "",
+        iso=a.ts.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        epoch=int(a.ts.timestamp()),
+        key=f"{a.sid}|{endpoint(a.src_ip, a.src_port)}|{endpoint(a.dst_ip, a.dst_port)}",
     )
+
+
+GROUP_GAP = timedelta(minutes=15)
+
+
+def group_rows(alerts: list[Alert], tz: tzinfo) -> list[AlertRow]:
+    """Newest-first alerts to rows; neighbours that repeat the same event become one row."""
+    rows: list[AlertRow] = []
+    last: Alert | None = None  # the oldest alert folded into rows[-1] so far
+    for a in alerts:
+        row = alert_row(a, tz)
+        prev = rows[-1] if rows else None
+        if prev and last and prev.key == row.key and last.ts - a.ts <= GROUP_GAP:
+            rows[-1] = replace(prev, count=prev.count + 1, first_time=row.time)
+        else:
+            rows.append(row)
+        last = a
+    return rows
 
 
 @dataclass(frozen=True, slots=True)

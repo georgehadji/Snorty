@@ -12,7 +12,14 @@ from snorty.services import Services
 
 def fill(s: Services, n: int, *, sid: int = 2001, priority: int = 1) -> None:
     s.repo.add_many(
-        alert(sid, msg=f"alert {i}", priority=priority, ts=NOW - timedelta(minutes=i + 1))
+        # a new source port each time keeps neighbours from collapsing into one counted row
+        alert(
+            sid,
+            msg=f"alert {i}",
+            priority=priority,
+            ts=NOW - timedelta(minutes=i + 1),
+            src_port=4000 + i,
+        )
         for i in range(n)
     )
 

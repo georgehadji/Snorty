@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, timedelta, timezone
 
 import pytest
@@ -8,6 +9,7 @@ from snorty.dashboard.views import (
     edit_message,
     endpoint,
     fmt_time,
+    group_rows,
     rules_summary,
     sensor_card,
     update_message,
@@ -113,3 +115,18 @@ def test_update_message_per_outcome() -> None:
     assert update_message(UpdateReport("up_to_date", 5, "x", 0, "same md5")).ok
     failed = update_message(UpdateReport("failed", None, None, 0, "no network"))
     assert (failed.ok, failed.text) == (False, "Update failed: no network")
+
+
+def test_neighbouring_repeats_collapse_into_one_counted_row() -> None:
+    base = alert(1000001, priority=3)
+    older = [replace(base, ts=base.ts - timedelta(minutes=m)) for m in (1, 2)]
+    rows = group_rows([base, *older], UTC)
+    assert [(r.count, r.sid) for r in rows] == [(3, 1000001)]
+    assert rows[0].first_time == fmt_time(older[-1].ts, UTC)
+
+
+def test_a_different_event_or_a_long_gap_starts_a_new_row() -> None:
+    base = alert(1000001)
+    other = replace(base, ts=base.ts - timedelta(minutes=1), src_ip="9.9.9.9")
+    late = replace(base, ts=base.ts - timedelta(hours=2))
+    assert [r.count for r in group_rows([base, other, late], UTC)] == [1, 1, 1]

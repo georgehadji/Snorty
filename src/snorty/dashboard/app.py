@@ -46,7 +46,7 @@ def _overview_data(svc: Services, now: datetime) -> dict[str, Any]:
         "count_hour": svc.repo.count(since=now - timedelta(hours=1)),
         "count_today": sum(n for _, n in today),
         "top_rules": top,
-        "rows": [views.alert_row(a, svc.tz) for a in svc.repo.query(limit=10)],
+        "rows": views.group_rows(svc.repo.query(limit=10), svc.tz),
     }
 
 
@@ -61,7 +61,7 @@ def _alert_page(
         limit=views.PAGE_SIZE + 1,
         offset=(f.page - 1) * views.PAGE_SIZE,
     )
-    rows = [views.alert_row(a, svc.tz) for a in found[: views.PAGE_SIZE]]
+    rows = views.group_rows(found[: views.PAGE_SIZE], svc.tz)
     return rows, f.query_string(f.page + 1) if len(found) > views.PAGE_SIZE else None
 
 
@@ -89,6 +89,9 @@ def build_app(
     app.mount("/static", StaticFiles(directory=_HERE / "static"), name="static")
     templates = Jinja2Templates(directory=_HERE / "templates")
     templates.env.globals["token"] = token
+    templates.env.globals["sensor_status"] = lambda: views.sensor_card(
+        services.sensor.status(), services.tz
+    )
     ui = Ui(templates)
     page, fragment = ui.page, ui.fragment
 

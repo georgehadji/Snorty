@@ -22,6 +22,9 @@ document.addEventListener("htmx:beforeSwap", (event) => {
     if (window.htmx) window.htmx.process(el);
   };
 
+  const TONES = ["ok", "warn", "bad", "idle"];
+  const GROUP_GAP = 15 * 60;  // seconds; keep in step with views.GROUP_GAP
+
   function swapById(html) {
     const incoming = parse(html).firstElementChild;
     const current = incoming && document.getElementById(incoming.id);
@@ -30,27 +33,101 @@ document.addEventListener("htmx:beforeSwap", (event) => {
     activate(incoming);
   }
 
+  // The header shows the sensor state on every page; the sensor card carries the new one.
+  function updateStatus(html) {
+    const pill = parse(html).querySelector(".pill");
+    const top = document.getElementById("top-status");
+    if (!pill || !top) return;
+    top.classList.remove(...TONES);
+    top.classList.add(...TONES.filter((c) => pill.classList.contains(c)));
+    top.querySelector(".txt").textContent = `Sensor ${pill.textContent.trim().toLowerCase()}`;
+  }
+
+  function relative(iso) {
+    const secs = (Date.now() - Date.parse(iso)) / 1000;
+    if (!(secs >= 0) || secs >= 86400) return null;
+    if (secs < 45) return "just now";
+    if (secs < 3600) return `${Math.round(secs / 60)} min ago`;
+    return `${Math.floor(secs / 3600)} h ago`;
+  }
+  function refreshTimes() {
+    document.querySelectorAll("td.when time").forEach((el) => {
+      const text = relative(el.dateTime);
+      if (text) el.textContent = text;
+    });
+  }
+
+  function flash(tr) {
+    tr.classList.remove("fresh");
+    void tr.offsetWidth;  // restart the animation
+    tr.classList.add("fresh");
+  }
+
+  // A repeat of the newest row's event grows its counter instead of adding a row.
+  function mergeInto(top, tr) {
+    const count = Number(top.dataset.count || 1) + Number(tr.dataset.count || 1);
+    top.dataset.count = String(count);
+    top.dataset.epoch = tr.dataset.epoch;
+    const when = top.querySelector("td.when time");
+    const next = tr.querySelector("td.when time");
+    when.dateTime = next.dateTime;
+    when.title = next.title;
+    when.textContent = next.textContent;
+    let badge = top.querySelector(".count");
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "count";
+      top.children[2].append(" ", badge);
+    }
+    badge.textContent = `×${count}`;
+    flash(top);
+  }
+
   function addRows(html) {
     if (!rows) return;
-    const fresh = [...parse(html).children];
     const none = rows.querySelector("tr.none");
     if (none) none.remove();
-    rows.prepend(...fresh);
-    fresh.forEach(activate);
+    for (const tr of [...parse(html).children].reverse()) {
+      const top = rows.querySelector("tr[data-alert]");
+      const close = top && Number(tr.dataset.epoch) - Number(top.dataset.epoch) <= GROUP_GAP;
+      if (top && close && top.dataset.key === tr.dataset.key) {
+        mergeInto(top, tr);
+      } else {
+        rows.prepend(tr);
+        activate(tr);
+        flash(tr);
+      }
+    }
     rows.querySelectorAll("tr[data-alert]").forEach((tr, i) => {
       if (i >= MAX_ROWS) tr.remove();
     });
+    refreshTimes();
+  }
+
+  function setLive(on) {
+    const el = document.getElementById("live");
+    if (!el) return;
+    el.hidden = false;
+    el.dataset.live = on ? "on" : "off";
+    el.querySelector(".txt").textContent = on ? "Live" : "Paused";
   }
 
   function connect() {
     if (source) source.close();
     const query = form ? new URLSearchParams(new FormData(form)).toString() : "";
     source = new EventSource(query ? `/events?${query}` : "/events");
+    source.addEventListener("open", () => setLive(true));
+    source.addEventListener("error", () => setLive(false));
     source.addEventListener("alert", (e) => addRows(e.data));
-    source.addEventListener("sensor", (e) => swapById(e.data));
+    source.addEventListener("sensor", (e) => {
+      updateStatus(e.data);
+      swapById(e.data);
+    });
     source.addEventListener("rules", (e) => swapById(e.data));
   }
 
+  refreshTimes();
+  setInterval(refreshTimes, 30000);
   if (window.EventSource) connect();
   if (form) {
     form.addEventListener("change", connect);

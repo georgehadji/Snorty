@@ -11,8 +11,8 @@
   </dl>
   {% if card.error %}<p class="error">{{ card.error }}</p>{% endif %}
   <div class="actions">
-    <button hx-post="/sensor/start" hx-target="#sensor-card" hx-swap="outerHTML"{% if not card.can_start %} disabled{% endif %}>Start</button>
-    <button hx-post="/sensor/stop" hx-target="#sensor-card" hx-swap="outerHTML"{% if not card.can_stop %} disabled{% endif %}>Stop</button>
+    <button class="primary" hx-post="/sensor/start" hx-target="#sensor-card" hx-swap="outerHTML"{% if not card.can_start %} disabled{% endif %}>Start</button>
+    <button class="danger" hx-post="/sensor/stop" hx-target="#sensor-card" hx-swap="outerHTML"{% if not card.can_stop %} disabled{% endif %}>Stop</button>
     <button hx-post="/sensor/restart" hx-target="#sensor-card" hx-swap="outerHTML"{% if not card.can_restart %} disabled{% endif %}>Restart</button>
   </div>
 </section>
