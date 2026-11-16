@@ -1,6 +1,7 @@
 """Watches the event bus and shows a toast for each alert worth interrupting you for."""
 
 import asyncio
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -12,6 +13,8 @@ from snorty.notify.ports import Notifier
 from snorty.notify.throttle import Throttle
 from snorty.notify.toast import build_toast
 
+log = logging.getLogger("snorty.notify")
+
 
 @dataclass(frozen=True, slots=True)
 class NotifyConfig:
@@ -20,6 +23,7 @@ class NotifyConfig:
     cap: int = 6  # toasts per cap_window across all SIDs
     cap_window: float = 60.0
     tz: tzinfo = UTC  # zone for the time shown in the toast
+    show_timeout: float = 15.0  # a notifier that takes longer is abandoned
 
 
 class NotifyService:
@@ -41,6 +45,8 @@ class NotifyService:
 
     async def start(self) -> None:
         """Subscribe, then start consuming. Events published after this returns are seen."""
+        if self._task is not None:
+            return
         self._sub = self._bus.subscribe(maxsize=1000)
         self._task = asyncio.create_task(self._consume(self._sub), name="notify-consumer")
 
@@ -55,7 +61,10 @@ class NotifyService:
     async def _consume(self, sub: Subscription) -> None:
         async for event in sub:
             if isinstance(event, AlertRaised):
-                await self._handle(event)
+                try:
+                    await self._handle(event)
+                except Exception:  # the consumer must outlive any single bad alert
+                    log.exception("could not handle alert SID %s", event.alert.sid)
 
     async def _handle(self, event: AlertRaised) -> None:
         alert = event.alert
@@ -64,6 +73,5 @@ class NotifyService:
         decision = self._throttle.decide(alert.sid, self._clock())
         if not decision.show:
             return
-        await self._notifier.show(
-            build_toast(alert, decision.same_sid, decision.other, self._config.tz)
-        )
+        toast = build_toast(alert, decision.same_sid, decision.other, self._config.tz)
+        await asyncio.wait_for(self._notifier.show(toast), self._config.show_timeout)
