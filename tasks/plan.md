@@ -30,10 +30,10 @@ the manual run.
 ### Phase 1: Pure logic
 - [x] Task 1: `lint` (rules, problems, caps)
 - [x] Task 2: `build_lab_conf`
-- [ ] Task 3: pcap generator (`build_pcap`, `tcp_packet`, `udp_packet`, handshake)
+- [x] Task 3: pcap generator (`build_pcap`, `tcp_packet`, `udp_packet`, handshake)
 
 ### Checkpoint: Pure logic
-- [ ] All unit tests green; ruff and strict mypy clean on `snorty.lab`
+- [x] All unit tests green; ruff and strict mypy clean on `snorty.lab`
 
 ### Phase 2: Pipeline and sandbox
 - [ ] Task 4: models, `summarize`, `LabService` pipeline with a fake `Runner`

@@ -24,16 +24,16 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 3: pcap generator (M)
 `src/snorty/lab/pcapgen.py`.
-- [ ] `build_pcap(frames: Sequence[bytes], start: float = 0.0, step: float = 0.001) -> bytes`: classic libpcap, little-endian, Ethernet link type, snaplen 65535
-- [ ] `tcp_packet(src, sport, dst, dport, payload, *, seq, ack, flags)` and `udp_packet(...)`: Ethernet + IPv4 + TCP/UDP frames; IP header checksum correct; payload kept byte for byte
-- [ ] `tcp_session(src, sport, dst, dport, payload, handshake)` gives the frame list: payload only, or SYN, SYN-ACK, ACK, then data; `count` copies option on the data packet
-- [ ] Tests read the result back with a small reader in the test file (global header, record headers, frame lengths, IP/TCP/UDP fields, payload)
-- [ ] Rejects invalid IPs and ports with `ValueError`
-- [ ] Verify: `uv run pytest tests/lab/test_lab_pcapgen.py -q`
+- [x] `build_pcap(frames: Sequence[bytes], start: float = 0.0, step: float = 0.001) -> bytes`: classic libpcap, little-endian, Ethernet link type, snaplen 65535
+- [x] `tcp_packet(src, sport, dst, dport, payload, *, seq, ack, flags)` and `udp_packet(...)`: Ethernet + IPv4 + TCP/UDP frames; IP header checksum correct; payload kept byte for byte
+- [x] `tcp_session(src, sport, dst, dport, payload, handshake)` gives the frame list: payload only, or SYN, SYN-ACK, ACK, then data; `count` copies option on the data packet
+- [x] Tests read the result back with a small reader in the test file (global header, record headers, frame lengths, IP/TCP/UDP fields, payload)
+- [x] Rejects invalid IPs and ports with `ValueError`
+- [x] Verify: `uv run pytest tests/lab/test_lab_pcapgen.py -q`
 - Dependencies: none · Files: `pcapgen.py`, `tests/lab/test_lab_pcapgen.py`
 
 ### Checkpoint: Tasks 1-3
-- [ ] Tests green; `uv run ruff check src tests`; `uv run mypy src/snorty/core src/snorty/snort src/snorty/sensor src/snorty/rules src/snorty/notify src/snorty/journal src/snorty/lab` clean
+- [x] Tests green; `uv run ruff check src tests`; `uv run mypy src/snorty/core src/snorty/snort src/snorty/sensor src/snorty/rules src/snorty/notify src/snorty/journal src/snorty/lab` clean
 
 ## Task 4: Models, summarize, pipeline (L)
 `models.py`, `service.py`, `tests/lab/lab_fakes.py`. Read `snorty.snort.service.check_config`, `run_pcap`, `pick_interface` first; adapt only if needed (with a test in `tests/snort`).
