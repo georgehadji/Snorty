@@ -17,6 +17,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from snorty.core.events import AlertRaised, Event, SensorStateChanged
 from snorty.dashboard import views
+from snorty.dashboard.capture_routes import add_capture_routes
 from snorty.dashboard.journal_routes import add_journal_routes
 from snorty.dashboard.lab_routes import add_lab_routes
 from snorty.dashboard.packets_routes import add_packets_routes
@@ -190,5 +191,6 @@ def build_app(
     add_rules_routes(app, ui)
     add_journal_routes(app, ui)
     add_lab_routes(app, ui)
+    add_capture_routes(app, ui)
     add_packets_routes(app, ui)
     return app

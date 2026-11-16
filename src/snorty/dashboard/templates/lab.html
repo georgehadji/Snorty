@@ -36,6 +36,19 @@
     </form>
   </section>
   <section class="card">
+    <h2>Record traffic</h2>
+    {% if can_record %}
+    <p class="muted">Records the adapter Snort is watching with Wireshark dumpcap, for 5 to 120 seconds or 50 MB, whichever comes first, and saves a pcap you can run rules against. Snort captures on the same adapter, so this doubles the capture work while it runs. The traffic stays on this PC.</p>
+    <form class="stack" hx-post="/lab/capture" hx-target="#capture-status" hx-swap="outerHTML">
+      <label>Seconds <input name="seconds" value="10" inputmode="numeric" required></label>
+      <button type="submit">Record</button>
+    </form>
+    <div id="capture-status" role="status" hx-get="/lab/capture/status" hx-trigger="load" hx-swap="outerHTML"></div>
+    {% else %}
+    <p class="muted">Recording needs Wireshark (dumpcap). Install it, or set wireshark_dir in snorty.toml.</p>
+    {% endif %}
+  </section>
+  <section class="card">
     <h2>Upload a pcap</h2>
     <p class="muted">Classic .pcap files up to 50 MB. They are saved in the Snorty data folder.</p>
     <input type="file" id="pcap-upload" accept=".pcap" aria-label="Pcap file to upload">

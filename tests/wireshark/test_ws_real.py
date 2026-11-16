@@ -149,3 +149,25 @@ async def test_real_tshark_finds_dns_sni_and_http_names(tmp_path: Path) -> None:
         result = await TsharkDecoder(TSHARK).decode(pcap, limit=1)
         assert isinstance(result, Decoded)
         assert hint(result.packets[0]) == expected
+
+
+async def test_real_dumpcap_records_a_short_capture_without_admin(tmp_path: Path) -> None:
+    import re
+    import subprocess
+
+    from snorty.packets import Recorded
+    from snorty.packets.pcapfile import read_pcap
+    from snorty.wireshark import DumpcapRecorder
+
+    dumpcap = find_tools(env=os.environ).dumpcap
+    if dumpcap is None:
+        pytest.skip("dumpcap is not installed")
+    listing = subprocess.run([str(dumpcap), "-D"], capture_output=True, text=True, check=False)
+    found = re.search(r"\d+\. (\S*NPF_\{[0-9A-Fa-f-]{36}\})", listing.stdout)
+    if found is None:
+        pytest.skip("dumpcap lists no capture adapter")
+    target = tmp_path / "c.tmp"
+    result = await DumpcapRecorder(dumpcap).record(found[1], 2, target)
+    assert isinstance(result, Recorded) and result.size >= 24
+    parsed = read_pcap(target.read_bytes())
+    assert parsed is not None and not parsed.truncated

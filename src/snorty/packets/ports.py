@@ -3,7 +3,13 @@
 from pathlib import Path
 from typing import Protocol
 
-from snorty.packets.models import DecodeResult, LaunchResult, SummaryResult, Unavailable
+from snorty.packets.models import (
+    DecodeResult,
+    LaunchResult,
+    RecordResult,
+    SummaryResult,
+    Unavailable,
+)
 
 NOT_FOUND = (
     "Wireshark (tshark) was not found. Install Wireshark, or set wireshark_dir in snorty.toml."
@@ -44,3 +50,21 @@ class NoViewer:
 
     async def open(self, pcap: Path) -> LaunchResult:
         return Unavailable(NOT_FOUND_VIEWER)
+
+
+NOT_FOUND_RECORDER = (
+    "Wireshark (dumpcap) was not found. Install Wireshark, or set wireshark_dir in snorty.toml."
+)
+
+
+class Recorder(Protocol):
+    """Records live traffic from a network adapter into a pcap for a fixed number of seconds."""
+
+    async def record(self, device: str, seconds: int, target: Path) -> RecordResult: ...
+
+
+class NoRecorder:
+    """Used when the recorder is not installed."""
+
+    async def record(self, device: str, seconds: int, target: Path) -> RecordResult:
+        return Unavailable(NOT_FOUND_RECORDER)

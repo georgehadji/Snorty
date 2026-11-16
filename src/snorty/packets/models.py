@@ -81,7 +81,18 @@ class Failed:
     message: str
 
 
+CAPTURE_MIN_SECONDS = 5
+CAPTURE_MAX_SECONDS = 120
+CAPTURE_MAX_KB = 50_000  # a capture stops at this size, under the 50 MB pcap limit
+
+
+@dataclass(frozen=True, slots=True)
+class Recorded:
+    size: int  # bytes written; 24 means the header only, no packet arrived
+
+
 DecodeResult = Decoded | Unavailable | Failed
+RecordResult = Recorded | Unavailable | Failed
 SummaryResult = Summary | Unavailable | Failed
 
 
@@ -117,3 +128,4 @@ LaunchResult = Launched | Unavailable | Failed
 class Capabilities:
     decode: bool
     open: bool = False
+    record: bool = False

@@ -22,6 +22,8 @@ from snorty.packets import (
     Layer,
     PacketView,
     ProtocolRow,
+    Recorded,
+    RecordResult,
     Summary,
     SummaryResult,
 )
@@ -191,6 +193,10 @@ class FakePackets:
         self.alert_calls: list[Alert] = []
         self.open_calls: list[Alert] = []
         self.can_open = True
+        self.can_record = True
+        self.recorded: list[tuple[str, int]] = []
+        self.record_result: RecordResult = Recorded(2048)
+        self.record_gate: asyncio.Event | None = None  # set it to hold a capture open
         self.launch: LaunchResult = Launched()
         self.summary: SummaryResult = Summary(
             (ProtocolRow("frame", 0, 3, 229), ProtocolRow("tcp", 1, 2, 154)),
@@ -215,7 +221,16 @@ class FakePackets:
         self.packet: AlertPacketResult = AlertPacket("exact", 1, b"PCAPDATA", self.result)
 
     def capabilities(self) -> Capabilities:
-        return Capabilities(decode=True, open=self.can_open)
+        return Capabilities(decode=True, open=self.can_open, record=self.can_record)
+
+    async def record(self, device: str, seconds: int, target: Path) -> RecordResult:
+        self.recorded.append((device, seconds))
+        if self.record_gate is not None:
+            target.write_bytes(b"partial")
+            await self.record_gate.wait()
+        if isinstance(self.record_result, Recorded):
+            target.write_bytes(b"\xd4\xc3\xb2\xa1" + bytes(max(0, self.record_result.size - 4)))
+        return self.record_result
 
     async def alert_packet(self, alert: Alert) -> AlertPacketResult:
         self.alert_calls.append(alert)

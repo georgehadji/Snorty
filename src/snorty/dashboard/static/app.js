@@ -1,6 +1,7 @@
-// htmx does not swap 4xx responses by default. Our 422 answers carry an inline message, so show them.
+// htmx does not swap 4xx responses by default. Our 422 (bad input) and 409 (not possible right now)
+// answers carry an inline message, so show them.
 document.addEventListener("htmx:beforeSwap", (event) => {
-  if (event.detail.xhr.status === 422) {
+  if (event.detail.xhr.status === 422 || event.detail.xhr.status === 409) {
     event.detail.shouldSwap = true;
     event.detail.isError = false;
   }

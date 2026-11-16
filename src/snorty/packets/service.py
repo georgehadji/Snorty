@@ -14,6 +14,8 @@ from snorty.core.models import Alert
 from snorty.packets.logs import candidate_logs, read_log
 from snorty.packets.match import NEAR_WITHIN_US, Located, alert_us, locate
 from snorty.packets.models import (
+    CAPTURE_MAX_SECONDS,
+    CAPTURE_MIN_SECONDS,
     AlertPacket,
     AlertPacketResult,
     Capabilities,
@@ -22,12 +24,13 @@ from snorty.packets.models import (
     Failed,
     LaunchResult,
     NotFound,
+    RecordResult,
     Summary,
     SummaryResult,
     Unavailable,
 )
 from snorty.packets.pcapfile import write_pcap
-from snorty.packets.ports import Decoder, NoDecoder, NoViewer, Viewer
+from snorty.packets.ports import Decoder, NoDecoder, NoRecorder, NoViewer, Recorder, Viewer
 
 _Key = tuple[str, int, int, int]  # path, size, mtime in ns, packet limit (0 for a summary)
 SCRATCH_KEEP_SECONDS = 24 * 3600
@@ -54,6 +57,7 @@ class PacketService:
         self,
         decoder: Decoder,
         viewer: Viewer | None = None,
+        recorder: Recorder | None = None,
         *,
         snort_logs: Path | None = None,
         scratch: Path | None = None,
@@ -62,6 +66,7 @@ class PacketService:
     ) -> None:
         self._decoder = decoder
         self._viewer: Viewer = viewer or NoViewer()
+        self._recorder: Recorder = recorder or NoRecorder()
         self._logs = snort_logs
         self._scratch = scratch
         self._decoded = _Lru[_Key, Decoded](cache_size)
@@ -73,6 +78,7 @@ class PacketService:
         return Capabilities(
             decode=not isinstance(self._decoder, NoDecoder),
             open=not isinstance(self._viewer, NoViewer),
+            record=not isinstance(self._recorder, NoRecorder),
         )
 
     async def decode(self, pcap: Path, limit: int = 200) -> DecodeResult:
@@ -82,6 +88,14 @@ class PacketService:
 
     async def summarize(self, pcap: Path) -> SummaryResult:
         return await self._cached(self._summaries, pcap, 0, lambda: self._decoder.summarize(pcap))
+
+    async def record(self, device: str, seconds: int, target: Path) -> RecordResult:
+        """Capture live traffic from `device` into `target`, for a time inside the allowed range."""
+        if not CAPTURE_MIN_SECONDS <= seconds <= CAPTURE_MAX_SECONDS:
+            return Failed(
+                f"Capture time must be {CAPTURE_MIN_SECONDS} to {CAPTURE_MAX_SECONDS} seconds."
+            )
+        return await self._recorder.record(device, seconds, target)
 
     async def alert_packet(self, alert: Alert) -> AlertPacketResult:
         """The packet an alert was raised on, from Snort's own log, with how sure the match is."""

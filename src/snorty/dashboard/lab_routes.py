@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 
 from snorty.dashboard import pcaps, views
-from snorty.dashboard.jobs import Job
+from snorty.dashboard.jobs import Done, Errored, Idle, Job, Running
 from snorty.dashboard.services import Svc
 from snorty.dashboard.ui import Ui, read_body
 from snorty.lab.lint import MAX_BYTES as RULES_MAX_BYTES
@@ -35,7 +35,13 @@ def add_lab_routes(app: FastAPI, ui: Ui) -> None:
 
     @app.get("/lab", response_class=HTMLResponse)
     async def lab_page(request: Request, svc: Svc) -> HTMLResponse:
-        return ui.page(request, "lab.html", pcaps=pcaps.list_pcaps(svc.pcap_dir), selected="")
+        return ui.page(
+            request,
+            "lab.html",
+            pcaps=pcaps.list_pcaps(svc.pcap_dir),
+            selected="",
+            can_record=svc.packets.capabilities().record,
+        )
 
     async def start(request: Request, svc: Svc, *, run: bool) -> HTMLResponse:
         try:
@@ -70,14 +76,18 @@ def add_lab_routes(app: FastAPI, ui: Ui) -> None:
 
     @app.get("/lab/status", response_class=HTMLResponse)
     async def status(request: Request, svc: Svc) -> HTMLResponse:
-        if job.running:
-            return running(request)
-        if job.error:
-            return ui.page(request, "_lab_result.html", state="error", error=job.error)
-        if job.result is None:
-            return ui.page(request, "_lab_result.html", state="idle")
-        lab = views.lab_view(job.result, svc.tz)
-        return ui.page(request, "_lab_result.html", state="done", lab=lab, pcap=last_pcap[0])
+        match job.state:
+            case Running():
+                return running(request)
+            case Errored(message=why):
+                return ui.page(request, "_lab_result.html", state="error", error=why)
+            case Done(result=result):
+                lab = views.lab_view(result, svc.tz)
+                return ui.page(
+                    request, "_lab_result.html", state="done", lab=lab, pcap=last_pcap[0]
+                )
+            case Idle():
+                return ui.page(request, "_lab_result.html", state="idle")
 
     def saved(request: Request, svc: Svc, name: str, what: str) -> HTMLResponse:
         msg = views.Message(True, f"{what} {name}.")

@@ -10,6 +10,7 @@ from pathlib import Path
 class Tools:
     tshark: Path | None = None
     wireshark: Path | None = None  # the program with a window, next to tshark
+    dumpcap: Path | None = None  # records live traffic, next to tshark
 
 
 def find_tools(
@@ -31,13 +32,14 @@ def find_tools(
             folders.append(Path(base) / "Wireshark")
     for folder in folders:
         if is_file(folder / "tshark.exe"):
-            return Tools(folder / "tshark.exe", _gui(folder, is_file))
+            return Tools(folder / "tshark.exe", *_beside(folder, is_file))
     found = which("tshark")
     if not found:
         return Tools()
-    return Tools(Path(found), _gui(Path(found).parent, is_file))
+    return Tools(Path(found), *_beside(Path(found).parent, is_file))
 
 
-def _gui(folder: Path, is_file: Callable[[Path], bool]) -> Path | None:
-    exe = folder / "Wireshark.exe"
-    return exe if is_file(exe) else None
+def _beside(folder: Path, is_file: Callable[[Path], bool]) -> tuple[Path | None, Path | None]:
+    """The window program and the recorder, if they sit next to tshark."""
+    found = [folder / name for name in ("Wireshark.exe", "dumpcap.exe")]
+    return found[0] if is_file(found[0]) else None, found[1] if is_file(found[1]) else None

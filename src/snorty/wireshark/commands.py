@@ -13,3 +13,14 @@ def summary_command(tshark: Path, pcap: Path) -> list[str]:
     # -q: statistics only, no packet lines; one pass over the file gives all five tables.
     zs = ("io,phs", "conv,ip", "conv,ipv6", "conv,tcp", "conv,udp")
     return [str(tshark), "-r", str(pcap), "-n", "-q", *(a for z in zs for a in ("-z", z))]
+
+
+def capture_command(
+    dumpcap: Path, device: str, seconds: int, max_kb: int, target: Path
+) -> list[str]:
+    # -P: classic pcap (Snort and the Lab read it); -q: no live packet counter; the two -a rules
+    # end the capture on whichever comes first, so it can neither run on nor fill the disk.
+    return [
+        str(dumpcap), "-i", device, "-q", "-P",
+        "-a", f"duration:{seconds}", "-a", f"filesize:{max_kb}", "-w", str(target),
+    ]  # fmt: skip

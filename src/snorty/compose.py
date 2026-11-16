@@ -23,7 +23,7 @@ from snorty.rules.service import RulesService
 from snorty.sensor import Sensor, SensorConfig, SnortAdapter
 from snorty.services import Services
 from snorty.snort import Interface, SnortPaths, SubprocessRunner
-from snorty.wireshark import TsharkDecoder, WiresharkViewer, find_tools
+from snorty.wireshark import DumpcapRecorder, TsharkDecoder, WiresharkViewer, find_tools
 
 
 @dataclass(slots=True)
@@ -98,6 +98,7 @@ def compose(
     packets = PacketService(
         TsharkDecoder(tools.tshark) if tools.tshark else NoDecoder(),
         WiresharkViewer(tools.wireshark) if tools.wireshark else None,
+        DumpcapRecorder(tools.dumpcap) if tools.dumpcap else None,
         snort_logs=paths.log_dir,
         scratch=data_dir / "opened",
     )

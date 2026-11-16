@@ -116,6 +116,7 @@ Snorty is built for a trusted single-user PC, and it keeps its exposure small:
 - The lab only allows `alert`, `log` and `pass` rules, runs them in a temporary copy of the config, and takes pcaps by name from one folder, never by path.
 - Rule archives are read safely: only `*.rules` files are taken, and your local rule files are never overwritten.
 - The journal writes only under `Security/Snort/` and refuses links that point outside the vault.
+- Recording runs Wireshark dumpcap for 5 to 120 seconds or 50 MB, whichever comes first, on the adapter Snort already uses, one capture at a time. It needs no administrator rights, and it stops if the dashboard is stopped. The adapter name must match the form Snort lists, so nothing from the browser reaches the command line. The traffic is saved only in the Snorty data folder.
 - Wireshark and tshark are started with a fixed argument list, never through a shell. "Open in Wireshark" opens a one-packet file Snorty wrote itself, never a path from the browser, and the button only appears when Wireshark is installed.
 
 Do not expose the dashboard to a network.

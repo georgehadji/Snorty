@@ -4,13 +4,23 @@ import contextlib
 import os
 import tempfile
 import time
+import uuid
+from datetime import datetime
 from pathlib import Path
 
 from snorty.dashboard.security import valid_pcap_name
 from snorty.lab.pcapgen import build_pcap, make_frames
 
 MAX_PCAP_BYTES = 50 * 1024 * 1024
-_MAGIC = (b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4")  # classic libpcap, either byte order
+# Classic libpcap in either byte order, with microsecond or nanosecond stamps (dumpcap writes the
+# latter; Snort reads both).
+_MAGIC = (
+    b"\xd4\xc3\xb2\xa1",
+    b"\xa1\xb2\xc3\xd4",
+    b"\x4d\x3c\xb2\xa1",
+    b"\xa1\xb2\x3c\x4d",
+)
+_CAPTURE_TEMP = ".snorty-capture-"
 
 
 def list_pcaps(folder: Path) -> list[str]:
@@ -78,3 +88,26 @@ def generate_pcap(
         proto, src, sport, dst, dport, payload.encode("utf-8"), count=count, handshake=handshake
     )
     return save_pcap(folder, name, build_pcap(frames, start=time.time()))
+
+
+def capture_temp(folder: Path) -> Path:
+    """A fresh hidden file name for a capture in progress; leftovers of a killed run are swept.
+
+    Only one capture runs at a time (the caller's job guard), so any older temp file is stale.
+    """
+    folder.mkdir(parents=True, exist_ok=True)
+    for old in folder.glob(f"{_CAPTURE_TEMP}*.tmp"):
+        with contextlib.suppress(OSError):
+            old.unlink()
+    return folder / f"{_CAPTURE_TEMP}{uuid.uuid4().hex[:8]}.tmp"
+
+
+def publish_capture(folder: Path, temp: Path, when: datetime) -> str:
+    """Move a finished capture to a listed name, `capture-<date>-<time>.pcap`, never overwriting."""
+    stem = f"capture-{when:%Y%m%d-%H%M%S}"
+    for n in range(1, 100):
+        name = valid_pcap_name(f"{stem}.pcap" if n == 1 else f"{stem}-{n}.pcap")
+        if not (folder / name).exists():
+            os.replace(temp, folder / name)
+            return name
+    raise ValueError("too many captures in the same second")

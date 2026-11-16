@@ -54,3 +54,18 @@ def test_the_window_program_is_found_beside_tshark_and_may_be_missing() -> None:
     assert cli_only.tshark is not None and cli_only.wireshark is None
     on_path = find_tools(env={}, **finder({"E:/bin/Wireshark.exe"}, on_path="E:/bin/tshark.exe"))
     assert str(on_path.wireshark).replace("\\", "/") == "E:/bin/Wireshark.exe"
+
+
+def test_the_recorder_is_found_beside_tshark_and_may_be_missing() -> None:
+    both = find_tools(
+        env={"ProgramFiles": "C:/Program Files"},
+        **finder(
+            {"C:/Program Files/Wireshark/tshark.exe", "C:/Program Files/Wireshark/dumpcap.exe"}
+        ),
+    )
+    assert str(both.dumpcap).replace("\\", "/") == "C:/Program Files/Wireshark/dumpcap.exe"
+    cli_only = find_tools(
+        env={"ProgramFiles": "C:/Program Files"},
+        **finder({"C:/Program Files/Wireshark/tshark.exe"}),
+    )
+    assert cli_only.dumpcap is None

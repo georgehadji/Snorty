@@ -1,0 +1,10 @@
+{% if state == "running" %}
+<div id="capture-status" class="flash" role="status" hx-get="/lab/capture/status" hx-trigger="every 1s" hx-swap="outerHTML">{% if already %}A capture is already running. {% endif %}Recording on {{ adapter }}, about {{ left }} s left.</div>
+{% elif state == "error" %}
+<div id="capture-status" class="flash bad" role="status">{{ error }}</div>
+{% elif state == "done" %}
+<div id="capture-status" class="flash ok" role="status">Saved {{ saved }} ({{ size }}). It is selected in the pcap list above.</div>
+{% include "_pcap_picker.html" %}
+{% else %}
+<div id="capture-status" role="status"></div>
+{% endif %}

@@ -16,6 +16,7 @@ from snorty.packets import (
     Capabilities,
     DecodeResult,
     LaunchResult,
+    RecordResult,
     SummaryResult,
 )
 from snorty.rules.blocks import MutedRule
@@ -81,6 +82,8 @@ class PacketsPort(Protocol):
     async def alert_packet(self, alert: Alert) -> AlertPacketResult: ...
 
     async def open_alert_packet(self, alert: Alert) -> LaunchResult: ...
+
+    async def record(self, device: str, seconds: int, target: Path) -> RecordResult: ...
 
 
 @dataclass(frozen=True, slots=True)

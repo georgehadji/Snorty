@@ -18,6 +18,8 @@ from snorty.packets import (
     NoDecoder,
     NotFound,
     PacketService,
+    Recorded,
+    RecordResult,
     Summary,
     SummaryResult,
     Unavailable,
@@ -197,3 +199,30 @@ async def test_old_scratch_files_are_swept_and_fresh_ones_kept(tmp_path: Path) -
     await service.open_alert_packet(alert(9))
     assert not old.exists() and fresh.exists() and other.exists()
     assert (scratch / "alert-9.pcap").exists()
+
+
+class Recorder:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, int, Path]] = []
+
+    async def record(self, device: str, seconds: int, target: Path) -> RecordResult:
+        self.calls.append((device, seconds, target))
+        return Recorded(100)
+
+
+async def test_recording_passes_valid_requests_on_and_refuses_bad_times(tmp_path: Path) -> None:
+    rec = Recorder()
+    service = PacketService(Decoder(), recorder=rec)
+    assert service.capabilities().record is True
+    assert await service.record("dev", 10, tmp_path / "a") == Recorded(100)
+    for seconds in (0, 4, 121, -1):
+        assert isinstance(await service.record("dev", seconds, tmp_path / "a"), Failed)
+    assert len(rec.calls) == 1
+    assert isinstance(await service.record("dev", 5, tmp_path / "a"), Recorded)
+    assert isinstance(await service.record("dev", 120, tmp_path / "a"), Recorded)
+
+
+async def test_recording_without_a_recorder_is_unavailable_and_says_so(tmp_path: Path) -> None:
+    service = PacketService(Decoder())
+    assert service.capabilities().record is False
+    assert isinstance(await service.record("dev", 10, tmp_path / "a"), Unavailable)
