@@ -1,81 +1,79 @@
-# Tasks: rules
+# Tasks: notify
 
-Plan: [plan.md](plan.md) · Spec: [SPEC-rules.md](../SPEC-rules.md)
+Plan: [plan.md](plan.md) · Spec: [SPEC-notify.md](../SPEC-notify.md)
 Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one commit.
 
-## Task 1: Managed block, home-net and conf rewrites (S)
-Pure functions in `src/snorty/rules/blocks.py`.
-- [x] `render_block(entries)` writes the marker lines plus `suppress gen_id G, sig_id S   # note` per entry, in SID order, using the file's line ending
-- [x] `read_block(text)` returns the entries (and notes) between the markers; no block gives `[]`; a lone start marker is an error
-- [x] `apply_block(text, entries)` replaces the block or appends it; text outside the markers is byte-identical (LF, CRLF and mixed files tested); empty entries removes the whole block
-- [x] `set_home_net(text, value)` changes only the `ipvar HOME_NET` line; missing line raises `ValueError`
-- [x] `rewrite_rule_path(text, path)` and `rewrite_include(text, name, path)` change only the `var RULE_PATH` line and the one `include threshold.conf` line
-- [x] Verify: `uv run pytest tests/rules/test_blocks.py -q`
-- Dependencies: none · Files: `src/snorty/rules/__init__.py`, `blocks.py`, `tests/rules/__init__.py`, `test_blocks.py`
+## Task 1: Toast, sanitize, build_toast (S)
+`src/snorty/notify/toast.py`.
+- [ ] `Toast(title, lines)` frozen dataclass
+- [ ] `sanitize(text, limit)`: control characters and `" ' ` $ < > & ; | %` and backslash replaced by a space, whitespace collapsed, truncated to `limit`; non-ASCII letters kept
+- [ ] `build_toast(alert, same_sid=0, other=0, tz)` gives title `Snort P{priority}: {msg}` (cap 80); lines `{proto} {src_ip}:{src_port} -> {dst_ip}:{dst_port}` (ports omitted when missing), `SID {gid}:{sid}  {HH:MM:SS}` in the given zone, then `+{n} more` and `+{m} other alerts` only when non-zero; each line capped at 120
+- [ ] Hostile inputs in msg and addresses (`"; calc; "`, backticks, `$(...)`, `<b>`, newlines, 10,000 characters) produce sanitised, capped text
+- [ ] Verify: `uv run pytest tests/notify/test_toast.py -q`
+- Dependencies: none · Files: `src/snorty/notify/__init__.py`, `toast.py`, `tests/notify/test_toast.py`
 
-## Task 2: Archive handling (S)
-`src/snorty/rules/archive.py`.
-- [x] `parse_md5(text)` accepts both `HEX` and `HEX  name` / `MD5 (name) = HEX` forms; garbage raises `ValueError`
-- [x] `safe_members(names)` keeps only `*.rules` basenames from paths with no `..`, no absolute path, no drive letter, not on the protected list
-- [x] `extract_rules(tar_bytes, dest) -> ExtractReport(written, skipped)` writes only regular files (symlinks, devices, hardlinks skipped and counted), flat into `dest`, nothing outside it; size cap per member
-- [x] `count_rules(dir)` counts non-comment, non-blank lines in `*.rules` that start with `alert|drop|reject|pass|log`
-- [x] `sanity_ok(new, old, ratio=0.5)`; old of 0 always passes
-- [x] Verify: `uv run pytest tests/rules/test_archive.py -q` (hostile archives built in memory with `tarfile`)
-- Dependencies: none · Files: `archive.py`, `tests/rules/test_archive.py`
+## Task 2: Throttle (S)
+`src/snorty/notify/throttle.py`.
+- [ ] `Decision(show, same_sid, other)` frozen dataclass
+- [ ] `Throttle(window=300, cap=6, cap_window=60, max_sids=1000)`; `decide(sid, now)`:
+  - SID shown less than `window` ago gives `show=False` and counts for that SID
+  - else if `cap` toasts were shown in the last `cap_window` seconds gives `show=False` and counts in the "other" tally
+  - else `show=True` with this SID's suppressed count and the "other" tally, then both reset
+- [ ] A suppressed alert never extends the window (the window runs from the last shown toast)
+- [ ] Expired SID entries are removed; at most `max_sids` kept, oldest dropped first (tested with 1,500 SIDs)
+- [ ] 500 alerts of one SID inside the window give one show; the next one after the window reports `same_sid == 499`
+- [ ] Verify: `uv run pytest tests/notify/test_throttle.py -q`
+- Dependencies: none · Files: `throttle.py`, `tests/notify/test_throttle.py`
 
 ### Checkpoint: Tasks 1-2
-- [x] Tests green; `uv run ruff check src tests`; `uv run mypy src/snorty/core src/snorty/snort src/snorty/sensor src/snorty/rules` clean
+- [ ] Tests green; `uv run ruff check src tests`; `uv run mypy src/snorty/core src/snorty/snort src/snorty/sensor src/snorty/rules src/snorty/notify` clean (add `snorty.notify.*` to the strict override in `pyproject.toml`)
 
-## Task 3: Ports, config, state (M)
-`ports.py`, `config.py`, `state.py`.
-- [x] `Downloader` Protocol (`async get(url, max_bytes) -> bytes`); `UrllibDownloader` via `asyncio.to_thread`, HTTPS only, rejects over-cap bodies, raises `DownloadError` for HTTP and network errors; tested against a local `http.server`
-- [x] `Validator` Protocol (`async check(conf: Path) -> ConfigCheck`); `SnortValidator(paths, runner)` picks the loopback (else first) interface, calls `check_config(..., conf=conf)`
-- [x] `SensorControl` Protocol (`state`, `async restart()`)
-- [x] `RulesConfig` frozen dataclass: `paths`, `url`, `min_ratio=0.5`, `health_timeout=60.0`, `max_download=100 MB`, `home_net_default`
-- [x] `RulesState` + `load_state` / `save_state` (`rules-state.json` beside the rules dir, atomic write, missing or corrupt file gives empty state)
-- [x] Verify: `uv run pytest tests/rules -q -m "not snort"`
-- Dependencies: none · Files: `ports.py`, `config.py`, `state.py`, `tests/rules/test_ports.py`, `test_state.py`
+## Task 3: Port and adapters, dependency (M)
+`ports.py`; `pyproject.toml` via `uv add winotify`.
+- [ ] `Notifier` Protocol (`async show(toast)`)
+- [ ] `ConsoleNotifier(out=print)` prints title and lines
+- [ ] `WinotifyNotifier(app_id="Snorty", timeout=10.0, send=None)`: builds the library's `Notification` from a `Toast` and shows it in `asyncio.to_thread` under `asyncio.wait_for`; the library call is injectable (`send`) so tests never show a real toast
+- [ ] Read the installed `winotify` source and record in a code comment what it does with title and message text (script, XML, or escaping); if text is interpolated unescaped, the sanitiser already guards it and a test pins that no sanitised character class reaches the library
+- [ ] Unit tests: `send` called with the title and joined lines; timeout raises `TimeoutError`; library exception propagates (the service handles it in Task 5)
+- [ ] Verify: `uv run pytest tests/notify/test_ports.py -q`
+- Dependencies: Task 1 · Files: `ports.py`, `pyproject.toml`, `uv.lock`, `tests/notify/test_ports.py`
 
-## Task 4: Update, happy path (M)
-`service.py`: `RulesService(config, downloader, validator, sensor, bus, *, clock)`.
-- [x] Same md5 as `state.last_md5` gives `UpToDate`: tarball never fetched, no restart, no event swap; `force=True` overrides
-- [x] Good update: overlay into `rules.new`, protected files untouched, temp conf validated, 3-step swap, old set in `rules.prev`, one `sensor.restart()`, state saved, `RulesUpdated(ok=True, rule_count, detail)` published
-- [x] Sensor STOPPED before the update: no restart, no health gate
-- [x] Returns an `UpdateReport` (outcome, rule_count, md5, skipped members)
-- [x] Verify: `uv run pytest tests/rules/test_update.py -q` (fake downloader, fake validator, fake sensor, real temp dirs)
-- Dependencies: Tasks 1-3 · Files: `service.py`, `tests/rules/rules_fakes.py`, `test_update.py`
+## Task 4: NotifyService, filter and throttle (M)
+`src/snorty/notify/service.py`: `NotifyConfig(min_priority=1, window=300, cap=6, cap_window=60, tz)`, `NotifyService(bus, notifier, config, *, clock)`.
+- [ ] `start()` subscribes (maxsize 1000) before returning and spawns one consumer task
+- [ ] Only `AlertRaised` events are considered; `alert.priority > min_priority` is ignored; changing `min_priority` changes the cut-off
+- [ ] A live priority-1 alert gives one toast through the notifier with the built text
+- [ ] Throttle integrated: 500 alerts of one SID give one toast, then `+499 more` after the window (fake clock); many SIDs hit the cap and the next toast says `+M other alerts`
+- [ ] Verify: `uv run pytest tests/notify/test_service.py -q` (real `EventBus`, `RecordingNotifier`, fake clock)
+- Dependencies: Tasks 1-3 · Files: `service.py`, `tests/notify/notify_fakes.py`, `test_service.py`
 
-## Task 5: Update failures and rollback (M)
-Same `service.py`, new tests in `tests/rules/test_update_failures.py`.
-- [x] Parametrised failures: download error, md5 mismatch, oversize, hostile archive (nothing extracted), sanity ratio, `-T` failure (first error lines in the detail), each of the 3 renames failing (undo path), sensor not RUNNING within `health_timeout` (rollback + second restart)
-- [x] After every failure: `rules/` byte-identical to before (hash of the tree), no `rules.new` / `rules.swap` left behind, `RulesUpdated(ok=False, detail)` published, state not advanced
-- [x] Two concurrent calls (update + mute) run one after the other (lock), never interleaved
-- [x] Verify: `uv run pytest tests/rules -q -m "not snort"`
-- Dependencies: Task 4 · Files: `service.py`, `test_update_failures.py`
+## Task 5: Service resilience and lifecycle (M)
+Same `service.py`; new tests in `tests/notify/test_service_resilience.py`.
+- [ ] A notifier that raises is logged; the next alert still gives a toast
+- [ ] A notifier that exceeds its timeout (raises `TimeoutError`) is logged; the next alert still gives a toast
+- [ ] A notifier that blocks forever does not slow `bus.publish` (1,000 publishes finish quickly) and the subscription queue drops oldest
+- [ ] `stop()` cancels the consumer, closes the subscription, and no toast is shown after it returns; `stop()` before `start()` and twice are harmless
+- [ ] `start()` twice does not double-subscribe (one toast per alert)
+- [ ] Verify: `uv run pytest tests/notify -q`
+- Dependencies: Task 4 · Files: `service.py`, `test_service_resilience.py`
 
 ### Checkpoint: Tasks 3-5
-- [x] All failure injections green; whole rules unit suite under 3 s; ruff and strict mypy clean
+- [ ] Spec criteria 1-9 each covered by a passing test; whole notify unit suite under 3 s; ruff and strict mypy clean
 
-## Task 6: Mute, unmute, home-net (M)
-`service.py` additions.
-- [x] `mute(sid, note="", restart=True)` / `unmute(sid, restart=True)`: idempotent; candidate `threshold.conf` validated through a temp conf with the include rewritten; `os.replace` commit; one-time `threshold.conf.snorty.bak`; validation failure leaves the file unchanged
-- [x] `muted()` returns the block's entries
-- [x] `set_home_net(value=None)`: default from config; changes only the HOME_NET line; same validate-commit-backup path (`snort.conf.snorty.bak`); `home_net()` shows current and default
-- [x] Sensor restarted when `restart=True` and the sensor was not STOPPED
-- [x] Verify: `uv run pytest tests/rules/test_mute.py tests/rules/test_home_net.py -q`
-- Dependencies: Tasks 1, 3 · Files: `service.py`, `test_mute.py`, `test_home_net.py`
+## Task 6: CLI and sensor wiring (M)
+`src/snorty/notify/__main__.py`; `src/snorty/sensor/__main__.py`.
+- [ ] `python -m snorty.notify test [--priority N] [--msg TEXT]` builds a sample alert and shows it through `WinotifyNotifier` (`--dry-run` uses `ConsoleNotifier`); exit 0, or 1 with the error if the toast failed
+- [ ] `python -m snorty.sensor --notify` creates a `NotifyService` on the same bus and starts it before the sensor, stops it after the sensor
+- [ ] `snorty.sensor` package modules (not `__main__`) do not import `snorty.notify` (grep-checked)
+- [ ] Unit tests with `--dry-run` and an injected notifier; the sensor CLI change is covered by a smoke test that builds the objects without starting Snort
+- [ ] Verify: `uv run pytest tests/notify tests/sensor -q -m "not snort"`
+- Dependencies: Tasks 3-5 · Files: `notify/__main__.py`, `sensor/__main__.py`, `tests/notify/test_notify_cli.py`
 
-## Task 7: CLI and real checks (M)
-`__main__.py`, `tests/rules/test_rules_integration.py`.
-- [x] CLI subcommands exactly as in the spec; exit 0 on success or up to date, 1 on a failed update, 2 on bad arguments; prints progress lines per stage
-- [x] `@pytest.mark.snort`: copy `C:\Snort\rules` and `snort.conf` to a temp dir; real `SnortValidator` passes the good set and fails with a message when one rule is broken; real `C:\Snort` untouched (hash check before and after)
-- [x] Manual, recorded in the final summary: `python -m snorty.rules update` against the real URL, sensor back to RUNNING, `snort -T` still passes; `mute` / `muted` / `unmute` round trip on the real `threshold.conf`; `home-net --set` default applied (with the sensor stopped or restarted as appropriate); nothing left running
-- [x] Verify: `uv run pytest tests/rules -q -m snort`; manual commands above
-- Dependencies: Tasks 3-6 · Files: `__main__.py`, `test_integration.py`
-
-## Task 8: Close-out (S)
-- [x] Coverage for `snorty.rules` at least 90% from unit tests alone
-- [x] `grep -r subprocess src/snorty` still matches only `snort/` files; `snorty.rules` imports only `snorty.core`, `snorty.snort`, stdlib
-- [x] SPEC-rules.md Success Criteria boxes ticked; plan and todo boxes ticked except the "next module" one
-- [x] Verify: `uv run pytest -q -m "not snort" --cov=snorty.rules --cov-report=term-missing`; `uv run ruff check src tests`; mypy as above
-- Dependencies: Task 7
+## Task 7: Real checks and close-out (S)
+- [ ] Manual: `uv run python -m snorty.notify test` shows a toast on this PC (I report what appeared; Focus Assist state noted)
+- [ ] Manual: `uv run python -m snorty.sensor --notify --db <tmp>` runs, a loopback payload with `uid=0(root)` raises an alert and a toast, and a cancelled run leaves no `snort.exe` (same method as the sensor check)
+- [ ] Coverage for `snorty.notify` at least 90% from unit tests alone
+- [ ] `grep -r subprocess src/snorty` matches only `snort/` files; `snorty.notify` imports only `snorty.core`, stdlib and `winotify`
+- [ ] SPEC-notify.md Success Criteria boxes ticked; plan and todo boxes ticked except the "next module" one
+- [ ] Verify: `uv run pytest -q -m "not snort" --cov=snorty.notify`; `uv run ruff check src tests`; mypy as above
+- Dependencies: Task 6
