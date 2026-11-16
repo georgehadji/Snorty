@@ -8,7 +8,9 @@ from snorty.core.bus import EventBus
 from snorty.core.models import Alert
 from snorty.core.repository import AlertRepository
 from snorty.dashboard.services import Services
+from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabJob, LabResult
+from snorty.notify.service import NotifyStatus
 from snorty.rules.blocks import MutedRule
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
@@ -136,9 +138,21 @@ class FakeRules:
 class FakeJournal:
     def __init__(self) -> None:
         self.flushes = 0
+        self.info = JournalStatus("C:/vault/Security/Snort", None, 0, None)
+
+    def status(self) -> JournalStatus:
+        return self.info
 
     async def flush(self) -> None:
         self.flushes += 1
+
+
+class FakeNotify:
+    def __init__(self) -> None:
+        self.info = NotifyStatus(toasts_shown=0, min_priority=1)
+
+    def status(self) -> NotifyStatus:
+        return self.info
 
 
 class FakeLab:
@@ -160,6 +174,7 @@ def make_services(tmp_path: Path) -> Services:
         sensor=FakeSensor(),
         rules=FakeRules(),
         journal=FakeJournal(),
+        notify=FakeNotify(),
         lab=FakeLab(),
         repo=AlertRepository(tmp_path / "t.db"),
         bus=EventBus(),

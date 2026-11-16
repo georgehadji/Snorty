@@ -7,6 +7,8 @@ from urllib.parse import urlencode
 
 from snorty.core.models import Alert
 from snorty.dashboard.security import valid_priority, valid_range, valid_sid
+from snorty.journal.service import JournalStatus
+from snorty.notify.service import NotifyStatus
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
 from snorty.sensor import SensorStatus, State
@@ -186,3 +188,27 @@ def update_message(report: UpdateReport) -> Message:
     if report.outcome == "up_to_date":
         return Message(True, f"Already up to date: {report.detail}")
     return Message(True, f"Updated: {report.detail}. Restart the sensor to load the new rules.")
+
+
+@dataclass(frozen=True, slots=True)
+class JournalView:
+    folder: str
+    last_written: str  # "never" until the first note is written
+    notes_written: int
+    error: str | None
+
+
+def journal_view(status: JournalStatus, tz: tzinfo) -> JournalView:
+    last = fmt_time(status.last_written, tz) if status.last_written else "never"
+    return JournalView(status.folder, last, status.notes_written, status.error)
+
+
+@dataclass(frozen=True, slots=True)
+class NotifyView:
+    toasts_shown: int
+    threshold: str  # which alerts raise a toast
+
+
+def notify_view(status: NotifyStatus) -> NotifyView:
+    p = status.min_priority
+    return NotifyView(status.toasts_shown, "priority 1 only" if p <= 1 else f"priority 1 to {p}")

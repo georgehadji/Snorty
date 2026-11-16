@@ -21,7 +21,9 @@
     {% include "_rules_summary.html" %}
     <p><a href="/rules">Manage rules</a></p>
     <h3>Journal</h3>
-    <p>{% if journal_on %}On. <a href="/journal">Details</a>{% else %}Off (no vault set).{% endif %}</p>
+    <p>{% if journal %}{{ journal.notes_written }} notes written{% if journal.error %}, <span class="bad-text">last write failed</span>{% endif %}. <a href="/journal">Details</a>{% else %}Off (no vault set).{% endif %}</p>
+    <h3>Notifications</h3>
+    <p>{% if notify %}{{ notify.toasts_shown }} toasts shown ({{ notify.threshold }}).{% else %}Off.{% endif %}</p>
   </section>
 </div>
 <section class="card wide">

@@ -13,6 +13,9 @@ class StoreError(Exception):
 
 
 class NoteStore(Protocol):
+    @property
+    def label(self) -> str: ...
+
     def read(self, day: date) -> str | None: ...
 
     def write(self, day: date, text: str) -> None: ...
@@ -20,6 +23,8 @@ class NoteStore(Protocol):
 
 class MemoryNoteStore:
     """For tests: keeps notes in a dict and records every write."""
+
+    label = "(memory)"
 
     def __init__(self) -> None:
         self.notes: dict[date, str] = {}
@@ -41,6 +46,7 @@ class VaultNoteStore:
 
     def __init__(self, vault_root: Path | str) -> None:
         self._root = Path(vault_root)
+        self.label = str(self._root / "Security" / "Snort")
 
     def _folder(self, *, create: bool) -> Path | None:
         if not self._root.is_dir():

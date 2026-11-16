@@ -26,6 +26,12 @@ class NotifyConfig:
     show_timeout: float = 15.0  # a notifier that takes longer is abandoned
 
 
+@dataclass(frozen=True, slots=True)
+class NotifyStatus:
+    toasts_shown: int
+    min_priority: int
+
+
 class NotifyService:
     def __init__(
         self,
@@ -42,6 +48,10 @@ class NotifyService:
         self._throttle = Throttle(config.window, config.cap, config.cap_window)
         self._sub: Subscription | None = None
         self._task: asyncio.Task[None] | None = None
+        self._shown = 0
+
+    def status(self) -> NotifyStatus:
+        return NotifyStatus(self._shown, self._config.min_priority)
 
     async def start(self) -> None:
         """Subscribe, then start consuming. Events published after this returns are seen."""
@@ -75,3 +85,4 @@ class NotifyService:
             return
         toast = build_toast(alert, decision.same_sid, decision.other, self._config.tz)
         await asyncio.wait_for(self._notifier.show(toast), self._config.show_timeout)
+        self._shown += 1

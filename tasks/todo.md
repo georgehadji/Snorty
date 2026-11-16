@@ -75,9 +75,9 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12. E
 
 ## Task 9: Journal page (S)
 `templates/journal.html`, small `status()` on `JournalService` and `NotifyService`, tests.
-- [ ] `JournalService.status()` returns frozen `JournalStatus(vault, last_flush, notes_written, error)`; `NotifyService.status()` returns on/off and toast count; both with tests in their own module test folders
-- [ ] `GET /journal` shows vault path (read-only) and state; `POST /journal/flush` calls flush once and shows the result; the Overview journal summary uses the same data
-- [ ] Verify: `uv run pytest tests/journal tests/notify tests/dashboard -q`
+- [x] `JournalService.status()` returns frozen `JournalStatus(vault, last_flush, notes_written, error)`; `NotifyService.status()` returns on/off and toast count; both with tests in their own module test folders
+- [x] `GET /journal` shows vault path (read-only) and state; `POST /journal/flush` calls flush once and shows the result; the Overview journal summary uses the same data
+- [x] Verify: `uv run pytest tests/journal tests/notify tests/dashboard -q`
 - Dependencies: Task 4 · Files: about 5
 
 ## Task 10: Lab page (L)

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% set active = "journal" %}
+{% block title %}Journal · Snorty{% endblock %}
+{% block main %}
+{% if journal %}
+{% include "_journal_card.html" %}
+{% else %}
+<section class="card"><h2>Journal</h2><p class="muted">Off. Start the dashboard with <span class="mono">--vault</span> to write daily notes.</p></section>
+{% endif %}
+{% endblock %}

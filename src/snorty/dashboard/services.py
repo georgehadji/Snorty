@@ -9,7 +9,9 @@ from fastapi import Depends, Request
 
 from snorty.core.bus import EventBus
 from snorty.core.repository import AlertRepository
+from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabJob, LabResult
+from snorty.notify.service import NotifyStatus
 from snorty.rules.blocks import MutedRule
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
@@ -50,6 +52,12 @@ class RulesPort(Protocol):
 class JournalPort(Protocol):
     async def flush(self) -> None: ...
 
+    def status(self) -> JournalStatus: ...
+
+
+class NotifyPort(Protocol):
+    def status(self) -> NotifyStatus: ...
+
 
 class LabPort(Protocol):
     async def run(self, job: LabJob) -> LabResult: ...
@@ -62,6 +70,7 @@ class Services:
     sensor: SensorPort
     rules: RulesPort
     journal: JournalPort | None
+    notify: NotifyPort | None
     lab: LabPort
     repo: AlertRepository
     bus: EventBus

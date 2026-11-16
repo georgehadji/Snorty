@@ -85,5 +85,5 @@ def compose(
     journal = (
         JournalService(bus, repo, journal_store, JournalConfig(tz=tz)) if journal_store else None
     )
-    services = Services(sensor, rules, journal, lab, repo, bus, tz, data_dir)
+    services = Services(sensor, rules, journal, toasts, lab, repo, bus, tz, data_dir)
     return Runtime(services, toasts, journal)

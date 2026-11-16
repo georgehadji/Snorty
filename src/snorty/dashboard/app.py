@@ -15,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 
 from snorty.core.events import AlertRaised, Event, SensorStateChanged
 from snorty.dashboard import views
+from snorty.dashboard.journal_routes import add_journal_routes
 from snorty.dashboard.rules_routes import add_rules_routes
 from snorty.dashboard.security import SecurityMiddleware
 from snorty.dashboard.services import Services, Svc
@@ -116,7 +117,8 @@ def build_app(
             "overview.html",
             card=views.sensor_card(svc.sensor.status(), svc.tz),
             rules=views.rules_summary(await svc.rules.status()),
-            journal_on=svc.journal is not None,
+            journal=svc.journal and views.journal_view(svc.journal.status(), svc.tz),
+            notify=svc.notify and views.notify_view(svc.notify.status()),
             **data,
         )
 
@@ -163,4 +165,5 @@ def build_app(
         )
 
     add_rules_routes(app, ui)
+    add_journal_routes(app, ui)
     return app

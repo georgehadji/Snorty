@@ -56,6 +56,14 @@ def build_note(
     return merge(existing, render(day, alerts, cfg.tz, total), day)
 
 
+@dataclass(frozen=True, slots=True)
+class JournalStatus:
+    folder: str  # where the notes go
+    last_written: datetime | None
+    notes_written: int
+    error: str | None  # the last failed write, until a later one succeeds
+
+
 class JournalService:
     def __init__(
         self,
@@ -76,6 +84,14 @@ class JournalService:
         self._dirty: set[date] = set()
         self._sub: Subscription | None = None
         self._tasks: list[asyncio.Task[None]] = []
+        self._notes_written = 0
+        self._last_written: datetime | None = None
+        self._error: str | None = None
+
+    def status(self) -> JournalStatus:
+        return JournalStatus(
+            self._store.label, self._last_written, self._notes_written, self._error
+        )
 
     def _today(self) -> date:
         return self._now().astimezone(self._config.tz).date()
@@ -110,8 +126,10 @@ class JournalService:
             self._dirty.discard(day)
             try:
                 await asyncio.to_thread(self._write_day, day)
-            except Exception:  # one bad day must not stop the rest, or the next flush
+                self._error = None
+            except Exception as exc:  # one bad day must not stop the rest, or the next flush
                 log.exception("could not write the journal note for %s", day)
+                self._error = f"{type(exc).__name__}: {exc}"
                 self._dirty.add(day)
 
     async def _consume(self, sub: Subscription) -> None:
@@ -129,3 +147,5 @@ class JournalService:
         text = build_note(self._repo, existing, day, self._config)
         if text is not None and text != existing:
             self._store.write(day, text)
+            self._notes_written += 1
+            self._last_written = self._now()

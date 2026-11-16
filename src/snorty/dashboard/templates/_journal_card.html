@@ -1,0 +1,10 @@
+<section id="journal-card" class="card"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <h2>Journal</h2>
+  <dl>
+    <dt>Folder</dt><dd class="mono">{{ journal.folder }}</dd>
+    <dt>Last note written</dt><dd>{{ journal.last_written }}</dd>
+    <dt>Notes written</dt><dd>{{ journal.notes_written }}</dd>
+  </dl>
+  {% if journal.error %}<p class="flash bad" role="alert">Last write failed: {{ journal.error }}</p>{% endif %}
+  <button hx-post="/journal/flush" hx-target="#flash" hx-swap="outerHTML">Write now</button>
+</section>
