@@ -1,5 +1,5 @@
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -8,7 +8,7 @@ from dash_fakes import FakeLab, alert
 from starlette.testclient import TestClient
 from test_dash_routes import POST, make
 
-from snorty.dashboard import pcaps
+from snorty.dashboard import pcaps, views
 from snorty.dashboard.services import Services
 from snorty.lab.lint import Problem
 from snorty.lab.models import LabJob, LabResult, RuleHit
@@ -279,3 +279,20 @@ def test_generate_refuses_bad_fields(tmp_path: Path, change: dict[str, str]) -> 
     r = post(c, "/lab/pcaps/generate", **{**GEN, **change})
     assert r.status_code == 422 and 'class="flash bad"' in r.text
     assert not s.pcap_dir.exists() or list(s.pcap_dir.iterdir()) == []
+
+
+def test_a_flood_of_matches_shows_the_first_rows_and_the_true_total(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    put_pcap(s)
+    n = views.MAX_LAB_ROWS + 100
+    when = datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
+    lab(s).result = LabResult(
+        True,
+        hits=(RuleHit(1000001, "t", 1, n),),
+        matches=tuple(alert(sid=1000001, ts=when + timedelta(seconds=i)) for i in range(n)),
+    )
+    with c:
+        post(c, "/lab/run", rules=RULE, pcap="a.pcap")
+        html = wait_done(c)
+    assert html.count('<tr class="p') == views.MAX_LAB_ROWS
+    assert f"Showing the first {views.MAX_LAB_ROWS} of {n} matches" in html

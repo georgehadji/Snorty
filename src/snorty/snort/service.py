@@ -156,10 +156,14 @@ async def _run_pcap_in(
     if result.returncode != 0:
         tail = "\n".join(f"{result.stdout}\n{result.stderr}".strip().splitlines()[-5:])
         raise SnortError(f"snort exited with code {result.returncode}: {tail}")
-    alert_file = log_dir / "alert.ids"
-    if not alert_file.exists():
+    return await asyncio.to_thread(_read_alerts, log_dir / "alert.ids", year, tz)
+
+
+def _read_alerts(path: Path, year: int, tz: tzinfo) -> list[Alert]:
+    """Runs in a worker thread: a big pcap can leave hundreds of thousands of lines."""
+    if not path.exists():
         return []
-    lines = alert_file.read_text(errors="replace").splitlines()
+    lines = path.read_text(errors="replace").splitlines()
     parsed = (parse_line(ln, default_year=year, tz=tz) for ln in lines)
     return [a for a in parsed if a is not None]
 

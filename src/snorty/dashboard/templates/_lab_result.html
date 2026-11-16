@@ -27,6 +27,7 @@
       <tr class="p{{ r.priority }}"><td class="mono">{{ r.time }}</td><td><span class="badge p{{ r.priority }}">P{{ r.priority }}</span></td><td title="{{ r.msg }}">{{ r.msg_short }}</td><td class="mono">{{ r.src }}</td><td class="mono">{{ r.dst }}</td></tr>
     {% endfor %}</tbody>
   </table></div>
+  {% if lab.matches_total > lab.matches|length %}<p class="muted">Showing the first {{ lab.matches|length }} of {{ lab.matches_total }} matches.</p>{% endif %}
   {% endif %}
 </div>
 {% else %}

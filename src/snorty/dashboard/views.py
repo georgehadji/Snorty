@@ -17,6 +17,9 @@ from snorty.sensor import SensorStatus, State
 MSG_MAX = 120
 PAGE_SIZE = 50
 MAX_PAGE = 10_000
+MAX_LAB_ROWS = (
+    500  # a lab run can match hundreds of thousands of packets; the hit counts stay exact
+)
 _RANGE_DELTA = {
     "1h": timedelta(hours=1),
     "24h": timedelta(hours=24),
@@ -221,7 +224,8 @@ class LabView:
     problems: list[str]
     error: str | None
     hits: list[tuple[int, str, int, int]]  # sid, msg, rule line, count
-    matches: list[AlertRow]
+    matches: list[AlertRow]  # at most MAX_LAB_ROWS
+    matches_total: int
 
 
 def lab_view(result: LabResult, tz: tzinfo) -> LabView:
@@ -229,6 +233,5 @@ def lab_view(result: LabResult, tz: tzinfo) -> LabView:
         f"rule line {p.line}: {p.message}" if p.line else p.message for p in result.problems
     ]
     hits = [(h.sid, h.msg, h.line, h.count) for h in result.hits]
-    return LabView(
-        result.ok, problems, result.error, hits, [alert_row(a, tz) for a in result.matches]
-    )
+    shown = [alert_row(a, tz) for a in result.matches[:MAX_LAB_ROWS]]
+    return LabView(result.ok, problems, result.error, hits, shown, len(result.matches))
