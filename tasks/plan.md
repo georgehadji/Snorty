@@ -44,10 +44,10 @@ the manual run.
 
 ### Phase 3: CLI and real checks
 - [x] Task 6: `python -m snorty.lab check | run | make-pcap`
-- [ ] Task 7: real Snort tests, manual run, close-out
+- [x] Task 7: real Snort tests, manual run, close-out
 
 ### Checkpoint: Complete
-- [ ] Every Success Criteria box in SPEC-rule-lab.md checked
+- [x] Every Success Criteria box in SPEC-rule-lab.md checked
 - [ ] Then the next module spec (dashboard)
 
 ## Risks and Mitigations

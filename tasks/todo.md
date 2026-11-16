@@ -72,12 +72,12 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Each task is one TDD cycle and one
 
 ## Task 7: Real checks and close-out (M)
 `tests/lab/test_lab_real.py` (marked `snort`).
-- [ ] Real: the lab config built from the real `snort.conf` passes `snort -T`
-- [ ] Real: a generated pcap triggers a lab rule on its payload; an unrelated rule shows 0; a deliberately broken rule gives an error on its line; `--handshake` makes a `flow:established` rule match
-- [ ] Real: hashes of live `snort.conf`, `rules\`, `threshold.conf` and `log\` unchanged; no `snorty-lab-*.conf` left; no `snort.exe` left
-- [ ] Manual: `uv run python -m snorty.lab run` on a rule you could have written and a generated pcap (I report the table and the run time)
-- [ ] Coverage for `snorty.lab` at least 90% from unit tests alone (read from the json report)
-- [ ] `grep -r subprocess src/snorty` matches only `snort/` files; `snorty.lab` imports only `snorty.core`, `snorty.snort` and stdlib
-- [ ] SPEC-rule-lab.md Success Criteria and deviations amended and ticked; plan and todo boxes ticked except the "next module" one
-- [ ] Verify: `uv run pytest -q -m "not snort"`; `uv run pytest tests/lab -q -m snort`; `uv run ruff check src tests`; mypy as above
+- [x] Real: the lab config built from the real `snort.conf` passes `snort -T`
+- [x] Real: a generated pcap triggers a lab rule on its payload; an unrelated rule shows 0; a deliberately broken rule gives an error on its line; `--handshake` makes a `flow:established` rule match
+- [x] Real: hashes of live `snort.conf`, `rules\`, `threshold.conf` and `log\` unchanged; no `snorty-lab-*.conf` left; no `snort.exe` left
+- [x] Manual: `uv run python -m snorty.lab run` on a rule you could have written and a generated pcap (I report the table and the run time)
+- [x] Coverage for `snorty.lab` at least 90% from unit tests alone (read from the json report)
+- [x] `grep -r subprocess src/snorty` matches only `snort/` files; `snorty.lab` imports only `snorty.core`, `snorty.snort` and stdlib
+- [x] SPEC-rule-lab.md Success Criteria and deviations amended and ticked; plan and todo boxes ticked except the "next module" one
+- [x] Verify: `uv run pytest -q -m "not snort"`; `uv run pytest tests/lab -q -m snort`; `uv run ruff check src tests`; mypy as above
 - Dependencies: Task 6

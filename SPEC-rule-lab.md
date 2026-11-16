@@ -103,19 +103,19 @@ async def run(self, job: LabJob) -> LabResult:
 
 ## Success Criteria
 
-- [ ] 1. `lint` accepts valid `alert`/`log`/`pass` rules with comments and blank lines, and refuses (with line numbers) any other line, a missing `sid`, a duplicate `sid`, more than 200 rules, text over 64 KB, and control characters.
-- [ ] 2. `build_lab_conf` removes exactly the rules, preprocessor-rules and `threshold.conf` includes, appends one lab include, and keeps every other byte; on the real `snort.conf` the result passes `snort -T`.
-- [ ] 3. Bad lab rules (Snort syntax error) give `ok=False` with the error on the right lab rule line and no pcap run.
-- [ ] 4. A valid rule plus a pcap gives `ok=True`, every lab rule's hit count (zeros included) and the matching alerts in time order.
-- [ ] 5. A missing, non-file or over-50-MB pcap gives `error` before any Snort run.
-- [ ] 6. After success, lint failure, Snort failure, timeout and cancellation: the temp config and temp folder are gone, and hashes of live `snort.conf`, `rules\`, `threshold.conf` and the log folder are unchanged.
-- [ ] 7. Stale `snorty-lab-*.conf` older than 1 hour are removed; younger ones and other files are left alone.
-- [ ] 8. Two jobs started together run one after the other.
-- [ ] 9. `build_pcap` output is a valid classic pcap (checked by a reader in the test); with real Snort, a generated packet triggers a rule on its payload, and `--handshake` makes a `flow:established` rule match.
-- [ ] 10. Hostile rules text (`include /etc/passwd`, `config`, `preprocessor`, binary bytes, a 10 MB string) is refused before Snort runs.
-- [ ] 11. CLI: `check`, `run` (plain and `--json`) and `make-pcap` work and use the exit codes above.
-- [ ] 12. Manual: a rule I write matches a generated pcap, an unrelated rule shows 0, and a broken rule shows its line; live Snort files unchanged; no leftover `snort.exe`.
-- [ ] 13. `ruff check`, strict mypy on `snorty.lab`, coverage at least 90%; `snorty.lab` imports only `snorty.core`, `snorty.snort` and stdlib; no `subprocess` in our `src/snorty` outside `snort/`.
+- [x] 1. `lint` accepts valid `alert`/`log`/`pass` rules with comments and blank lines, and refuses (with line numbers) any other line, a missing `sid`, a duplicate `sid`, more than 200 rules, text over 64 KB, and control characters.
+- [x] 2. `build_lab_conf` removes exactly the rules, preprocessor-rules and `threshold.conf` includes, appends one lab include, and keeps every other byte; on the real `snort.conf` the result passes `snort -T`.
+- [x] 3. Bad lab rules (Snort syntax error) give `ok=False` with the error on the right lab rule line and no pcap run.
+- [x] 4. A valid rule plus a pcap gives `ok=True`, every lab rule's hit count (zeros included) and the matching alerts in time order.
+- [x] 5. A missing, non-file or over-50-MB pcap gives `error` before any Snort run.
+- [x] 6. After success, lint failure, Snort failure, timeout and cancellation: the temp config and temp folder are gone, and hashes of live `snort.conf`, `rules\`, `threshold.conf` and the log folder are unchanged.
+- [x] 7. Stale `snorty-lab-*.conf` older than 1 hour are removed; younger ones and other files are left alone.
+- [x] 8. Two jobs started together run one after the other.
+- [x] 9. `build_pcap` output is a valid classic pcap (checked by a reader in the test); with real Snort, a generated packet triggers a rule on its payload, and `--handshake` makes a `flow:established` rule match.
+- [x] 10. Hostile rules text (`include /etc/passwd`, `config`, `preprocessor`, binary bytes, a 10 MB string) is refused before Snort runs.
+- [x] 11. CLI: `check`, `run` (plain and `--json`) and `make-pcap` work and use the exit codes above.
+- [x] 12. Manual: a rule I write matches a generated pcap, an unrelated rule shows 0, and a broken rule shows its line; live Snort files unchanged; no leftover `snort.exe`.
+- [x] 13. `ruff check`, strict mypy on `snorty.lab`, coverage at least 90%; `snorty.lab` imports only `snorty.core`, `snorty.snort` and stdlib; no `subprocess` in our `src/snorty` outside `snort/`.
 
 ## Out of Scope (Deferred)
 
@@ -132,3 +132,11 @@ async def run(self, job: LabJob) -> LabResult:
 2. **Allowed actions:** only `alert`, `log`, `pass`. OK, or do you want `drop` and `reject` accepted for study?
 3. **Live mutes:** the lab ignores them and keeps your preprocessors (assumption 2). OK?
 4. **Promote to live:** deferred. Do you want it in V1 (it would call the rules module and need your confirmation each time)?
+
+## Built-in deviations (as built)
+
+- `LabSandbox` is a plain sync context manager (not async): it only touches the file system.
+- `LabService.check(rules_text)` added (lint + `snort -T`, no pcap) for the `check` CLI command.
+- `summarize(rules, alerts)` returns a `(hits, matches)` tuple, not a `LabResult`.
+- Real Snort: error line numbers from `snort -T` matched the user's lines; the lab conf built from the CRLF `snort.conf` with a Windows temp path passes `snort -T`; `--handshake` makes `flow:established` rules match. Manual run took about 0.4 s. `snorty.lab` coverage 97% from unit tests.
+- Temp paths containing whitespace are refused as an error (Snort `include` cannot take them); not hit on this machine.
