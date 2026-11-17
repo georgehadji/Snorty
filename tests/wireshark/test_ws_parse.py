@@ -82,12 +82,9 @@ def test_hostile_sizes_are_capped() -> None:
 
 
 def test_deep_nesting_does_not_blow_the_stack() -> None:
-    deep: dict = {}
-    node = deep
-    for _ in range(5000):
-        node["n"] = {}
-        node = node["n"]
-    text = json.dumps([{"_source": {"layers": {"x": deep}}}])
+    # built as text: json.dumps itself overflows on this depth in some Python versions
+    deep = '{"n": ' * 5000 + "{}" + "}" * 5000
+    text = '[{"_source": {"layers": {"x": ' + deep + "}}}]"
     try:
         parse_packets(text)
     except ParseError:
