@@ -16,16 +16,18 @@ class FakeFirewall:
         self.rules: set[str] = set()
         self.dns = frozenset({"1.1.1.1"})
         self.error: FirewallError | None = None
+        self.calls: list[tuple[str, ...]] = []  # one entry per unblock call
 
     async def block(self, ip: str) -> None:
         if self.error:
             raise self.error
         self.rules.add(ip)
 
-    async def unblock(self, ip: str) -> None:
+    async def unblock(self, *ips: str) -> None:
         if self.error:
             raise self.error
-        self.rules.discard(ip)
+        self.calls.append(ips)
+        self.rules.difference_update(ips)
 
     async def blocked(self) -> Sequence[str]:
         return sorted(self.rules)
@@ -101,9 +103,9 @@ async def test_hours_are_bounded(rig: Rig) -> None:
 
 
 async def test_needing_admin_is_reported_and_nothing_is_recorded(rig: Rig) -> None:
-    rig.fw.error = NeedsAdmin("blocking needs an administrator")
+    rig.fw.error = NeedsAdmin("blocking needs your approval")
     out = await rig.svc.block(GLOBAL, 24)
-    assert not out.ok and "administrator" in out.detail
+    assert not out.ok and "approval" in out.detail
     assert rig.svc.blocks() == []
 
 
@@ -131,19 +133,37 @@ async def test_sweep_removes_only_expired_blocks(rig: Rig) -> None:
     assert {b.ip: b.state for b in rig.svc.blocks()} == {GLOBAL: "expired", "8.8.8.4": "active"}
 
 
-async def test_a_failed_sweep_is_retried_later(rig: Rig) -> None:
+async def test_expired_blocks_are_removed_in_one_call(rig: Rig) -> None:
+    await rig.svc.block(GLOBAL, 1)
+    await rig.svc.block("8.8.8.4", 1)
+    rig.clock.now = T0 + timedelta(hours=2)
+    assert await rig.svc.sweep() == 2
+    assert rig.fw.calls == [(GLOBAL, "8.8.8.4")]  # one permission prompt, not two
+
+
+async def test_a_declined_sweep_waits_before_asking_again(rig: Rig) -> None:
     await rig.svc.block(GLOBAL, 1)
     rig.clock.now = T0 + timedelta(hours=2)
     rig.fw.error = NeedsAdmin("no")
     assert await rig.svc.sweep() == 0
     rig.fw.error = None
+    rig.clock.now += timedelta(minutes=10)
+    assert await rig.svc.sweep() == 0 and rig.fw.calls == []  # no new prompt yet
+    rig.clock.now += timedelta(minutes=21)
     assert await rig.svc.sweep() == 1
 
 
-async def test_reconcile_adopts_stray_rules_and_restores_lost_ones(rig: Rig) -> None:
+async def test_sweep_with_nothing_due_asks_for_nothing(rig: Rig) -> None:
+    await rig.svc.block(GLOBAL, 24)
+    assert await rig.svc.sweep() == 0
+    assert rig.fw.calls == []
+
+
+async def test_reconcile_adopts_stray_rules_and_releases_lost_ones(rig: Rig) -> None:
     await rig.svc.block(GLOBAL, 24)
     rig.fw.rules = {"8.8.8.4"}  # the firewall lost ours and holds one Snorty has no row for
     await rig.svc.reconcile()
-    assert rig.fw.rules == {"8.8.8.4", GLOBAL}
-    assert {b.ip for b in rig.svc.blocks("active")} == {GLOBAL, "8.8.8.4"}
+    assert rig.fw.rules == {"8.8.8.4"}  # nothing is written to the firewall
+    assert {b.ip for b in rig.svc.blocks("active")} == {"8.8.8.4"}
+    assert next(b for b in rig.svc.blocks() if b.ip == GLOBAL).state == "released"
     assert next(b for b in rig.svc.blocks() if b.ip == "8.8.8.4").until is None

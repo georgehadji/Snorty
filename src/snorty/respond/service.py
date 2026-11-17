@@ -19,6 +19,7 @@ log = logging.getLogger("snorty.respond")
 
 MAX_HOURS = 24 * 30  # a block is meant to be temporary
 SWEEP_SECONDS = 60.0
+RETRY_AFTER = timedelta(minutes=30)  # after the user declined the permission prompt
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +42,7 @@ class BlockService:
         self._now = now
         self._every = sweep_every
         self._task: asyncio.Task[None] | None = None
+        self._retry_at: datetime | None = None
 
     async def start(self) -> None:
         if self._task is None:
@@ -89,28 +91,32 @@ class BlockService:
         return Outcome(True, f"{ip} unblocked")
 
     async def sweep(self) -> int:
-        """Remove blocks whose time is up; returns how many."""
+        """Remove blocks whose time is up, in one go; returns how many. Removing needs the
+        user's approval, so a refusal is not retried until `RETRY_AFTER` has passed."""
         now = self._now()
+        if self._retry_at and now < self._retry_at:
+            return 0
         due = [
-            b
+            b.ip
             for b in await asyncio.to_thread(self._repo.blocks, "active")
             if b.until and b.until <= now
         ]
-        done = 0
-        for b in due:
-            try:
-                await self._fw.unblock(b.ip)
-            except FirewallError:  # needs admin or the firewall is busy: try again next time
-                log.warning("could not remove the expired block on %s", b.ip)
-                continue
-            await asyncio.to_thread(self._repo.set_block_state, b.ip, "expired")
-            done += 1
-        return done
+        if not due:
+            return 0
+        try:
+            await self._fw.unblock(*due)
+        except FirewallError:
+            log.warning("could not remove %d expired block(s); will ask again later", len(due))
+            self._retry_at = now + RETRY_AFTER
+            return 0
+        for ip in due:
+            await asyncio.to_thread(self._repo.set_block_state, ip, "expired")
+        return len(due)
 
     async def reconcile(self) -> None:
-        """Make the table and the firewall agree at start. The firewall is what really blocks,
-        so a rule with no row is adopted (and can then be reversed); a row whose rule is gone
-        is put back if it has not expired."""
+        """Make the table and the firewall agree at start. The firewall is what really blocks:
+        a rule with no row is adopted (and can then be reversed), and a row whose rule is gone
+        is marked released. Nothing is written to the firewall, so no approval is asked."""
         try:
             present = set(await self._fw.blocked())
         except FirewallError:
@@ -120,10 +126,5 @@ class BlockService:
         now = self._now()
         for ip in present - rows.keys():
             await asyncio.to_thread(self._repo.put_block, Block(ip, now, None, None, "active"))
-        for ip, b in rows.items():
-            if ip in present or (b.until and b.until <= now):
-                continue
-            try:
-                await self._fw.block(ip)
-            except FirewallError:
-                log.warning("could not restore the block on %s", ip)
+        for ip in rows.keys() - present:
+            await asyncio.to_thread(self._repo.set_block_state, ip, "released")

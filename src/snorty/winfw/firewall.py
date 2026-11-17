@@ -1,9 +1,11 @@
 """Windows Firewall through PowerShell. Every rule is in the `Snorty` group, so Snorty can list
 and remove exactly its own rules and nothing else.
 
-Snorty runs unelevated and never raises its own rights. Reading rules works unelevated, writing
-them does not, so a refused write is reported as `NeedsAdmin` and the user decides what to do."""
+Snorty itself runs unelevated: the engine stalls when the dashboard is elevated. Reading rules
+works unelevated. Each write runs in a short-lived elevated PowerShell, so Windows shows its
+permission prompt (UAC) and the user approves every change. Declining it is `NeedsAdmin`."""
 
+import base64
 import ipaddress
 from collections.abc import Sequence
 
@@ -12,7 +14,22 @@ from snorty.snort.models import SnortError
 from snorty.snort.runner import Runner
 
 GROUP = "Snorty"
-_DENIED = ("access is denied", "requires elevation", "administrator", "0x5")
+_DENIED = ("access is denied", "requires elevation", "canceled by the user")
+_APPROVAL = "blocking needs your approval: accept the Windows permission prompt"
+WRITE_TIMEOUT = 120.0  # the user has to find and click the permission prompt
+
+
+def elevated(script: str) -> str:
+    """`script` wrapped so a hidden, elevated PowerShell runs it; the exit code comes back.
+    The inner script travels base64-encoded, so no quoting can change what it says."""
+    inner = f"try {{ {script} }} catch {{ exit 1 }}"
+    encoded = base64.b64encode(inner.encode("utf-16-le")).decode("ascii")
+    return (
+        "$ErrorActionPreference='Stop'; "
+        "$p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -WindowStyle Hidden "
+        f"-ArgumentList '-NoProfile','-NonInteractive','-EncodedCommand','{encoded}'; "
+        "exit $p.ExitCode"
+    )
 
 
 def _clean(ip: str) -> str:
@@ -37,10 +54,10 @@ def block_script(ip: str) -> str:
     )
 
 
-def unblock_script(ip: str) -> str:
-    return (
-        "$ErrorActionPreference='Stop'; "
+def unblock_script(*ips: str) -> str:
+    return "$ErrorActionPreference='Stop'; " + "; ".join(
         f"Remove-NetFirewallRule -DisplayName '{_name(_clean(ip))}' -ErrorAction SilentlyContinue"
+        for ip in ips
     )
 
 
@@ -61,16 +78,18 @@ class PowerShellFirewall:
         self._runner = runner
         self._timeout = timeout
 
-    async def _run(self, script: str) -> str:
+    async def _run(self, script: str, *, write: bool = False) -> str:
+        if write:
+            script = elevated(script)
         argv = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script]
         try:
-            result = await self._runner(argv, timeout=self._timeout)
+            result = await self._runner(argv, timeout=WRITE_TIMEOUT if write else self._timeout)
         except SnortError as exc:
             raise FirewallError(str(exc)) from exc
         if result.returncode != 0:
             text = f"{result.stderr}\n{result.stdout}".strip()
             if any(marker in text.lower() for marker in _DENIED):
-                raise NeedsAdmin("blocking needs an administrator: start Snorty as administrator")
+                raise NeedsAdmin(_APPROVAL)
             raise FirewallError(text.splitlines()[0][:200] if text else "firewall command failed")
         return result.stdout
 
@@ -85,10 +104,12 @@ class PowerShellFirewall:
         return found
 
     async def block(self, ip: str) -> None:
-        await self._run(block_script(ip))
+        await self._run(block_script(ip), write=True)
 
-    async def unblock(self, ip: str) -> None:
-        await self._run(unblock_script(ip))
+    async def unblock(self, *ips: str) -> None:
+        """Remove the rules of every address in one go: one permission prompt, not one each."""
+        if ips:
+            await self._run(unblock_script(*ips), write=True)
 
     async def blocked(self) -> Sequence[str]:
         """Single addresses that Snorty's rules block now."""

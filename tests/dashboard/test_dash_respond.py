@@ -88,11 +88,12 @@ def test_rules_page_lists_blocks_only_when_blocking_is_on(tmp_path: Path) -> Non
 
 
 def test_alert_rows_offer_block_buttons_only_when_blocking_is_on(tmp_path: Path) -> None:
+    now = datetime.now(UTC)  # /alerts shows the last 24 hours, so a fixed date would age out
     on, s, _ = make(tmp_path)
-    s.repo.add(alert(2001, msg="x", ts=T0))
+    s.repo.add(alert(2001, msg="x", ts=now))
     assert "/respond/block?ip=" in on.get("/alerts").text
     off, s2, _ = make(tmp_path / "off", on=False)
-    s2.repo.add(alert(2001, msg="x", ts=T0))
+    s2.repo.add(alert(2001, msg="x", ts=now))
     assert "/respond/block" not in off.get("/alerts").text
 
 
