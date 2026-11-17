@@ -13,4 +13,5 @@
   {% if error %}<p class="error">{{ error }}</p>
   {% elif saved != running %}<p class="muted">Saved. Stop the dashboard and start it again to switch to {{ names[saved] }}.</p>
   {% else %}<p class="muted">Pick the other engine to switch the next time the dashboard starts.</p>{% endif %}
+  <p class="muted">An <code>--engine</code> flag on the command line overrides this choice.</p>
 </section>
