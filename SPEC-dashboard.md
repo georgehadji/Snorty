@@ -178,4 +178,11 @@ Status: implemented. Criterion 14 was checked in the built-in browser in two par
 
 ## Alert retention
 
-The dashboard deletes alerts older than `retention_days` (default 90, `0` keeps everything; set in `snorty.toml`). It runs once at startup, because the PC is often off at night, and again daily at 03:30. This is the retention job that SPEC-sensor leaves to the dashboard. A failed delete is logged and the dashboard keeps running.
+The dashboard deletes alerts older than `retention_days` (default 90, `0` keeps everything; set in `snorty.toml`). It runs once at startup, because the PC is often off at night, and again daily at 03:30. This is the retention job that SPEC-sensor leaves to the dashboard. A failed delete is logged and the dashboard keeps running. The same job always deletes connection and DNS context older than `CONTEXT_DAYS` (7), also when `retention_days` is 0, so the 03:30 run is always scheduled.
+
+**Context around an alert.** For an alert with a flow id (Suricata's), the alert detail (`around` in `context_routes.py`) shows three things:
+- its connection, from the `conns` row of its flow, or "still open, or not logged yet" because Suricata logs a flow only when it ends;
+- the DNS lookups answered with the remote address (`remote_address`, else the destination) in the hour before, newest per client and name;
+- up to 20 other connections with that address that started 5 minutes either side.
+
+`EveDecoder` turns every `flow` event and every A/AAAA DNS answer into `Conn` and `Lookup` rows (`take_context`), alert or not. The sensor stores them with `add_context`.

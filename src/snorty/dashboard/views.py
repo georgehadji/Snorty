@@ -270,6 +270,12 @@ def alert_row(a: Alert, tz: tzinfo) -> AlertRow:
 GROUP_GAP = timedelta(minutes=15)
 
 
+def fmt_size(n: int) -> str:
+    if n < 1000:
+        return f"{n} B"  # a DNS packet is about 100 bytes; "1 KB" would hide that
+    return f"{n / 1_000_000:.1f} MB" if n >= 1_000_000 else f"{round(n / 1000)} KB"
+
+
 def fmt_span(delta: timedelta) -> str:
     """A group's length in words; under a minute is empty so a quick burst shows only its count."""
     secs = int(delta.total_seconds())

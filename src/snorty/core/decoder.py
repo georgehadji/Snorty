@@ -13,7 +13,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, tzinfo
 from typing import Any, Protocol
 
-from snorty.core.models import Alert, FactKind, FlowFact
+from snorty.core.models import Alert, Conn, FactKind, FlowFact, Lookup
 from snorty.core.parser import parse_line
 
 log = logging.getLogger("snorty.core")
@@ -42,6 +42,11 @@ class AlertDecoder(Protocol):
 
     def take_names(self) -> list[str]:
         """DNS names answered since the last call (alert or not), then forgotten."""
+        ...
+
+    def take_context(self) -> tuple[list[Conn], list[Lookup]]:
+        """Connections that ended and DNS answers seen since the last call (alert or not), then
+        forgotten. They are the context shown around an alert."""
         ...
 
 
@@ -82,6 +87,9 @@ class FastDecoder:
 
     def take_names(self) -> list[str]:
         return []  # nor about DNS
+
+    def take_context(self) -> tuple[list[Conn], list[Lookup]]:
+        return [], []  # nor about other connections
 
     def decode(
         self, lines: Sequence[str], year: int, ties: Sequence[int], now: datetime
@@ -137,11 +145,68 @@ def _text(value: object) -> str | None:
     return cleaned or None
 
 
+def _stamp(value: object) -> datetime | None:
+    """An EVE timestamp, or None when it is missing, broken or has no offset."""
+    if not isinstance(value, str):
+        return None
+    try:
+        ts = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return ts if ts.tzinfo is not None else None
+
+
+def _dns_name(value: str) -> str:
+    return value.lower().rstrip(".")
+
+
+def _asked(info: dict[str, object]) -> str | None:
+    """The name a DNS answer was for: `rrname` (EVE dns v2) or the first query (v3)."""
+    queries = info.get("queries")
+    first = queries[0] if isinstance(queries, list) and queries else None
+    name = _text(info.get("rrname")) or _text(
+        first.get("rrname") if isinstance(first, dict) else None
+    )
+    return _dns_name(name) if name else None
+
+
+def _count(value: object) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+
+def _conn(data: dict[str, object]) -> Conn | None:
+    """A `flow` event as a Conn, or None when it lacks what places it."""
+    info, flow = data.get("flow"), data.get("flow_id")
+    src, dst = _text(data.get("src_ip")), _text(data.get("dest_ip"))
+    if not isinstance(info, dict) or type(flow) is not int or not src or not dst:
+        return None
+    start, end = _stamp(info.get("start")), _stamp(info.get("end"))
+    if start is None or end is None:
+        return None
+    return Conn(
+        flow_id=flow,
+        start=start,
+        end=end,
+        proto=_text(data.get("proto")) or "",
+        app_proto=_text(data.get("app_proto")),
+        src_ip=src,
+        src_port=_port(data.get("src_port")),
+        dst_ip=dst,
+        dst_port=_port(data.get("dest_port")),
+        pkts_out=_count(info.get("pkts_toserver")),
+        pkts_in=_count(info.get("pkts_toclient")),
+        bytes_out=_count(info.get("bytes_toserver")),
+        bytes_in=_count(info.get("bytes_toclient")),
+        state=_text(info.get("state")),
+    )
+
+
 class EveDecoder:
     """Suricata's EVE JSON, one object per line. Only `alert` events become alerts. TLS and HTTP
     events and DNS answers are not alerts, but what they say about an alert's flow is kept for its
-    detail (`take_flows`); a stats event feeds `drop_pct`. Everything else is skipped without
-    counting as a failure."""
+    detail (`take_flows`); a stats event feeds `drop_pct`. Every ended flow and DNS answer is
+    also kept as context (`take_context`). Everything else is skipped without counting as a
+    failure."""
 
     def __init__(self) -> None:
         self.drop_pct: float | None = None
@@ -150,6 +215,8 @@ class EveDecoder:
         self._alerted: OrderedDict[int, None] = OrderedDict()
         self._out: list[FlowFact] = []
         self._answered: dict[str, None] = {}  # DNS names answered since take_names, in order
+        self._conns: list[Conn] = []  # since take_context; one decode call's worth at most
+        self._lookups: list[Lookup] = []
 
     def reset(self) -> None:
         self.drop_pct = None
@@ -158,6 +225,8 @@ class EveDecoder:
         self._alerted.clear()
         self._out.clear()
         self._answered.clear()
+        self._conns.clear()
+        self._lookups.clear()
 
     def take_flows(self) -> list[FlowFact]:
         out, self._out = self._out, []
@@ -165,6 +234,11 @@ class EveDecoder:
 
     def take_names(self) -> list[str]:
         out, self._answered = list(self._answered), {}
+        return out
+
+    def take_context(self) -> tuple[list[Conn], list[Lookup]]:
+        out = self._conns, self._lookups
+        self._conns, self._lookups = [], []
         return out
 
     def decode(
@@ -181,6 +255,9 @@ class EveDecoder:
                 kind = data.get("event_type")
                 if kind == "stats":
                     self._note_stats(data)
+                elif kind == "flow":
+                    if conn := _conn(data):
+                        self._conns.append(conn)
                 elif kind in ("dns", "tls", "http"):
                     self._note_event(kind, data)
                 continue
@@ -205,7 +282,7 @@ class EveDecoder:
 
     def _note_event(self, kind: str, data: dict[str, object]) -> None:
         if kind == "dns":
-            self._note_dns(data.get("dns"))
+            self._note_dns(data)
             return
         for fact in self._flow_facts(kind, data):
             if fact.flow_id in self._alerted:  # the alert came first
@@ -216,27 +293,29 @@ class EveDecoder:
                 facts.append(fact)
             _remember(self._pending, fact.flow_id, facts)
 
-    def _note_dns(self, info: object) -> None:
-        """Which name each address was looked up as: A and AAAA answers say so."""
+    def _note_dns(self, data: dict[str, object]) -> None:
+        """Which name each address was looked up as: A and AAAA answers say so. Each answer is
+        also kept as a Lookup by the client that asked (the event's source)."""
+        info = data.get("dns")
         answers = info.get("answers") if isinstance(info, dict) else None
-        for answer in answers if isinstance(answers, list) else ():
+        if not isinstance(info, dict) or not isinstance(answers, list):
+            return
+        client, ts = _text(data.get("src_ip")), _stamp(data.get("timestamp"))
+        asked = _asked(info)
+        for answer in answers:
             if isinstance(answer, dict) and answer.get("rrtype") in ("A", "AAAA"):
                 name, address = _text(answer.get("rrname")), _text(answer.get("rdata"))
                 if name and address:
                     _remember(self._names, address, name)
                     if len(self._answered) < _REMEMBERED:  # bounded between two takes
                         self._answered[name] = None
+                    if client and ts:  # the name asked for, not the alias that answered
+                        self._lookups.append(Lookup(ts, client, asked or _dns_name(name), address))
 
     @staticmethod
     def _flow_facts(kind: str, data: dict[str, object]) -> list[FlowFact]:
-        flow, stamp, info = data.get("flow_id"), data.get("timestamp"), data.get(kind)
-        if type(flow) is not int or not isinstance(stamp, str) or not isinstance(info, dict):
-            return []
-        try:
-            ts = datetime.fromisoformat(stamp)
-        except ValueError:
-            return []
-        if ts.tzinfo is None:
+        flow, ts, info = data.get("flow_id"), _stamp(data.get("timestamp")), data.get(kind)
+        if type(flow) is not int or ts is None or not isinstance(info, dict):
             return []
         if kind != "tls":  # a web request: the host and path, never the query (it may hold secrets)
             host, url = _text(info.get("hostname")), _text(info.get("url"))

@@ -3,11 +3,11 @@ import threading
 from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime, tzinfo
+from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
 from typing import Any, Literal
 
-from snorty.core.models import Alert, Block, FlowFact
+from snorty.core.models import Alert, Block, Conn, FlowFact, Lookup
 from snorty.core.query import AlertQuery, utc_text
 from snorty.core.triage import (
     STATES,
@@ -176,6 +176,38 @@ def _add_explanation_style(conn: sqlite3.Connection) -> None:
         )
 
 
+def _add_context(conn: sqlite3.Connection) -> None:
+    """Every connection the engine saw end and every DNS answer, alert or not: the context shown
+    around an alert. Kept a short time (`prune_context`); a row read twice is kept once."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS conns ("
+        "flow_id INTEGER NOT NULL, start TEXT NOT NULL, end_ts TEXT NOT NULL, proto TEXT NOT NULL, "
+        "app_proto TEXT, src_ip TEXT NOT NULL, src_port INTEGER, dst_ip TEXT NOT NULL, "
+        "dst_port INTEGER, pkts_out INTEGER NOT NULL, pkts_in INTEGER NOT NULL, "
+        "bytes_out INTEGER NOT NULL, bytes_in INTEGER NOT NULL, state TEXT, "
+        "PRIMARY KEY (flow_id, start))"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS conns_src ON conns (src_ip, start)")
+    conn.execute("CREATE INDEX IF NOT EXISTS conns_dst ON conns (dst_ip, start)")
+    conn.execute("CREATE INDEX IF NOT EXISTS conns_start ON conns (start)")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS lookups ("
+        "ts TEXT NOT NULL, client TEXT NOT NULL, name TEXT NOT NULL, address TEXT NOT NULL, "
+        "PRIMARY KEY (address, ts, client, name))"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS lookups_ts ON lookups (ts)")
+
+
+_CONN_COLUMNS = (
+    "flow_id, start, end_ts, proto, app_proto, src_ip, src_port, dst_ip, dst_port, "
+    "pkts_out, pkts_in, bytes_out, bytes_in, state"
+)
+
+
+def _conn_of(row: Sequence[Any]) -> Conn:
+    return Conn(row[0], datetime.fromisoformat(row[1]), datetime.fromisoformat(row[2]), *row[3:])
+
+
 SEEN_MAX = 253  # the longest DNS name
 type SeenKind = Literal["dns", "country"]
 
@@ -200,6 +232,7 @@ MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _add_flow_id,
     _add_seen,
     _add_explanation_style,
+    _add_context,
 ]
 
 
@@ -564,6 +597,98 @@ class AlertRepository:
                 (flow_id,),
             ).fetchall()
         return [(k, v) for k, v in rows]
+
+    def add_context(self, conns: Iterable[Conn], lookups: Iterable[Lookup]) -> None:
+        """Keep ended connections and DNS answers; one read twice is kept once."""
+        crows = [
+            (
+                c.flow_id,
+                utc_text(c.start),
+                utc_text(c.end),
+                c.proto,
+                c.app_proto,
+                c.src_ip,
+                c.src_port,
+                c.dst_ip,
+                c.dst_port,
+                c.pkts_out,
+                c.pkts_in,
+                c.bytes_out,
+                c.bytes_in,
+                c.state,
+            )  # fmt: skip
+            for c in conns
+        ]
+        lrows = [(utc_text(x.ts), x.client, x.name, x.address) for x in lookups]
+        if not crows and not lrows:
+            return
+        with self._lock:
+            self._conn.execute("BEGIN")
+            try:
+                self._conn.executemany(
+                    f"INSERT OR IGNORE INTO conns ({_CONN_COLUMNS}) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    crows,
+                )
+                self._conn.executemany(
+                    "INSERT OR IGNORE INTO lookups (ts, client, name, address) VALUES (?, ?, ?, ?)",
+                    lrows,
+                )
+            except BaseException:
+                self._conn.execute("ROLLBACK")
+                raise
+            self._conn.execute("COMMIT")
+
+    def conn(self, flow_id: int) -> Conn | None:
+        """The connection with this flow id, once it has ended (the newest if the id came back)."""
+        with self._lock:
+            row = self._conn.execute(
+                f"SELECT {_CONN_COLUMNS} FROM conns WHERE flow_id = ? ORDER BY start DESC LIMIT 1",
+                (flow_id,),
+            ).fetchone()
+        return _conn_of(row) if row else None
+
+    def conns_near(
+        self,
+        ip: str,
+        around: datetime,
+        window: timedelta,
+        *,
+        skip: int | None = None,
+        limit: int = 20,
+    ) -> list[Conn]:
+        """Connections to or from `ip` that started within `window` of `around`, oldest first,
+        without flow `skip`."""
+        lo, hi = utc_text(around - window), utc_text(around + window)
+        sql = (
+            f"SELECT {_CONN_COLUMNS} FROM conns WHERE src_ip = ? AND start BETWEEN ? AND ? "
+            f"UNION SELECT {_CONN_COLUMNS} FROM conns WHERE dst_ip = ? AND start BETWEEN ? AND ? "
+            "ORDER BY start LIMIT ?"
+        )
+        with self._lock:
+            rows = self._conn.execute(sql, (ip, lo, hi, ip, lo, hi, limit + 1)).fetchall()
+        return [c for c in map(_conn_of, rows) if c.flow_id != skip][:limit]
+
+    def lookups_of(
+        self, address: str, before: datetime, window: timedelta, limit: int = 10
+    ) -> list[Lookup]:
+        """Who looked up which name and was told `address`, in the `window` up to `before`: the
+        newest answer per (client, name), newest first."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT MAX(ts), client, name FROM lookups "
+                "WHERE address = ? AND ts BETWEEN ? AND ? "
+                "GROUP BY client, name ORDER BY MAX(ts) DESC LIMIT ?",
+                (address, utc_text(before - window), utc_text(before), limit),
+            ).fetchall()
+        return [Lookup(datetime.fromisoformat(t), c, n, address) for t, c, n in rows]
+
+    def prune_context(self, before: datetime) -> None:
+        """Forget connections that started, and DNS answers given, before `before`."""
+        cutoff = utc_text(before)
+        with self._lock:
+            self._conn.execute("DELETE FROM conns WHERE start < ?", (cutoff,))
+            self._conn.execute("DELETE FROM lookups WHERE ts < ?", (cutoff,))
 
     def blocks(self, state: str | None = None) -> list[Block]:
         sql = "SELECT ip, created, until, alert_id, state FROM blocks"

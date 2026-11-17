@@ -3,6 +3,7 @@ import logging
 import socket
 import threading
 from collections.abc import AsyncIterator
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ from fastapi.responses import StreamingResponse
 from snorty.compose import Runtime
 from snorty.core.repository import AlertRepository
 from snorty.dashboard.__main__ import (
+    CONTEXT_DAYS,
     HOST,
     LOG_NAME,
     STOP_NAME,
@@ -325,6 +327,19 @@ def test_retention_zero_keeps_everything(tmp_path: Path) -> None:
     (tmp_path / "data" / "snorty.toml").write_text("retention_days = 0\n", encoding="utf-8")
     assert cli(tmp_path, Rig(tmp_path)) == 0
     assert stored_sids(tmp_path) == [1, 2]
+
+
+async def test_connection_context_is_pruned_after_a_week_even_when_alerts_are_kept(
+    tmp_path: Path,
+) -> None:
+    from snorty.core.models import Lookup
+
+    now = datetime.now(UTC)
+    with closing(AlertRepository(tmp_path / "t.db")) as repo:
+        old = [Lookup(now - timedelta(days=CONTEXT_DAYS + 1), "pc", "old.example", "x")]
+        repo.add_context([], [*old, Lookup(now, "pc", "new.example", "x")])
+        assert await prune_old(repo, 0) == 0  # retention 0 keeps every alert
+        assert [x.name for x in repo.lookups_of("x", now, timedelta(days=30))] == ["new.example"]
 
 
 async def test_a_failing_prune_is_logged_not_raised(tmp_path: Path) -> None:

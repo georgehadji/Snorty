@@ -30,6 +30,7 @@ LOG_NAME = "snorty.log"
 STOP_NAME = "stop.request"  # `--stop` writes it; the running dashboard stops and deletes it
 STOP_POLL = 1.0  # seconds between looks for the stop request
 STOP_WAIT = 90.0  # how long `--stop` waits for the dashboard (and the sensor) to finish
+CONTEXT_DAYS = 7  # connection and DNS context kept for alerts; about 70k connections a day
 STOP_GRACE = 5  # an open browser tab keeps its live stream; cut it after this many seconds
 log = logging.getLogger("snorty.dashboard")
 
@@ -178,10 +179,16 @@ def note_store(cfg: DashConfig) -> NoteStore | None:
 
 
 async def prune_old(repo: AlertRepository, days: int, pcap_dir: Path | None = None) -> int:
-    """Delete alerts, and recorded captures, older than `days` days (0 keeps all).
+    """Delete alerts, and recorded captures, older than `days` days (0 keeps all). Connection
+    and DNS context is always kept only CONTEXT_DAYS days.
 
     A failure is logged, not raised. Returns the number of alerts removed.
     """
+    try:
+        cutoff = datetime.now(UTC) - timedelta(days=CONTEXT_DAYS)
+        await asyncio.to_thread(repo.prune_context, cutoff)
+    except Exception:
+        log.exception("could not delete old connection context")
     if days <= 0:
         return 0
     if pcap_dir is not None:
@@ -238,7 +245,7 @@ async def run(
     prune = asyncio.create_task(
         run_daily(
             lambda: prune_old(services.repo, cfg.retention_days, services.pcap_dir),
-            "03:30" if cfg.retention_days else "",
+            "03:30",  # even with retention_days 0: the connection context is still pruned
         ),
         name="alert-prune",
     )

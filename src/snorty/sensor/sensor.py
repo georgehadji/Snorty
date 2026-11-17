@@ -478,4 +478,5 @@ class Sensor:
         new = self._repo.add_new(alerts, checkpoint)
         self._repo.add_flow_facts(self._decoder.take_flows())
         self._repo.note_seen("dns", self._decoder.take_names(), self._wall())
+        self._repo.add_context(*self._decoder.take_context())
         return new, bad

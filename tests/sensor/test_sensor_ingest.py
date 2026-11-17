@@ -443,6 +443,28 @@ async def test_what_the_decoder_saw_on_flows_is_stored(tmp_path: Path) -> None:
     r.repo.close()
 
 
+async def test_the_connection_context_the_decoder_saw_is_stored(tmp_path: Path) -> None:
+    from snorty.core.models import Conn, Lookup
+
+    t = datetime.now(UTC)
+    c = Conn(9, t, t, "TCP", None, "10.0.0.1", 1, "203.0.113.9", 443, 1, 1, 1, 1, None)
+
+    class Seen(FastDecoder):
+        def take_context(self) -> tuple[list[Conn], list[Lookup]]:
+            return [c], [Lookup(t, "10.0.0.1", "evil.example", "203.0.113.9")]
+
+    r = Rig(tmp_path)
+    r.sensor._decoder = Seen(UTC)
+    r.append(line(1))
+    await r.sensor.start()
+    assert r.repo.conn(9) == c
+    assert [x.name for x in r.repo.lookups_of("203.0.113.9", t, timedelta(hours=1))] == [
+        "evil.example"
+    ]
+    await r.sensor.stop()
+    r.repo.close()
+
+
 async def test_names_the_decoder_saw_answered_are_noted_as_seen(tmp_path: Path) -> None:
     class Named(FastDecoder):
         def take_names(self) -> list[str]:

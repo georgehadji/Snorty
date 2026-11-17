@@ -15,6 +15,17 @@
       {% if not loop.first %} / {% endif %}<a href="{{ t.url }}" target="_blank" rel="noopener noreferrer">{{ t.id }}</a> {{ t.name }}
       {%- endfor -%}
     </dd>{% endif %}
+    {% if ctx.around %}<dt>This connection</dt><dd>{{ ctx.around.flow }}</dd>{% endif %}
   </dl>
+  {% if ctx.around %}
+  <h3>DNS lookups that gave <span class="mono">{{ ctx.around.peer }}</span>, hour before</h3>
+  {% if ctx.around.lookups %}<dl class="detail">
+    {% for when, client, name in ctx.around.lookups %}<dt>{{ when }}, by <span class="mono">{{ client }}</span></dt><dd class="mono">{{ name }}</dd>{% endfor %}
+  </dl>{% else %}<p class="muted">None logged.</p>{% endif %}
+  <h3>Other connections with it, 5 min either side</h3>
+  {% if ctx.around.nearby %}<dl class="detail">
+    {% for when, text in ctx.around.nearby %}<dt>{{ when }}</dt><dd class="mono">{{ text }}</dd>{% endfor %}
+  </dl>{% else %}<p class="muted">None logged.</p>{% endif %}
+  {% endif %}
 {% endif %}
 </div>

@@ -73,3 +73,34 @@ class FlowFact:
     kind: FactKind
     value: str
     ts: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class Conn:
+    """One connection the engine saw end (Suricata's `flow` event), alert or not. `src` is the
+    side that opened it; `out` counts what it sent, `in_` what it got back."""
+
+    flow_id: int
+    start: datetime
+    end: datetime
+    proto: str
+    app_proto: str | None  # what the engine recognised it as (tls, dns, http...), if anything
+    src_ip: str
+    src_port: int | None
+    dst_ip: str
+    dst_port: int | None
+    pkts_out: int
+    pkts_in: int
+    bytes_out: int
+    bytes_in: int
+    state: str | None  # new, established, closed...
+
+
+@dataclass(frozen=True, slots=True)
+class Lookup:
+    """One DNS answer: `client` looked up `name` and was told `address`."""
+
+    ts: datetime
+    client: str
+    name: str
+    address: str

@@ -15,6 +15,7 @@ from snorty.dashboard import pcaps
 from snorty.dashboard.jobs import Done, Errored, Idle, Job, Running
 from snorty.dashboard.services import Svc
 from snorty.dashboard.ui import Ui
+from snorty.dashboard.views import fmt_size
 from snorty.packets import (
     CAPTURE_MAX_SECONDS,
     CAPTURE_MIN_SECONDS,
@@ -40,10 +41,6 @@ class _Run:
 
 
 CaptureResult = Captured | Failed
-
-
-def _size(n: int) -> str:
-    return f"{n / 1_000_000:.1f} MB" if n >= 1_000_000 else f"{max(1, round(n / 1000))} KB"
 
 
 def _seconds(form: dict[str, str]) -> int:
@@ -141,7 +138,7 @@ def add_capture_routes(
                     "_capture_status.html",
                     state="done",
                     saved=done.name,
-                    size=_size(done.size),
+                    size=fmt_size(done.size),
                     pcaps=pcaps.list_pcaps(svc.pcap_dir),
                     selected=done.name,
                     oob=True,
