@@ -8,7 +8,7 @@ from typing import Literal
 
 from snorty.core.bus import EventBus
 from snorty.core.decoder import AlertDecoder, FastDecoder
-from snorty.core.events import AlertRaised, AlertsBackfilled, SensorStateChanged
+from snorty.core.events import AlertRaised, AlertsBackfilled, SensorHealth, SensorStateChanged
 from snorty.core.models import Alert
 from snorty.core.repository import TAIL_KEY, AlertRepository
 from snorty.sensor.config import SensorConfig
@@ -37,6 +37,7 @@ class SensorStatus:
     unparsed: int
     restarts: int  # automatic or requested restarts of a running Snort
     last_error: str | None
+    drop_pct: float | None = None  # share of packets the engine dropped, when it reports it
 
 
 def _read_pid(path: Path) -> int | None:
@@ -104,6 +105,7 @@ class Sensor:
         self._alerts_seen = 0
         self._last_alert_ts: datetime | None = None
         self._unparsed = 0
+        self._drop_pct: float | None = None
 
         self._supervisor: asyncio.Task[None] | None = None
         self._stop_requested = asyncio.Event()
@@ -130,6 +132,7 @@ class Sensor:
             unparsed=self._unparsed,
             restarts=self._restarts,
             last_error=self._last_error,
+            drop_pct=self._drop_pct,
         )
 
     def _active(self) -> bool:
@@ -451,9 +454,16 @@ class Sensor:
                         self._bus.publish(AlertRaised(alert))
                 else:  # no toast for old alerts, but the journal must know which days changed
                     self._bus.publish(AlertsBackfilled(min(a.ts for a in new), newest))
+        self._note_health()
         self._tail = result.state
         # A chunk of blank lines moves the offset without yielding a line: keep reading.
         return moved
+
+    def _note_health(self) -> None:
+        pct = self._decoder.drop_pct
+        if pct is not None and pct != self._drop_pct:
+            self._drop_pct = pct
+            self._bus.publish(SensorHealth(pct))
 
     def _store_lines(
         self,

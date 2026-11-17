@@ -57,6 +57,14 @@ def build_toast(alert: Alert, same_sid: int = 0, other: int = 0, tz: tzinfo = UT
     return Toast(title, tuple(lines))
 
 
+def build_health_toast(drop_pct: float) -> Toast:
+    """The engine is dropping packets, so it is missing traffic."""
+    return Toast(
+        "Sensor is dropping packets",
+        (f"{drop_pct:g}% of packets were dropped", "Alerts may be missing"),
+    )
+
+
 def build_flagged_toast(
     alert: Alert, reason: str, same_sid: int = 0, other: int = 0, tz: tzinfo = UTC
 ) -> Toast:

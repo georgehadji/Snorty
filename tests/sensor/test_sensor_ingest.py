@@ -9,7 +9,7 @@ from fakes import FakeClock, FakePort
 
 from snorty.core.bus import EventBus, Subscription
 from snorty.core.decoder import FastDecoder
-from snorty.core.events import AlertRaised, AlertsBackfilled, Event
+from snorty.core.events import AlertRaised, AlertsBackfilled, Event, SensorHealth
 from snorty.core.repository import AlertRepository
 from snorty.sensor import tail
 from snorty.sensor.config import SensorConfig
@@ -412,3 +412,16 @@ async def test_a_damaged_checkpoint_falls_back_to_reading_the_whole_file(tmp_pat
     assert second.stored() == 2  # re-read, nothing stored twice
     await second.sensor.stop()
     first.repo.close()
+
+
+async def test_a_new_drop_figure_from_the_decoder_is_published_once(rig: Rig) -> None:
+    decoder = FastDecoder(UTC)
+    rig.sensor._decoder = decoder
+    await rig.sensor.start()
+    rig.drain()
+    decoder.drop_pct = 3.5
+    rig.append(line(7))
+    await eventually(lambda: rig.sensor.status().drop_pct == 3.5)
+    await asyncio.sleep(0.02)  # later polls with the same figure stay quiet
+    assert [e for e in rig.drain() if isinstance(e, SensorHealth)] == [SensorHealth(3.5)]
+    await rig.sensor.stop()

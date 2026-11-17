@@ -171,3 +171,9 @@ def test_hourly_chart_has_24_bars_with_the_peak_scaled_to_a_round_top() -> None:
     assert (chart.bars[-1].height, chart.bars[-3].height, chart.bars[0].height) == (70, 30, 0)
     assert chart.bars[-1].tip.endswith("7 alerts")
     assert [c for c, _ in chart.labels] == [1, 7, 13, 19]
+
+
+@pytest.mark.parametrize(("pct", "warn"), [(None, False), (0.5, False), (1.0, False), (1.5, True)])
+def test_sensor_card_warns_above_one_percent_dropped(pct: float | None, warn: bool) -> None:
+    card = sensor_card(status(State.RUNNING, drop_pct=pct), UTC)
+    assert card.drop_pct == pct and card.drop_warn is warn

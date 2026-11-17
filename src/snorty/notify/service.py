@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from datetime import UTC, tzinfo
 
 from snorty.core.bus import EventBus, Subscription
-from snorty.core.events import AlertFlagged, AlertRaised
+from snorty.core.events import AlertFlagged, AlertRaised, SensorHealth
 from snorty.notify.ports import Notifier
 from snorty.notify.throttle import Throttle
-from snorty.notify.toast import build_flagged_toast, build_toast
+from snorty.notify.toast import build_flagged_toast, build_health_toast, build_toast
 
 log = logging.getLogger("snorty.notify")
 
@@ -24,6 +24,8 @@ class NotifyConfig:
     cap_window: float = 60.0
     tz: tzinfo = UTC  # zone for the time shown in the toast
     show_timeout: float = 15.0  # a notifier that takes longer is abandoned
+    drop_pct: float = 5.0  # toast when the engine drops more than this share of packets
+    drop_window: float = 3600.0  # at most one such toast per this many seconds
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +51,7 @@ class NotifyService:
         self._sub: Subscription | None = None
         self._task: asyncio.Task[None] | None = None
         self._shown = 0
+        self._drop_toast_at: float | None = None
 
     def status(self) -> NotifyStatus:
         return NotifyStatus(self._shown, self._config.min_priority)
@@ -64,6 +67,7 @@ class NotifyService:
             maxsize=1000,
             accept=lambda e: (
                 isinstance(e, AlertFlagged)
+                or (isinstance(e, SensorHealth) and e.drop_pct > self._config.drop_pct)
                 or (isinstance(e, AlertRaised) and e.alert.priority <= self._config.min_priority)
             ),
             keep_oldest=True,
@@ -81,7 +85,9 @@ class NotifyService:
     async def _consume(self, sub: Subscription) -> None:
         missed = 0
         async for event in sub:
-            if isinstance(event, AlertRaised | AlertFlagged):
+            if isinstance(event, SensorHealth):
+                await self._health(event)
+            elif isinstance(event, AlertRaised | AlertFlagged):
                 try:
                     await self._handle(event)
                 except Exception:  # the consumer must outlive any single bad alert
@@ -90,6 +96,21 @@ class NotifyService:
             if sub.dropped > missed:
                 self._throttle.missed(sub.dropped - missed)
                 missed = sub.dropped
+
+    async def _health(self, event: SensorHealth) -> None:
+        now = self._clock()
+        last = self._drop_toast_at
+        if last is not None and now - last < self._config.drop_window:
+            return
+        self._drop_toast_at = now
+        try:
+            await asyncio.wait_for(
+                self._notifier.show(build_health_toast(event.drop_pct)), self._config.show_timeout
+            )
+            self._shown += 1
+        except Exception:  # a failed toast is retried on the next health event
+            self._drop_toast_at = last
+            log.exception("could not show the dropped-packets toast")
 
     async def _handle(self, event: AlertRaised | AlertFlagged) -> None:
         alert = event.alert

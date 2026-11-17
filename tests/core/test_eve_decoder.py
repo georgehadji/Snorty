@@ -103,3 +103,28 @@ def test_fast_decoder_decodes_nothing_from_nothing() -> None:
     d = FastDecoder(UTC)
     d.reset()
     assert d.decode([], NOW.year, (), NOW) == ([], 0)
+
+
+def stats(packets: int, drops: int) -> str:
+    return json.dumps(
+        {
+            "event_type": "stats",
+            "stats": {"capture": {"kernel_packets": packets, "kernel_drops": drops}},
+        }
+    )
+
+
+def test_stats_events_give_the_drop_percentage() -> None:
+    dec = EveDecoder()
+    assert dec.drop_pct is None
+    alerts, bad = dec.decode([stats(200, 3), stats(1000, 25)], NOW.year, (), NOW)
+    assert (alerts, bad) == ([], 0)
+    assert dec.drop_pct == 2.5  # the latest totals count
+    dec.reset()
+    assert dec.drop_pct is None
+
+
+def test_stats_without_traffic_or_capture_are_ignored() -> None:
+    dec = EveDecoder()
+    dec.decode([stats(0, 0), json.dumps({"event_type": "stats", "stats": {}})], 2026, (), NOW)
+    assert dec.drop_pct is None

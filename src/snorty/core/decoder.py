@@ -29,6 +29,11 @@ class AlertDecoder(Protocol):
         """The alert file was replaced: forget anything learned from the old one."""
         ...
 
+    @property
+    def drop_pct(self) -> float | None:
+        """Packets the engine dropped so far, as a percentage, if its output says (else None)."""
+        ...
+
 
 def _settle_fold(ts: datetime, last: float | None, second: bool) -> tuple[datetime, float, bool]:
     """Snort writes local wall time. When the clocks go back, that hour is written twice and both
@@ -52,6 +57,7 @@ class FastDecoder:
         self._tz = tz
         self._last: float | None = None  # newest alert time read so far, for _settle_fold
         self._second = False  # reading the repeated hour of a clock change a second time
+        self.drop_pct: float | None = None  # Snort's fast alerts carry no drop statistics
 
     def reset(self) -> None:
         self._last, self._second = None, False
@@ -93,8 +99,11 @@ class EveDecoder:
     """Suricata's EVE JSON, one object per line. Only `alert` events become alerts; every other
     event type is skipped without counting as a failure."""
 
+    def __init__(self) -> None:
+        self.drop_pct: float | None = None
+
     def reset(self) -> None:
-        pass
+        self.drop_pct = None
 
     def decode(
         self, lines: Sequence[str], year: int, ties: Sequence[int], now: datetime
@@ -107,6 +116,8 @@ class EveDecoder:
             except ValueError:
                 data = None
             if isinstance(data, dict) and data.get("event_type") != "alert":
+                if data.get("event_type") == "stats":
+                    self._note_stats(data)
                 continue
             alert = self._alert(data, text) if isinstance(data, dict) else None
             if alert is None:
@@ -115,6 +126,16 @@ class EveDecoder:
             else:
                 alerts.append(alert)
         return alerts, bad
+
+    def _note_stats(self, data: dict[str, object]) -> None:
+        """Totals since the engine started: kernel_drops out of kernel_packets."""
+        stats = data.get("stats")
+        capture = stats.get("capture") if isinstance(stats, dict) else None
+        if not isinstance(capture, dict):
+            return
+        packets, drops = capture.get("kernel_packets"), capture.get("kernel_drops")
+        if isinstance(packets, int) and isinstance(drops, int) and packets > 0:
+            self.drop_pct = round(100 * drops / packets, 2)
 
     @staticmethod
     def _alert(data: dict[str, object], text: str) -> Alert | None:

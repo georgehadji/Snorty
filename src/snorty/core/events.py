@@ -42,4 +42,13 @@ class AlertFlagged:
     reason: str
 
 
-type Event = AlertRaised | AlertsBackfilled | AlertFlagged | SensorStateChanged | RulesUpdated
+@dataclass(frozen=True, slots=True)
+class SensorHealth:
+    """How much traffic the engine missed since it started, as a percentage of what it saw."""
+
+    drop_pct: float
+
+
+type Event = (
+    AlertRaised | AlertsBackfilled | AlertFlagged | SensorStateChanged | RulesUpdated | SensorHealth
+)

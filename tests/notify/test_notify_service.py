@@ -5,7 +5,7 @@ import pytest
 from notify_fakes import FakeClock, RecordingNotifier, make_alert, raise_alert, settle
 
 from snorty.core.bus import EventBus
-from snorty.core.events import AlertFlagged, SensorStateChanged
+from snorty.core.events import AlertFlagged, SensorHealth, SensorStateChanged
 from snorty.notify.service import NotifyConfig, NotifyService
 
 
@@ -125,3 +125,16 @@ async def test_a_flagged_alert_toasts_whatever_its_priority_and_has_its_own_thro
     assert flagged.title == "Known bad: Feodo Tracker botnet C2"
     assert flagged.lines[0] == "rule 1000003" and "SID 1:1000003" in flagged.lines[-1]
     assert plain.title.startswith("Snort P1:")
+
+
+async def test_heavy_drops_toast_once_an_hour(rig: Rig) -> None:
+    rig.bus.publish(SensorHealth(2.0))  # under the 5 % line
+    rig.bus.publish(SensorHealth(9.0))
+    await settle(lambda: len(rig.notifier.toasts) == 1)
+    rig.bus.publish(SensorHealth(12.0))
+    await settle()
+    assert len(rig.notifier.toasts) == 1
+    assert rig.notifier.toasts[0].title == "Sensor is dropping packets"
+    rig.clock.now += 3601
+    rig.bus.publish(SensorHealth(12.0))
+    await settle(lambda: len(rig.notifier.toasts) == 2)

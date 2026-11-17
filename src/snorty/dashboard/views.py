@@ -253,6 +253,9 @@ def group_rows(alerts: list[Alert], tz: tzinfo) -> list[AlertRow]:
     return rows
 
 
+DROP_WARN_PCT = 1.0
+
+
 @dataclass(frozen=True, slots=True)
 class SensorCard:
     state: str
@@ -266,6 +269,8 @@ class SensorCard:
     can_start: bool
     can_stop: bool
     can_restart: bool
+    drop_pct: float | None = None
+    drop_warn: bool = False  # above 1 %: the engine is missing traffic
 
 
 def sensor_card(st: SensorStatus, tz: tzinfo) -> SensorCard:
@@ -285,6 +290,8 @@ def sensor_card(st: SensorStatus, tz: tzinfo) -> SensorCard:
         can_start=st.state in (State.STOPPED, State.FAILED),
         can_stop=st.state in (State.STARTING, State.RUNNING, State.FAILED),
         can_restart=st.state is State.RUNNING,
+        drop_pct=st.drop_pct,
+        drop_warn=st.drop_pct is not None and st.drop_pct > DROP_WARN_PCT,
     )
 
 

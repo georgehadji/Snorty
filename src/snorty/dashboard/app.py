@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.gzip import GZipMiddleware
 
-from snorty.core.events import AlertRaised, Event, RulesUpdated, SensorStateChanged
+from snorty.core.events import AlertRaised, Event, RulesUpdated, SensorHealth, SensorStateChanged
 from snorty.core.query import AlertQuery
 from snorty.core.triage import INBOX
 from snorty.dashboard import views
@@ -129,7 +129,7 @@ def build_app(
                     return None
                 row = views.alert_row(event.alert, svc.tz)
                 return "alert", fragment("_alert_rows.html", rows=[row], paged=True)
-            if isinstance(event, SensorStateChanged):
+            if isinstance(event, SensorStateChanged | SensorHealth):
                 card = views.sensor_card(svc.sensor.status(), svc.tz)
                 return "sensor", fragment("_sensor_card.html", card=card)
             rules = views.rules_summary(await svc.rules.status())
@@ -205,7 +205,7 @@ def build_app(
         def wanted(event: Event) -> bool:  # what this tab shows, so others never fill its queue
             if isinstance(event, AlertRaised):
                 return views.alert_matches(f, event.alert)
-            return isinstance(event, SensorStateChanged | RulesUpdated)
+            return isinstance(event, SensorStateChanged | SensorHealth | RulesUpdated)
 
         return StreamingResponse(
             sse_frames(
