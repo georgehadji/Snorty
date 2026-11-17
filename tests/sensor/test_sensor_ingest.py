@@ -425,3 +425,19 @@ async def test_a_new_drop_figure_from_the_decoder_is_published_once(rig: Rig) ->
     await asyncio.sleep(0.02)  # later polls with the same figure stay quiet
     assert [e for e in rig.drain() if isinstance(e, SensorHealth)] == [SensorHealth(3.5)]
     await rig.sensor.stop()
+
+
+async def test_what_the_decoder_saw_on_flows_is_stored(tmp_path: Path) -> None:
+    from snorty.core.models import FlowFact
+
+    class Seen(FastDecoder):
+        def take_flows(self) -> list[FlowFact]:
+            return [FlowFact(9, "tls", "evil.example", datetime.now(UTC))]
+
+    r = Rig(tmp_path)
+    r.sensor._decoder = Seen(UTC)
+    r.append(line(1))
+    await r.sensor.start()
+    assert r.repo.flow_facts(9) == [("tls", "evil.example")]
+    await r.sensor.stop()
+    r.repo.close()

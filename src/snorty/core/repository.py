@@ -7,7 +7,7 @@ from datetime import UTC, datetime, tzinfo
 from pathlib import Path
 from typing import Any, Literal
 
-from snorty.core.models import Alert, Block
+from snorty.core.models import Alert, Block, FlowFact
 from snorty.core.query import AlertQuery, utc_text
 from snorty.core.triage import STATES, ArchiveRule, TriageState, spec_from_json, spec_to_json
 
@@ -125,6 +125,16 @@ def _add_explanations(conn: sqlite3.Connection) -> None:
     )
 
 
+def _add_flows(conn: sqlite3.Connection) -> None:
+    """What the engine saw on the flows of alerts (TLS names, web requests, looked-up names)."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS flows ("
+        "flow_id INTEGER NOT NULL, kind TEXT NOT NULL, value TEXT NOT NULL, ts TEXT NOT NULL, "
+        "PRIMARY KEY (flow_id, kind, value))"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS flows_ts ON flows (ts)")
+
+
 # Append only: a database's `schema_version` is how many of these it has had.
 MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _rebuild_with_dup,
@@ -133,6 +143,7 @@ MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _add_annotations,
     _add_blocks,
     _add_explanations,
+    _add_flows,
 ]
 
 
@@ -453,6 +464,25 @@ class AlertRepository:
                 (sid, rev, model, text, utc_text(created)),
             )
 
+    def add_flow_facts(self, facts: Iterable[FlowFact]) -> None:
+        """Keep what was seen on flows; a fact read twice is kept once."""
+        rows = [(f.flow_id, f.kind, f.value, utc_text(f.ts)) for f in facts]
+        if rows:
+            with self._lock:
+                self._conn.executemany(
+                    "INSERT OR IGNORE INTO flows (flow_id, kind, value, ts) VALUES (?, ?, ?, ?)",
+                    rows,
+                )
+
+    def flow_facts(self, flow_id: int) -> list[tuple[str, str]]:
+        """(kind, value) pairs seen on this flow."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT kind, value FROM flows WHERE flow_id = ? ORDER BY kind, value LIMIT 12",
+                (flow_id,),
+            ).fetchall()
+        return [(k, v) for k, v in rows]
+
     def blocks(self, state: str | None = None) -> list[Block]:
         sql = "SELECT ip, created, until, alert_id, state FROM blocks"
         with self._lock:
@@ -483,6 +513,7 @@ class AlertRepository:
             self._conn.execute("BEGIN")  # rows and floor together: a crash between them would
             try:  # let the deleted alerts be read back from Snort's file
                 deleted = self._conn.execute("DELETE FROM alerts WHERE ts < ?", (cutoff,)).rowcount
+                self._conn.execute("DELETE FROM flows WHERE ts < ?", (cutoff,))
                 self._conn.execute(
                     "INSERT INTO meta (key, value) VALUES (?, ?) "
                     "ON CONFLICT (key) DO UPDATE SET value = MAX(value, excluded.value)",

@@ -128,3 +128,89 @@ def test_stats_without_traffic_or_capture_are_ignored() -> None:
     dec = EveDecoder()
     dec.decode([stats(0, 0), json.dumps({"event_type": "stats", "stats": {}})], 2026, (), NOW)
     assert dec.drop_pct is None
+
+
+TS = "2026-11-17T10:15:31.000000+0200"
+
+
+def facts(decoder: EveDecoder) -> set[tuple[int, str, str]]:
+    return {(f.flow_id, f.kind, f.value) for f in decoder.take_flows()}
+
+
+def test_tls_and_http_facts_follow_an_alert_on_their_flow() -> None:
+    d = EveDecoder()
+    d.decode([eve()], NOW.year, (), NOW)
+    tls = json.dumps(
+        {
+            "event_type": "tls",
+            "timestamp": TS,
+            "flow_id": 1234567890,
+            "tls": {"sni": "evil.example"},
+        }
+    )
+    http = json.dumps(
+        {
+            "event_type": "http",
+            "timestamp": TS,
+            "flow_id": 1234567890,
+            "http": {"hostname": "evil.example", "url": "/a/b?token=secret"},
+        }
+    )
+    d.decode([tls, http], NOW.year, (), NOW)
+    got = facts(d)
+    assert (1234567890, "tls", "evil.example") in got
+    assert (1234567890, "http", "evil.example/a/b") in got  # the query string is dropped
+    assert not any("secret" in v for _, _, v in got)
+    assert d.take_flows() == []  # taken once
+
+
+def test_a_fact_that_came_before_its_alert_is_kept() -> None:
+    d = EveDecoder()
+    tls = json.dumps(
+        {
+            "event_type": "tls",
+            "timestamp": TS,
+            "flow_id": 1234567890,
+            "tls": {"sni": "evil.example"},
+        }
+    )
+    d.decode([tls], NOW.year, (), NOW)
+    assert d.take_flows() == []  # no alert yet: held back
+    d.decode([eve()], NOW.year, (), NOW)
+    assert (1234567890, "tls", "evil.example") in facts(d)
+
+
+def test_a_dns_answer_names_the_address_an_alert_later_talks_to() -> None:
+    d = EveDecoder()
+    dns = json.dumps(
+        {
+            "event_type": "dns",
+            "flow_id": 77,
+            "dns": {"answers": [{"rrname": "evil.example", "rrtype": "A", "rdata": "203.0.113.9"}]},
+        }
+    )
+    d.decode([dns], NOW.year, (), NOW)
+    d.decode([eve()], NOW.year, (), NOW)
+    assert (1234567890, "dns", "evil.example") in facts(d)
+
+
+def test_reset_forgets_what_was_seen() -> None:
+    d = EveDecoder()
+    tls = json.dumps(
+        {
+            "event_type": "tls",
+            "timestamp": TS,
+            "flow_id": 1234567890,
+            "tls": {"sni": "evil.example"},
+        }
+    )
+    d.decode([tls], NOW.year, (), NOW)
+    d.reset()
+    d.decode([eve()], NOW.year, (), NOW)
+    assert d.take_flows() == []
+
+
+def test_alert_flow_id_is_read_from_its_raw_text() -> None:
+    alerts, _ = decode(eve())
+    assert alerts[0].flow_id == 1234567890
+    assert decode(eve(flow_id=None))[0][0].flow_id is None

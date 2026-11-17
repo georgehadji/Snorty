@@ -288,3 +288,16 @@ def test_each_database_records_how_many_migrations_it_has_had(tmp_path: Path) ->
     fresh = AlertRepository(tmp_path / "fresh.db")
     assert fresh.meta_get("schema_version") == str(len(MIGRATIONS))
     fresh.close()
+
+
+def test_flow_facts_are_kept_once_and_pruned_with_their_age(tmp_path: Path) -> None:
+    from snorty.core.models import FlowFact
+
+    with closing(AlertRepository(tmp_path / "f.db")) as repo:
+        old = FlowFact(5, "tls", "old.example", T0 - timedelta(days=100))
+        new = FlowFact(5, "tls", "new.example", T0)
+        repo.add_flow_facts([old, new, new])
+        assert repo.flow_facts(5) == [("tls", "new.example"), ("tls", "old.example")]
+        repo.prune(T0 - timedelta(days=90))
+        assert repo.flow_facts(5) == [("tls", "new.example")]
+        assert repo.flow_facts(6) == []

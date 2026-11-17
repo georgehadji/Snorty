@@ -476,4 +476,5 @@ class Sensor:
         `ties[i]` says which of several identical lines `lines[i]` is (0 when not given)."""
         alerts, bad = self._decoder.decode(lines, year, ties, self._wall())
         new = self._repo.add_new(alerts, checkpoint)
+        self._repo.add_flow_facts(self._decoder.take_flows())
         return new, bad

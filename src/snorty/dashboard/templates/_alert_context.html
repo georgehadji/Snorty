@@ -8,6 +8,7 @@
     {% if ctx.country %}<dt>Country</dt><dd>{{ ctx.country }}</dd>{% endif %}
     {% if ctx.asn %}<dt>Network</dt><dd>{{ ctx.asn }}</dd>{% endif %}
     {% if ctx.rdns %}<dt>Hostname</dt><dd class="mono">{{ ctx.rdns }}</dd>{% endif %}
+    {% for kind, value in ctx.seen %}<dt>{{ labels[kind] }}</dt><dd class="mono">{{ value }}</dd>{% endfor %}
   </dl>
 {% endif %}
 </div>

@@ -23,6 +23,14 @@ class Alert:
     # so two alerts can read exactly alike; `raw` plus `dup` is what tells them apart.
     dup: int = field(default=0, compare=False)
 
+    @property
+    def flow_id(self) -> int | None:
+        """The engine's flow id, when the alert line carries one (Suricata's do, Snort's do not)."""
+        parts = self.raw.split(":", 2)
+        return (
+            int(parts[1]) if len(parts) == 3 and parts[0] == "eve" and parts[1].isdigit() else None
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class Block:
@@ -51,3 +59,14 @@ class Suppression:
         if self.track is not None:
             line += f", track {self.track}, ip {self.ip}"
         return line
+
+
+@dataclass(frozen=True, slots=True)
+class FlowFact:
+    """Something the engine saw on the flow of an alert: a name looked up, a TLS server name, a
+    web request. Shown in the alert's detail."""
+
+    flow_id: int
+    kind: Literal["dns", "tls", "http"]
+    value: str
+    ts: datetime
