@@ -6,7 +6,7 @@ import logging
 from collections.abc import Callable
 from typing import Literal, cast
 
-from snorty.attribution.ports import ConnectionLookup
+from snorty.attribution.ports import ConnectionHistory, ConnectionLookup, NoHistory
 from snorty.core.bus import EventBus, Subscription
 from snorty.core.events import AlertRaised, Event
 from snorty.core.models import Alert
@@ -19,8 +19,9 @@ KIND = "process"
 
 class AttributionService:
     """Looks each live TCP or UDP alert up in the connection table and stores the owner as an
-    annotation. The lookup runs about one poll after the packet, so a short connection may be gone:
-    that is stored too, so the page can say so instead of staying silent."""
+    annotation. The lookup runs about one poll after the packet, so a short connection may be gone;
+    then a connection log (Sysmon) is asked. A miss is stored too, so the page can say so instead
+    of staying silent. The note says which source answered."""
 
     def __init__(
         self,
@@ -28,11 +29,13 @@ class AttributionService:
         repo: AlertRepository,
         lookup: ConnectionLookup,
         local_ip: Callable[[], str | None],
+        history: ConnectionHistory | None = None,
     ) -> None:
         self._bus = bus
         self._repo = repo
         self._lookup = lookup
         self._local_ip = local_ip
+        self._history: ConnectionHistory = history or NoHistory()
         self._sub: Subscription | None = None
         self._task: asyncio.Task[None] | None = None
 
@@ -71,11 +74,14 @@ class AttributionService:
             ip, port = alert.dst_ip, alert.dst_port
         else:
             return  # neither end is this PC (a mirrored or routed packet)
-        owner = self._lookup.owner(proto, ip, port)
+        # the live table first; the log only for a connection that has already closed
+        via, owner = "table", self._lookup.owner(proto, ip, port)
+        if owner is None:
+            via, owner = "sysmon", self._history.find(proto, ip, port, alert.ts)
         found = (
             {"found": False}
             if owner is None
-            else {"found": True, "pid": owner.pid, "image": owner.image}
+            else {"found": True, "pid": owner.pid, "image": owner.image, "via": via}
         )
         self._repo.annotate(alert.id, KIND, json.dumps(found))
 

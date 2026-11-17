@@ -105,30 +105,31 @@ def test_start_alert_lab_and_stop_through_http(
     try:
         with TestClient(app, base_url=f"http://127.0.0.1:{PORT}") as c:
             assert c.post("/sensor/start", headers=POST).status_code == 200
-            eventually(lambda: services.sensor.state is State.RUNNING, timeout=60)
+            try:
+                eventually(lambda: services.sensor.state is State.RUNNING, timeout=60)
 
-            send_attack_traffic()
-            eventually(lambda: "data-alert" in c.get("/alerts/rows").text, timeout=30)
+                send_attack_traffic()
+                eventually(lambda: "data-alert" in c.get("/alerts/rows").text, timeout=30)
 
-            body = {
-                "name": "uid.pcap", "proto": "tcp", "src": "10.0.0.1", "sport": "4444",
-                "dst": "10.0.0.2", "dport": "80", "payload": "uid=0(root) gid=0(root)",
-                "count": "1", "handshake": "on",
-            }  # fmt: skip
-            gen = c.post("/lab/pcaps/generate", content=urlencode(body), headers=FORM)
-            assert gen.status_code == 200 and "Generated uid.pcap" in gen.text
-            form = urlencode({"rules": UID_RULE, "pcap": "uid.pcap"})
-            assert c.post("/lab/run", content=form, headers=FORM).status_code == 200
+                body = {
+                    "name": "uid.pcap", "proto": "tcp", "src": "10.0.0.1", "sport": "4444",
+                    "dst": "10.0.0.2", "dport": "80", "payload": "uid=0(root) gid=0(root)",
+                    "count": "1", "handshake": "on",
+                }  # fmt: skip
+                gen = c.post("/lab/pcaps/generate", content=urlencode(body), headers=FORM)
+                assert gen.status_code == 200 and "Generated uid.pcap" in gen.text
+                form = urlencode({"rules": UID_RULE, "pcap": "uid.pcap"})
+                assert c.post("/lab/run", content=form, headers=FORM).status_code == 200
 
-            def lab_done() -> bool:
-                # only the running state polls itself; a finished result may load other parts
-                return 'hx-get="/lab/status"' not in c.get("/lab/status").text
+                def lab_done() -> bool:
+                    # only the running state polls itself; a finished result may load other parts
+                    return 'hx-get="/lab/status"' not in c.get("/lab/status").text
 
-            eventually(lab_done, timeout=60)
-            html = c.get("/lab/status").text
-            assert "9000101" in html and "no match" not in html and "Matches" in html
-
-            assert c.post("/sensor/stop", headers=POST).status_code == 200
-            eventually(lambda: services.sensor.state is State.STOPPED, timeout=30)
+                eventually(lab_done, timeout=60)
+                html = c.get("/lab/status").text
+                assert "9000101" in html and "no match" not in html and "Matches" in html
+            finally:  # stop through HTTP even after a failure, so no snort.exe outlives the test
+                assert c.post("/sensor/stop", headers=POST).status_code == 200
+                eventually(lambda: services.sensor.state is State.STOPPED, timeout=30)
     finally:
         services.repo.close()

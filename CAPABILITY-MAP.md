@@ -1,7 +1,7 @@
 ﻿# Capability Map: Snorty — V1
 
 Status: approved 2026-11-16. This is the V1 design record. Since then Snorty gained Suricata as a
-second engine and the `triage`, `attribution`, `enrich`, `winnet`, `respond`, `winfw`, `explain`,
+second engine and the `triage`, `attribution`, `enrich`, `winnet`, `winevt`, `respond`, `winfw`, `explain`,
 `packets` and `wireshark` packages. The current package list is
 [docs/modules.md](docs/modules.md); the tables below describe V1 only.
 
@@ -88,7 +88,7 @@ Each module is verified by its own tests and a CLI entry point until the
 - **Scheduling:** asyncio tasks in the app process (daily rules update, journal flush). No external scheduler.
 - **Logging:** stdlib `logging` to a rotating file in the app's data folder.
 - **Testing:** pytest + pytest-asyncio. Pure modules: unit tests. Adapters: integration tests marked `@pytest.mark.snort` that need `C:\Snort`. Dashboard: a few HTTP tests via FastAPI's TestClient.
-- **Dependencies (proposed):** fastapi, uvicorn, jinja2, pydantic-settings, httpx (ET download), winotify (toasts), pytest, pytest-asyncio. Nothing else without asking. As built: config is read with stdlib `tomllib` and rules are downloaded with `urllib`, so pydantic-settings is not used and httpx is a dev-only test dependency; `pyproject.toml` is the list.
+- **Dependencies (proposed):** fastapi, uvicorn, jinja2, pydantic-settings, httpx (ET download), winotify (toasts), pytest, pytest-asyncio. Nothing else without asking. As built: config is read with stdlib `tomllib` and rules are downloaded with `urllib`, so pydantic-settings is not used and httpx2 (formerly httpx) is a dev-only test dependency; `pyproject.toml` is the list.
 
 ## Out of Scope (Deferred)
 

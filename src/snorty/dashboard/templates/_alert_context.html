@@ -8,7 +8,13 @@
     {% if ctx.country %}<dt>Country</dt><dd>{{ ctx.country }}</dd>{% endif %}
     {% if ctx.asn %}<dt>Network</dt><dd>{{ ctx.asn }}</dd>{% endif %}
     {% if ctx.rdns %}<dt>Hostname</dt><dd class="mono">{{ ctx.rdns }}</dd>{% endif %}
-    {% for kind, value in ctx.seen %}<dt>{{ labels[kind] }}</dt><dd class="mono">{{ value }}</dd>{% endfor %}
+    {% for kind, value in ctx.seen %}<dt>{{ labels[kind] }}</dt><dd class="mono">{{ value }}
+      {%- if kind in ("dns", "tls") %} <button type="button" class="small" hx-post="/triage/archive-host?host={{ value|urlencode }}" hx-target="#flash" hx-swap="outerHTML" title="Acknowledge alerts naming this host or a subdomain, from now on">Auto-acknowledge this host</button>{% endif %}</dd>{% endfor %}
+    {% if ctx.attack %}<dt>ATT&amp;CK</dt><dd>
+      {%- for t in ctx.attack.tactics + ctx.attack.techniques -%}
+      {% if not loop.first %} / {% endif %}<a href="{{ t.url }}" target="_blank" rel="noopener noreferrer">{{ t.id }}</a> {{ t.name }}
+      {%- endfor -%}
+    </dd>{% endif %}
   </dl>
 {% endif %}
 </div>

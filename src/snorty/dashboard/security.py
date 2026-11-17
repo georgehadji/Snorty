@@ -10,6 +10,7 @@ from urllib.parse import parse_qs
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from snorty.core.query import TEXT_MAX
 from snorty.core.repository import GroupBy
 from snorty.rules.blocks import Track
 
@@ -77,6 +78,28 @@ def valid_ip(text: str) -> str:
         return str(ipaddress.ip_address(text))
     except ValueError:
         raise ValueError("address must be a single IP address") from None
+
+
+def valid_search(text: str) -> str | None:
+    """Search text, trimmed; None when blank. No control characters, at most TEXT_MAX."""
+    text = text.strip()
+    if len(text) > TEXT_MAX or any(c < " " or c == "\x7f" for c in text):
+        raise ValueError(f"search: at most {TEXT_MAX} characters, no control characters")
+    return text or None
+
+
+_HOST = re.compile(r"(?=.{1,253}\Z)[a-z0-9_-]{1,63}(?:\.[a-z0-9_-]{1,63})+")
+
+
+def valid_host(text: str) -> str:
+    """A DNS name with at least one dot, lowercased, without a trailing dot. A single label such
+    as `com` would cover far too much."""
+    host = text.strip().lower().rstrip(".")
+    if not _HOST.fullmatch(host):
+        raise ValueError(
+            "host: a name with a dot, letters, digits, - and _ only, at most 253 characters"
+        )
+    return host
 
 
 def valid_group(text: str) -> GroupBy:

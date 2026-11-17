@@ -24,8 +24,8 @@ dev = [
     "pytest-cov>=5",
     "ruff>=0.6",
     "mypy>=1.11",
-    "httpx>=0.28.1",
     "import-linter>=2.16",
+    "httpx2==2.16.0",
 ]
 
 [tool.pytest.ini_options]
@@ -35,6 +35,7 @@ asyncio_default_fixture_loop_scope = "function"
 markers = [
     "snort: integration test that needs the Snort install at C:\\Snort",
     "tshark: integration test that needs Wireshark's tshark (skipped when it is not installed)",
+    "sysmon: reads the real Sysmon log (skipped when Sysmon is missing or not readable)",
 ]
 
 [tool.ruff]
@@ -48,7 +49,7 @@ select = ["E", "F", "I", "B", "UP"]
 python_version = "3.12"
 
 [[tool.mypy.overrides]]
-module = ["snorty.core.*", "snorty.snort.*", "snorty.suricata.*", "snorty.sensor.*", "snorty.rules.*", "snorty.notify.*", "snorty.journal.*", "snorty.lab.*", "snorty.dashboard.*", "snorty.compose"]
+module = ["snorty.core.*", "snorty.snort.*", "snorty.suricata.*", "snorty.sensor.*", "snorty.rules.*", "snorty.notify.*", "snorty.journal.*", "snorty.lab.*", "snorty.dashboard.*", "snorty.compose", "snorty.winfw.*", "snorty.respond.*", "snorty.explain.*", "snorty.enrich.*", "snorty.attribution.*", "snorty.triage.*", "snorty.winnet.*", "snorty.winevt.*", "snorty.packets.*", "snorty.wireshark.*", "snorty.services", "snorty.headless"]
 strict = true
 
 [[tool.mypy.overrides]]
@@ -66,7 +67,7 @@ source_modules = ["snorty.core"]
 forbidden_modules = [
     "snorty.snort", "snorty.suricata", "snorty.sensor", "snorty.rules", "snorty.notify",
     "snorty.journal", "snorty.lab", "snorty.triage", "snorty.attribution", "snorty.enrich",
-    "snorty.winnet", "snorty.winfw", "snorty.respond", "snorty.explain",
+    "snorty.winnet", "snorty.winevt", "snorty.winfw", "snorty.respond", "snorty.explain",
     "snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless",
 ]
 
@@ -88,7 +89,7 @@ type = "forbidden"
 source_modules = [
     "snorty.snort", "snorty.suricata", "snorty.sensor", "snorty.rules", "snorty.notify",
     "snorty.journal", "snorty.lab", "snorty.packets", "snorty.triage", "snorty.attribution",
-    "snorty.enrich", "snorty.winnet", "snorty.wireshark", "snorty.winfw", "snorty.respond",
+    "snorty.enrich", "snorty.winnet", "snorty.winevt", "snorty.wireshark", "snorty.winfw", "snorty.respond",
     "snorty.explain",
 ]
 forbidden_modules = ["snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless"]

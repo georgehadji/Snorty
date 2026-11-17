@@ -45,6 +45,42 @@ def test_the_sql_form_and_the_in_memory_form_agree(repo: AlertRepository, q: Ale
     assert in_sql == in_memory and (q != AlertQuery() or len(in_sql) == 12)
 
 
+MESSAGES = ["ET SCAN Nmap", "100% done", "a_b c", "ÉCOLE Café", "back\\slash", "plain"]
+SEARCHES = {  # search text: the messages (by index) it finds; index 5 also has source 10.9.9.9
+    "nmap": {0},
+    "%": {1},
+    "a_b": {2},
+    "_": {2},
+    "ab": set(),
+    "café": {3},
+    "école": set(),  # like SQLite, only ASCII letters ignore case
+    "\\": {4},
+    "10.9.9.9": {5},
+    "10.9.9": set(),  # an address matches whole, never in part
+    "ET SCAN nmap": {0},
+}
+
+
+@pytest.mark.parametrize(("text", "expected"), SEARCHES.items())
+def test_search_text_means_the_same_in_sql_and_in_memory(
+    tmp_path: Path, text: str, expected: set[int]
+) -> None:
+    r = AlertRepository(tmp_path / "s.db")
+    r.add_many(
+        replace(
+            make_alert(n, sid=2000 + n),
+            msg=m,
+            src_ip="10.9.9.9" if n == 5 else "10.0.0.1",
+        )
+        for n, m in enumerate(MESSAGES)
+    )
+    q = AlertQuery(text=text)
+    in_sql = {a.sid - 2000 for a in r.query(text=text, limit=100)}
+    in_memory = {a.sid - 2000 for a in r.query(limit=100) if q.matches(a)}
+    assert in_sql == in_memory == expected
+    assert sum(g.count for g in r.group(q, "sid")) == len(expected)
+
+
 def test_groups_count_per_key_with_first_last_and_newest_message(repo: AlertRepository) -> None:
     by_sid = {g.key: g for g in repo.group(AlertQuery(), "sid")}
     assert by_sid["1000"].count == 6 and by_sid["1001"].count == 6

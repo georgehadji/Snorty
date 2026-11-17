@@ -4,7 +4,7 @@ import re
 import unicodedata
 from collections import Counter
 from collections.abc import Sequence
-from datetime import date, tzinfo
+from datetime import date, datetime, tzinfo
 
 from snorty.core.models import Alert
 
@@ -41,10 +41,36 @@ def _top[K: (int, str)](counts: Counter[K]) -> list[tuple[K, int]]:
     return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_N]
 
 
-def render(day: date, alerts: Sequence[Alert], tz: tzinfo, total: int | None = None) -> str:
+SEEN_ROWS = 50
+_SEEN_KINDS = {"dns": "Name", "country": "Country"}
+
+
+def _first_seen(rows: Sequence[tuple[str, str, datetime]], total: int, tz: tzinfo) -> list[str]:
+    """Names and countries seen for the first time that day; nothing when there were none."""
+    if not rows:
+        return []
+    out = ["", "### First seen", "| Time | Kind | Value |", "|---|---|---|"]
+    for kind, value, ts in sorted(rows, key=lambda r: (r[2], r[0], r[1]), reverse=True)[:SEEN_ROWS]:
+        label = _SEEN_KINDS.get(kind, sanitize_cell(kind))
+        out.append(f"| {ts.astimezone(tz):%H:%M} | {label} | {sanitize_cell(value)} |")
+    shown = min(len(rows), SEEN_ROWS)
+    if total > shown:
+        out += ["", f"…and {total - shown} more"]
+    return out
+
+
+def render(
+    day: date,
+    alerts: Sequence[Alert],
+    tz: tzinfo,
+    total: int | None = None,
+    first_seen: Sequence[tuple[str, str, datetime]] = (),
+    first_seen_total: int = 0,
+) -> str:
     """The managed block for `day`. Same alerts give the same text, in any order.
 
-    `total` is the true alert count when `alerts` is a truncated page of the day."""
+    `total` is the true alert count when `alerts` is a truncated page of the day. `first_seen`
+    is (kind, value, when) for values first seen that day; `first_seen_total` counts all."""
     ordered = sorted(alerts, key=lambda a: (a.ts, a.raw), reverse=True)
     shown = len(ordered)
     count = shown if total is None else max(total, shown)
@@ -94,5 +120,6 @@ def render(day: date, alerts: Sequence[Alert], tz: tzinfo, total: int | None = N
             )
         if len(p1) > P1_ROWS:
             out += ["", f"…and {len(p1) - P1_ROWS} more"]
+    out += _first_seen(first_seen, first_seen_total, tz)
     out.append(END)
     return "\n".join(out) + "\n"

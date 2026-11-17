@@ -57,6 +57,49 @@ def test_parse_rejects_bad_values(params: dict[str, str]) -> None:
         parse_alert_filters(params)
 
 
+def test_search_is_trimmed_capped_and_free_of_control_characters() -> None:
+    assert parse_alert_filters({"q": "  nmap "}).text == "nmap"
+    assert parse_alert_filters({"q": "   "}).text is None
+    assert parse_alert_filters({"q": "x" * 200}).text == "x" * 200
+    for bad in ("x" * 201, "a\nb", "a\x00b"):
+        with pytest.raises(ValueError, match="search"):
+            parse_alert_filters({"q": bad})
+    assert "q=50%25" in AlertFilters(None, None, "24h", 1, text="50%").query_string(1)
+
+
+def test_the_alerts_page_searches_rule_text(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    fill(s, 3)
+    html = c.get("/alerts/rows", params={"q": "ALERT 1", "range": "all"}).text
+    assert row_count(html) == 1 and "alert 1" in html
+    assert 'name="q"' in c.get("/alerts").text
+
+
+def test_csv_export_uses_the_filters_and_defuses_formulas(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    fill(s, 3)
+    s.repo.add(alert(2002, msg="=HYPERLINK(1)", ts=NOW - timedelta(minutes=9)))
+    r = c.get("/alerts/export.csv", params={"range": "all"})
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
+    assert 'filename="snorty-alerts.csv"' in r.headers["content-disposition"]
+    lines = r.text.splitlines()
+    assert lines[0].startswith("time,priority,sid") and len(lines) == 5
+    assert any(",'=HYPERLINK(1)," in line for line in lines)
+    only = c.get("/alerts/export.csv", params={"range": "all", "sid": "2002"}).text
+    assert len(only.splitlines()) == 2
+    assert c.get("/alerts/export.csv", params={"sid": "x"}).status_code == 422
+
+
+def test_csv_export_pages_through_more_than_one_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("snorty.dashboard.app.EXPORT_PAGE", 2)
+    c, s = make(tmp_path)
+    fill(s, 5)
+    lines = c.get("/alerts/export.csv", params={"range": "all"}).text.splitlines()
+    assert len(lines) == 6 and len(set(lines)) == 6
+
+
 def test_query_string_keeps_filters_and_sets_the_page() -> None:
     f = AlertFilters(2001, 2, "7d", 1)
     assert f.query_string(3) == "sid=2001&priority=2&range=7d&page=3"

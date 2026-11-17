@@ -6,13 +6,14 @@ of a clock change). Suricata's EVE JSON carries a full timestamp with its offset
 
 import json
 import logging
+import re
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, tzinfo
 from typing import Any, Protocol
 
-from snorty.core.models import Alert, FlowFact
+from snorty.core.models import Alert, FactKind, FlowFact
 from snorty.core.parser import parse_line
 
 log = logging.getLogger("snorty.core")
@@ -37,6 +38,10 @@ class AlertDecoder(Protocol):
 
     def take_flows(self) -> list[FlowFact]:
         """What was seen on the flows of the alerts decoded since the last call, then forgotten."""
+        ...
+
+    def take_names(self) -> list[str]:
+        """DNS names answered since the last call (alert or not), then forgotten."""
         ...
 
 
@@ -75,6 +80,9 @@ class FastDecoder:
     def take_flows(self) -> list[FlowFact]:
         return []  # Snort's fast alerts say nothing about the flow
 
+    def take_names(self) -> list[str]:
+        return []  # nor about DNS
+
     def decode(
         self, lines: Sequence[str], year: int, ties: Sequence[int], now: datetime
     ) -> tuple[list[Alert], int]:
@@ -109,8 +117,9 @@ def _int(value: object, default: int) -> int | None:
 
 
 _REMEMBERED = 4096  # how many addresses, flows and alerted flows an EveDecoder keeps in mind
-_PER_FLOW = 4
+_PER_FLOW = 6
 _VALUE_CHARS = 200
+_FINGERPRINT = {"ja3": re.compile(r"[0-9a-f]{32}"), "ja4": re.compile(r"[a-z0-9_]{1,64}")}
 
 
 def _remember(table: "OrderedDict[Any, Any]", key: object, value: object) -> None:
@@ -140,6 +149,7 @@ class EveDecoder:
         self._pending: OrderedDict[int, list[FlowFact]] = OrderedDict()  # flows with no alert yet
         self._alerted: OrderedDict[int, None] = OrderedDict()
         self._out: list[FlowFact] = []
+        self._answered: dict[str, None] = {}  # DNS names answered since take_names, in order
 
     def reset(self) -> None:
         self.drop_pct = None
@@ -147,9 +157,14 @@ class EveDecoder:
         self._pending.clear()
         self._alerted.clear()
         self._out.clear()
+        self._answered.clear()
 
     def take_flows(self) -> list[FlowFact]:
         out, self._out = self._out, []
+        return out
+
+    def take_names(self) -> list[str]:
+        out, self._answered = list(self._answered), {}
         return out
 
     def decode(
@@ -192,16 +207,14 @@ class EveDecoder:
         if kind == "dns":
             self._note_dns(data.get("dns"))
             return
-        fact = self._flow_fact(kind, data)
-        if fact is None:
-            return
-        if fact.flow_id in self._alerted:  # the alert came first
-            self._out.append(fact)
-            return
-        facts = self._pending.setdefault(fact.flow_id, [])
-        if len(facts) < _PER_FLOW:
-            facts.append(fact)
-        _remember(self._pending, fact.flow_id, facts)
+        for fact in self._flow_facts(kind, data):
+            if fact.flow_id in self._alerted:  # the alert came first
+                self._out.append(fact)
+                continue
+            facts = self._pending.setdefault(fact.flow_id, [])
+            if len(facts) < _PER_FLOW:
+                facts.append(fact)
+            _remember(self._pending, fact.flow_id, facts)
 
     def _note_dns(self, info: object) -> None:
         """Which name each address was looked up as: A and AAAA answers say so."""
@@ -211,24 +224,35 @@ class EveDecoder:
                 name, address = _text(answer.get("rrname")), _text(answer.get("rdata"))
                 if name and address:
                     _remember(self._names, address, name)
+                    if len(self._answered) < _REMEMBERED:  # bounded between two takes
+                        self._answered[name] = None
 
     @staticmethod
-    def _flow_fact(kind: str, data: dict[str, object]) -> FlowFact | None:
+    def _flow_facts(kind: str, data: dict[str, object]) -> list[FlowFact]:
         flow, stamp, info = data.get("flow_id"), data.get("timestamp"), data.get(kind)
         if type(flow) is not int or not isinstance(stamp, str) or not isinstance(info, dict):
-            return None
+            return []
         try:
             ts = datetime.fromisoformat(stamp)
         except ValueError:
-            return None
+            return []
         if ts.tzinfo is None:
-            return None
-        if kind == "tls":
-            value = _text(info.get("sni"))
-        else:  # a web request: the host and the path, never the query string (it may hold secrets)
+            return []
+        if kind != "tls":  # a web request: the host and path, never the query (it may hold secrets)
             host, url = _text(info.get("hostname")), _text(info.get("url"))
             value = _text(f"{host or ''}{url.split('?')[0] if url else ''}")
-        return FlowFact(flow, "tls" if kind == "tls" else "http", value, ts) if value else None
+            return [FlowFact(flow, "http", value, ts)] if value else []
+        ja3 = info.get("ja3")
+        found: list[tuple[FactKind, object]] = [
+            ("tls", info.get("sni")),
+            ("ja3", ja3.get("hash") if isinstance(ja3, dict) else None),
+            ("ja4", info.get("ja4")),
+        ]
+        return [
+            FlowFact(flow, k, v, ts)
+            for k, raw in found
+            if (v := _text(raw)) and (k == "tls" or _FINGERPRINT[k].fullmatch(v))
+        ]
 
     def _note_stats(self, data: dict[str, object]) -> None:
         """Totals since the engine started: kernel_drops out of kernel_packets."""

@@ -9,7 +9,15 @@ from typing import Any, Literal
 
 from snorty.core.models import Alert, Block, FlowFact
 from snorty.core.query import AlertQuery, utc_text
-from snorty.core.triage import STATES, ArchiveRule, TriageState, spec_from_json, spec_to_json
+from snorty.core.triage import (
+    STATES,
+    ArchiveRule,
+    TriageState,
+    host_from_json,
+    host_sql,
+    spec_from_json,
+    spec_to_json,
+)
 
 
 def _alerts_table(name: str) -> str:
@@ -135,6 +143,42 @@ def _add_flows(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS flows_ts ON flows (ts)")
 
 
+def _add_flow_id(conn: sqlite3.Connection) -> None:
+    """The engine's flow id as a column, so a rule can join an alert to its flow facts. Rows
+    stored before it get theirs from `raw` (`eve:<flow>:<sid>:<time>`, see Alert.flow_id)."""
+    if "flow_id" not in {r[1] for r in conn.execute("PRAGMA table_info(alerts)")}:
+        conn.execute("ALTER TABLE alerts ADD COLUMN flow_id INTEGER")
+    flow = "substr(raw, 5, instr(substr(raw, 5), ':') - 1)"
+    conn.execute(
+        f"UPDATE alerts SET flow_id = CAST({flow} AS INTEGER) "
+        f"WHERE raw LIKE 'eve:%' AND {flow} <> '' AND {flow} NOT GLOB '*[^0-9]*'"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS alerts_flow ON alerts (flow_id)")
+
+
+def _add_seen(conn: sqlite3.Connection) -> None:
+    """Names this PC looked up and countries it exchanged alerts with, and when each was first
+    and last seen, so the first time can be told apart."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS seen ("
+        "kind TEXT NOT NULL, value TEXT NOT NULL, first_ts TEXT NOT NULL, last_ts TEXT NOT NULL, "
+        "PRIMARY KEY (kind, value))"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS seen_first ON seen (first_ts)")
+
+
+SEEN_MAX = 253  # the longest DNS name
+type SeenKind = Literal["dns", "country"]
+
+
+def seen_value(kind: SeenKind, value: str) -> str:
+    """How a seen value is stored: trimmed and capped; names also lowercase without a final dot."""
+    value = value.strip()
+    if kind == "dns":
+        value = value.lower().rstrip(".")
+    return value[:SEEN_MAX]
+
+
 # Append only: a database's `schema_version` is how many of these it has had.
 MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _rebuild_with_dup,
@@ -144,6 +188,8 @@ MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _add_blocks,
     _add_explanations,
     _add_flows,
+    _add_flow_id,
+    _add_seen,
 ]
 
 
@@ -233,7 +279,10 @@ class AlertRepository:
         """Store alerts in one transaction; returns the ones that were new, in order.
         `checkpoint` (where the reader got to) is saved in the same transaction, so a crash never
         leaves rows without it or it without the rows."""
-        sql = f"INSERT OR IGNORE INTO alerts ({_COLUMNS}, dup) VALUES ({', '.join('?' * 14)})"
+        sql = (
+            f"INSERT OR IGNORE INTO alerts ({_COLUMNS}, dup, flow_id) "
+            f"VALUES ({', '.join('?' * 15)})"
+        )
         new: list[Alert] = []
         with self._lock:
             self._conn.execute("BEGIN")
@@ -243,7 +292,7 @@ class AlertRepository:
                 for alert in alerts:
                     if utc_text(alert.ts) < floor:  # older than the last prune: not stored again
                         continue
-                    cur = self._conn.execute(sql, _row(alert))
+                    cur = self._conn.execute(sql, (*_row(alert), alert.flow_id))
                     if cur.rowcount == 1:
                         new.append(replace(alert, id=cur.lastrowid or 0))
                 if checkpoint is not None:
@@ -266,10 +315,11 @@ class AlertRepository:
         states: Sequence[TriageState] | None = None,
         limit: int = 100,
         offset: int = 0,
+        text: str | None = None,
     ) -> list[Alert]:
         """Newest first. since is inclusive, until exclusive. min_priority=1 keeps
-        only priority 1 (1 is the most severe)."""
-        q = AlertQuery(since, until, sid, min_priority, src_ip, dst_ip)
+        only priority 1 (1 is the most severe). See AlertQuery for `text`."""
+        q = AlertQuery(since, until, sid, min_priority, src_ip, dst_ip, text)
         source, where, args = _with_states(q, states)
         order = "ORDER BY ts DESC, id DESC LIMIT ? OFFSET ?"
         sql = f"SELECT {_SELECT}{_COLUMNS} FROM {source}{where} {order}"
@@ -362,11 +412,22 @@ class AlertRepository:
             return {r[0]: r[1] for r in self._conn.execute(sql, [*args, *sids])}
 
     def set_state(
-        self, q: AlertQuery, state: TriageState, now: datetime, *, only_new: bool = False
+        self,
+        q: AlertQuery,
+        state: TriageState,
+        now: datetime,
+        *,
+        only_new: bool = False,
+        host: str | None = None,
     ) -> int:
         """Set the triage state of every alert matching `q`; returns how many changed.
-        `only_new` leaves alerts someone already triaged alone."""
+        `only_new` leaves alerts someone already triaged alone; `host` keeps only alerts whose
+        flow named that host or a subdomain (see host_matches)."""
         where, args = q.to_sql()
+        if host is not None:
+            clause, host_args = host_sql(host)
+            where += (" AND " if where else " WHERE ") + clause
+            args += host_args
         with self._lock:
             if state == "new":
                 sql = f"DELETE FROM triage WHERE alert_id IN (SELECT id FROM alerts{where})"
@@ -387,11 +448,13 @@ class AlertRepository:
             found = dict(self._conn.execute(sql, args).fetchall())
         return {s: found.get(s, 0) for s in STATES}
 
-    def add_archive_rule(self, spec: AlertQuery, note: str, now: datetime) -> int:
+    def add_archive_rule(
+        self, spec: AlertQuery, note: str, now: datetime, host: str | None = None
+    ) -> int:
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO archive_rules (spec, note, created) VALUES (?, ?, ?)",
-                (spec_to_json(spec), note, utc_text(now)),
+                (spec_to_json(spec, host), note, utc_text(now)),
             )
             return cur.lastrowid or 0
 
@@ -401,7 +464,9 @@ class AlertRepository:
                 "SELECT id, spec, note, created FROM archive_rules ORDER BY id"
             ).fetchall()
         return [
-            ArchiveRule(spec_from_json(r[1]), r[2], datetime.fromisoformat(r[3]), r[0])
+            ArchiveRule(
+                spec_from_json(r[1]), r[2], datetime.fromisoformat(r[3]), r[0], host_from_json(r[1])
+            )
             for r in rows
         ]
 
@@ -412,7 +477,10 @@ class AlertRepository:
 
     def apply_archive_rules(self, now: datetime) -> int:
         """Acknowledge new alerts that match an archive rule; returns how many."""
-        return sum(self.set_state(r.spec, "ack", now, only_new=True) for r in self.archive_rules())
+        return sum(
+            self.set_state(r.spec, "ack", now, only_new=True, host=r.host)
+            for r in self.archive_rules()
+        )
 
     def annotate(self, alert_id: int, kind: str, value: str) -> None:
         """Remember a fact about an alert; a later one of the same kind replaces it. An alert that
@@ -505,6 +573,62 @@ class AlertRepository:
         with self._lock:
             self._conn.execute("UPDATE blocks SET state = ? WHERE ip = ?", (state, ip))
 
+    def note_seen(self, kind: SeenKind, values: Iterable[str], ts: datetime) -> list[str]:
+        """Record that these values were seen at `ts`; returns the ones never seen before (as
+        stored, see seen_value), each once. One transaction, so two callers never both get the
+        same value back as new."""
+        wanted = list(dict.fromkeys(v for v in (seen_value(kind, x) for x in values) if v))
+        if not wanted:
+            return []
+        stamp = utc_text(ts)
+        known: set[str] = set()
+        with self._lock:
+            self._conn.execute("BEGIN")
+            try:
+                for i in range(0, len(wanted), 500):  # SQLite caps the arguments per statement
+                    chunk = wanted[i : i + 500]
+                    marks = ",".join("?" * len(chunk))
+                    sql = f"SELECT value FROM seen WHERE kind = ? AND value IN ({marks})"
+                    known.update(r[0] for r in self._conn.execute(sql, [kind, *chunk]))
+                self._conn.executemany(
+                    "INSERT INTO seen (kind, value, first_ts, last_ts) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT (kind, value) "
+                    "DO UPDATE SET last_ts = MAX(last_ts, excluded.last_ts)",
+                    [(kind, v, stamp, stamp) for v in wanted],
+                )
+            except BaseException:
+                self._conn.execute("ROLLBACK")
+                raise
+            self._conn.execute("COMMIT")
+        return [v for v in wanted if v not in known]
+
+    def first_seen(
+        self, since: datetime, until: datetime | None = None, limit: int = 10
+    ) -> tuple[dict[str, int], list[tuple[str, str, datetime]]]:
+        """Values first seen in [since, until): counts per kind, and the newest `limit` of them
+        as (kind, value, first seen)."""
+        where, args = "first_ts >= ?", [utc_text(since)]
+        if until is not None:
+            where, args = where + " AND first_ts < ?", [*args, utc_text(until)]
+        with self._lock:
+            counts = dict(
+                self._conn.execute(
+                    f"SELECT kind, COUNT(*) FROM seen WHERE {where} GROUP BY kind", args
+                ).fetchall()
+            )
+            rows = self._conn.execute(
+                f"SELECT kind, value, first_ts FROM seen WHERE {where} "
+                "ORDER BY first_ts DESC, kind, value LIMIT ?",
+                [*args, limit],
+            ).fetchall()
+        return counts, [(k, v, datetime.fromisoformat(t)) for k, v, t in rows]
+
+    def seen_since(self) -> datetime | None:
+        """When the oldest kept seen value was first seen: how long Snorty has been learning."""
+        with self._lock:
+            row = self._conn.execute("SELECT MIN(first_ts) FROM seen").fetchone()
+        return datetime.fromisoformat(row[0]) if row and row[0] else None
+
     def prune(self, before: datetime) -> int:
         """Delete alerts strictly older than `before`; returns the number deleted. Later reads of
         Snort's file (which still holds them) do not bring them back."""
@@ -514,6 +638,8 @@ class AlertRepository:
             try:  # let the deleted alerts be read back from Snort's file
                 deleted = self._conn.execute("DELETE FROM alerts WHERE ts < ?", (cutoff,)).rowcount
                 self._conn.execute("DELETE FROM flows WHERE ts < ?", (cutoff,))
+                # "first seen" means first within the kept history
+                self._conn.execute("DELETE FROM seen WHERE last_ts < ?", (cutoff,))
                 self._conn.execute(
                     "INSERT INTO meta (key, value) VALUES (?, ?) "
                     "ON CONFLICT (key) DO UPDATE SET value = MAX(value, excluded.value)",

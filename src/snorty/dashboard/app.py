@@ -1,8 +1,10 @@
 """The FastAPI app: routes are thin, each calls one service and renders a template."""
 
 import asyncio
+import csv
 import hashlib
-from collections.abc import AsyncIterator, Callable
+import io
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -70,6 +72,9 @@ def _overview_data(svc: Services, now: datetime) -> dict[str, Any]:
             svc.repo.counts_by_hour(since=chart_from, tz=svc.tz), now, svc.tz
         ),
         "rows": views.group_rows(svc.repo.query(limit=80), svc.tz)[:8],
+        "first_seen": views.first_seen_view(
+            *svc.repo.first_seen(midnight), svc.repo.seen_since(), now, svc.tz
+        ),
     }
 
 
@@ -84,11 +89,37 @@ def _alert_page(
         min_priority=q.min_priority,
         src_ip=q.src_ip,
         dst_ip=q.dst_ip,
+        text=q.text,
         limit=views.PAGE_SIZE + 1,
         offset=(f.page - 1) * views.PAGE_SIZE,
     )
     rows = views.group_rows(found[: views.PAGE_SIZE], svc.tz)
     return rows, f.query_string(f.page + 1) if len(found) > views.PAGE_SIZE else None
+
+
+EXPORT_PAGE = 500
+
+
+def _export_csv(svc: Services, f: views.AlertFilters, now: datetime) -> Iterator[str]:
+    """Every alert the filters match, as CSV text in pages; `until=now` keeps paging stable while
+    new alerts arrive."""
+    q = f.to_query(now)
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(views.CSV_HEADER)
+    offset = 0
+    while True:
+        found = svc.repo.query(
+            since=q.since, until=now, sid=q.sid, min_priority=q.min_priority, src_ip=q.src_ip,
+            dst_ip=q.dst_ip, text=q.text, limit=EXPORT_PAGE, offset=offset,
+        )  # fmt: skip
+        writer.writerows(views.csv_rows(found, svc.tz))
+        yield out.getvalue()
+        out.seek(0)
+        out.truncate()
+        if len(found) < EXPORT_PAGE:
+            return
+        offset += EXPORT_PAGE
 
 
 def build_app(
@@ -190,6 +221,21 @@ def build_app(
             return page(request, "alerts.html", f=f, error=None, rows=[], more=None, groups=groups)
         rows, more = await asyncio.to_thread(_alert_page, svc, f, clock())
         return page(request, "alerts.html", f=f, error=None, rows=rows, more=more, groups=None)
+
+    @app.get("/alerts/export.csv")
+    async def export_csv(request: Request, svc: Svc) -> Response:
+        try:
+            f = views.parse_alert_filters(request.query_params)
+        except ValueError as exc:
+            return PlainTextResponse(str(exc), status_code=422)
+        return StreamingResponse(  # a sync iterator: Starlette pages it in a worker thread
+            _export_csv(svc, f, clock()),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": 'attachment; filename="snorty-alerts.csv"',
+                "Cache-Control": "no-store",
+            },
+        )
 
     @app.get("/alerts/rows", response_class=HTMLResponse)
     async def alert_rows(request: Request, svc: Svc) -> HTMLResponse:

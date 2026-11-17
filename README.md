@@ -1,6 +1,6 @@
 # Snorty
 
-A local dashboard and toolkit around an existing [Snort 2.9](https://www.snort.org/) or [Suricata 7](https://suricata.io/) install on Windows. Snorty starts and stops the engine cleanly, stores its alerts, shows them live in a browser, updates and mutes rules, raises Windows toast notifications, writes a daily security journal into an Obsidian vault, and gives you a lab for trying new rules against a pcap.
+A local dashboard and toolkit around an existing [Snort 2.9](https://www.snort.org/) or [Suricata 7 or 8](https://suricata.io/) install on Windows. Snorty starts and stops the engine cleanly, stores its alerts, shows them live in a browser, updates and mutes rules, raises Windows toast notifications, writes a daily security journal into an Obsidian vault, and gives you a lab for trying new rules against a pcap.
 
 Snorty is a single-user tool for one PC. It listens on `127.0.0.1` only and has no remote access.
 
@@ -8,16 +8,17 @@ Snorty is a single-user tool for one PC. It listens on `127.0.0.1` only and has 
 
 | Module | What it does |
 |---|---|
-| **Dashboard** | Live alerts over Server-Sent Events, sensor start/stop/restart, rule management, journal status and the rule lab, all in one local web page. |
+| **Dashboard** | Live alerts over Server-Sent Events, sensor start/stop/restart, rule management, journal status and the rule lab, all in one local web page. The Alerts page searches rule text or an exact address and exports the filtered alerts as CSV. |
 | **Sensor** | Keeps Snort running on the right network interface, restarts it with backoff if it dies, follows network changes, and reads its alert file into the store. |
 | **Rules** | Downloads the Emerging Threats Open ruleset, checks it with `snort -T`, swaps it in with rollback, mutes rules by SID and sets `HOME_NET`. |
 | **Notify** | Windows toast for priority-1 alerts, throttled per rule and overall so a flood does not bury you. |
 | **Journal** | Writes one Markdown note per day into `Security/Snort/` of an Obsidian vault, touching only its own marked block. |
 | **Rule lab** | Lints and tests your own rules in a sandbox copy of the Snort config, against a pcap you upload or generate. The live sensor is never touched. |
 | **Packets** | Optional, needs Wireshark. Shows the packet behind an alert and what it was for (DNS name, TLS server, HTTP host), offers a one-packet download and "Open in Wireshark", suggests display filters, decodes and summarises lab pcaps, and records 5 to 120 seconds of live traffic into the lab. |
-| **Engine** | Suricata 7 as the alternative to Snort, picked on the Overview page. Its EVE log adds what the engine saw on the alert's flow: the DNS name looked up, the TLS server name, the web request. |
-| **Host context** | Which program on this PC made the alert's connection, and what public data says about the remote address (country, owner, reverse DNS, known-bad lists). |
-| **Inbox** | Acknowledge or star alerts a rule at a time; an archive rule acknowledges a rule's future alerts as they arrive. |
+| **Engine** | Suricata (the default when installed) or Snort, picked on the Overview page. Its EVE log adds what the engine saw on the alert's flow: the DNS name looked up, the TLS server name, the web request, and the client's TLS fingerprints (JA3, JA4; Snorty turns them on in its copy of the config). |
+| **Host context** | Which program on this PC made the alert's connection, and what public data says about the remote address (country, owner, reverse DNS, known-bad lists), and the rule's MITRE ATT&CK tactic and technique when the rule carries them. |
+| **First seen** | The Overview and the daily note list the DNS names this PC looked up (Suricata only) and the countries in alerts that Snorty had not seen before, within the kept history. The first week is marked as learning. |
+| **Inbox** | Acknowledge or star alerts a rule at a time; an archive rule acknowledges a rule's future alerts as they arrive. With Suricata, an alert's detail also offers to acknowledge everything that names a host (its DNS name or TLS server name) or a subdomain of it. |
 | **Blocking** | Blocks one public address in Windows Firewall for a set time, with undo. See below. |
 | **Explain** | A plain-English reading of an alert's rule from an Ollama model on this PC. See below. |
 
@@ -49,7 +50,7 @@ Settings come from defaults, then `snorty.toml` in the data folder, then command
 ```toml
 # %LOCALAPPDATA%\Snorty\snorty.toml
 port = 8765
-engine = "snort"                  # or "suricata"; see Engine below
+engine = "suricata"               # or "snort"; unset: Suricata when installed. See Engine below
 interface_ip = "192.168.1.20"     # pin the capture interface; default: the PC's route to the internet
 vault = "C:/Users/you/Vault"      # default: the OBSIDIAN_VAULT_PATH environment variable
 notify = true
@@ -66,7 +67,7 @@ explain_model = ""                # an Ollama model that runs on this PC, e.g. "
 
 **Explaining.** With `explain_model` set, an alert's detail has an "Explain this alert" button. The rule's text goes to Ollama on this PC (127.0.0.1) and the reading is saved per rule version. Models that Ollama runs on a remote server (the "cloud" ones) are refused. The explanation is a suggestion generated by a model and can be wrong.
 
-**Engine.** Snort is the default; Suricata 7 is the other. The Overview page has a "Detection engine" picker that writes `engine = "..."` to `snorty.toml`. The engine is chosen when the dashboard starts, so stop it and start it again to switch. The `--engine` flag overrides the file.
+**Engine.** Suricata is the default when it is installed in `C:\Program Files\Suricata`; otherwise Snort. A rebuilt Suricata config is made from the install's own `suricata.yaml` whenever that file changes (an engine upgrade); the old copy stays as `suricata.yaml.before-rebuild`, and the rules, threshold list and `HOME_NET` are kept. The Overview page has a "Detection engine" picker that writes `engine = "..."` to `snorty.toml`. The engine is chosen when the dashboard starts, so stop it and start it again to switch. The `--engine` flag overrides the file.
 
 **Dropped packets.** With Suricata the engine reports its own drop figure. With Snort, starting the sensor adds one marked `preprocessor perfmonitor` line to `C:\Snort\etc\snort.conf` (checked with `snort -T` first and put back if Snort refuses it; delete the line and the comment above it to turn it off). Snort writes the figure to `perfmon.csv` in its log folder about once a minute, and the Overview shows it once the first rows are flushed.
 
@@ -125,6 +126,7 @@ src/snorty/
   respond/    firewall blocks with expiry and undo (the policy; no processes)
   winfw/      Windows Firewall adapter (PowerShell, one approval prompt per change)
   winnet/     the PC's TCP and UDP connection tables (ctypes over iphlpapi)
+  winevt/     Sysmon's connection log, for connections already closed (ctypes over wevtapi)
   explain/    plain-English reading of a rule from a local Ollama model
   dashboard/  FastAPI app, pages, security middleware, autostart
   services.py the Protocols and bundle the UI layer uses

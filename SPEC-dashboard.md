@@ -12,7 +12,7 @@ User: you, on this PC only. Success: you run `uv run python -m snorty.dashboard`
 
 1. **One process:** the dashboard is the composition root. It builds the bus, repository, sensor, notify, journal, rules and lab services exactly as `snorty.sensor.__main__.run` does, and serves the UI from the same asyncio loop. The existing module CLIs keep working unchanged.
 2. **Local only:** binds `127.0.0.1`, default port 8765. No login (single user, loopback). Not exposed to the network; a different bind address is refused in V1.
-3. **Stack (from the map):** FastAPI + uvicorn + Jinja2 templates, htmx for partial updates, Server-Sent Events for live alerts. No front-end build step, no SPA framework. New runtime dependencies: `fastapi`, `uvicorn`, `jinja2`. Dev: `httpx` (FastAPI's TestClient). Not added: `pydantic-settings` (config is read with stdlib `tomllib`), `python-multipart` (form bodies are parsed with `urllib.parse.parse_qs`).
+3. **Stack (from the map):** FastAPI + uvicorn + Jinja2 templates, htmx for partial updates, Server-Sent Events for live alerts. No front-end build step, no SPA framework. New runtime dependencies: `fastapi`, `uvicorn`, `jinja2`. Dev: `httpx2` (Starlette's TestClient; it replaced `httpx`, which Starlette 1.10 deprecates). Not added: `pydantic-settings` (config is read with stdlib `tomllib`), `python-multipart` (form bodies are parsed with `urllib.parse.parse_qs`).
 4. **htmx is vendored,** not loaded from a CDN: one file in `static/`, with its version and SHA-256 noted in the spec's deviations. The page makes no request to any third-party host.
 5. **Config:** optional `snorty.toml` in the data folder (stdlib `tomllib`). Keys: `port`, `interface_ip`, `vault` (journal path), `notify` (bool), `journal` (bool), `autostart_sensor` (bool, default false), `rules_update_at` (`"HH:MM"` local, default `"03:00"`, empty string disables). Missing file means defaults. CLI flags override the file.
 6. **The sensor does not start by itself** unless `autostart_sensor` is true or `--start-sensor` is given: you press Start. Closing the dashboard (Ctrl+C) stops the sensor cleanly, like the sensor CLI does today.
@@ -153,7 +153,6 @@ Status: implemented. Criterion 14 was checked in the built-in browser in two par
 - Extra modules: `ui.py` (render helpers), `jobs.py` (one in-flight job), `rules_routes.py`, `journal_routes.py`, `lab_routes.py`, `pcaps.py`. Alert tests are in `test_dash_alerts.py`.
 - Vendored htmx 2.0.4, SHA-256 `e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447`, recorded in `static/htmx.VERSION`.
 - Generated pcaps are stamped with the current time (a pcap starting at epoch 0 made Snort alerts show the year 2070).
-- Starlette's test client prints a deprecation notice asking for `httpx2`; harmless.
 - Known gap: the CLI exit code 1 covers a port that cannot be bound or a crash, not a sensor that fails later (the card shows that). Fixed after close-out: unhandled errors now return a 500 with the security headers, and the Rules page shows a message when the Snort files cannot be read.
 
 ## Out of Scope (Deferred)

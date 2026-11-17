@@ -477,4 +477,5 @@ class Sensor:
         alerts, bad = self._decoder.decode(lines, year, ties, self._wall())
         new = self._repo.add_new(alerts, checkpoint)
         self._repo.add_flow_facts(self._decoder.take_flows())
+        self._repo.note_seen("dns", self._decoder.take_names(), self._wall())
         return new, bad

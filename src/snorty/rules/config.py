@@ -7,7 +7,8 @@ from snorty.snort.models import SnortPaths
 from snorty.suricata.models import SuricataPaths
 
 ET_URL = "https://rules.emergingthreats.net/open/snort-2.9.0/emerging.rules.tar.gz"
-# Emerging Threats Open for Suricata 7; pass it as `url` with engine="suricata".
+# Emerging Threats Open for Suricata 7 and 8 (ET serves the same archive under suricata-8.0.0);
+# pass it as `url` with engine="suricata".
 SURICATA_ET_URL = "https://rules.emergingthreats.net/open/suricata-7.0.3/emerging.rules.tar.gz"
 ALL_PRIVATE = "[192.168.0.0/16,10.0.0.0/8,172.16.0.0/12]"
 

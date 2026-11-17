@@ -13,7 +13,7 @@ from snorty.core.query import AlertQuery
 from snorty.core.repository import AlertRepository
 from snorty.core.triage import INBOX, STATES, TriageState
 from snorty.dashboard import views
-from snorty.dashboard.security import valid_sid
+from snorty.dashboard.security import valid_host, valid_sid
 from snorty.dashboard.services import Svc
 from snorty.dashboard.ui import Ui
 
@@ -40,7 +40,9 @@ def _inbox(repo: AlertRepository, tz: tzinfo) -> dict[str, Any]:
     return {
         "counts": repo.counts_by_state(AlertQuery()),
         "inbox": rows,
-        "archive": [(r.id, r.spec.sid, r.note, views.fmt_time(r.created, tz)) for r in rules],
+        "archive": [
+            (r.id, r.host or r.spec.sid, r.note, views.fmt_time(r.created, tz)) for r in rules
+        ],
     }
 
 
@@ -80,6 +82,19 @@ def add_triage_routes(app: FastAPI, ui: Ui) -> None:
         await asyncio.to_thread(svc.repo.add_archive_rule, AlertQuery(sid=number), note, now)
         await asyncio.to_thread(svc.repo.apply_archive_rules, now)
         return await card(request, svc)
+
+    @app.post("/triage/archive-host", response_class=HTMLResponse)
+    async def archive_host(request: Request, svc: Svc, host: str) -> HTMLResponse:
+        try:
+            name = valid_host(host)
+        except ValueError as exc:
+            return ui.flash(request, views.Message(False, str(exc)), status=422)
+        now = datetime.now(UTC)
+        note = f"host {name} and its subdomains"
+        await asyncio.to_thread(svc.repo.add_archive_rule, AlertQuery(), note, now, name)
+        done = await asyncio.to_thread(svc.repo.apply_archive_rules, now)
+        text = f"Alerts naming {name} or a subdomain are acknowledged on arrival ({done} now)."
+        return ui.flash(request, views.Message(True, text))
 
     @app.post("/triage/archive/{rule_id}/delete", response_class=HTMLResponse)
     async def delete_rule(request: Request, svc: Svc, rule_id: int) -> HTMLResponse:

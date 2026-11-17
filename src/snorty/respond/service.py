@@ -69,7 +69,7 @@ class BlockService:
     async def block(self, ip: str, hours: float | None, alert_id: int | None = None) -> Outcome:
         """Block `ip` for `hours` (None: until unblocked)."""
         if hours is not None and not 0 < hours <= MAX_HOURS:
-            return Outcome(False, f"hours must be from 1 to {MAX_HOURS}")
+            return Outcome(False, f"hours must be more than 0 and at most {MAX_HOURS}")
         if self._busy.locked():
             return Outcome(False, "another change is waiting for your approval")
         async with self._busy:

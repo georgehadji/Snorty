@@ -164,6 +164,34 @@ def test_tls_and_http_facts_follow_an_alert_on_their_flow() -> None:
     assert d.take_flows() == []  # taken once
 
 
+def tls_record(info: dict[str, object]) -> str:
+    return json.dumps({"event_type": "tls", "timestamp": TS, "flow_id": 1234567890, "tls": info})
+
+
+def test_tls_fingerprints_become_facts_of_their_own() -> None:
+    d = EveDecoder()
+    d.decode([eve()], NOW.year, (), NOW)
+    ja3 = "e7d705a3286e19ea42f587b344ee6865"
+    ja4 = "t13d1516h2_8daaf6152771_02713d6af862"
+    info = {"sni": "evil.example", "ja3": {"hash": ja3, "string": "771,..."}, "ja4": ja4}
+    d.decode([tls_record(info)], NOW.year, (), NOW)
+    assert facts(d) == {
+        (1234567890, "tls", "evil.example"),
+        (1234567890, "ja3", ja3),
+        (1234567890, "ja4", ja4),
+    }
+
+
+def test_a_tls_record_without_or_with_odd_fingerprints_gives_only_the_name() -> None:
+    d = EveDecoder()
+    d.decode([eve()], NOW.year, (), NOW)
+    odd = {"sni": "a.example", "ja3": {"hash": "<script>"}, "ja4": "T13D BAD"}
+    d.decode([tls_record({"sni": "b.example"}), tls_record(odd)], NOW.year, (), NOW)
+    assert {k for _, k, _ in facts(d)} == {"tls"}
+    d.decode([tls_record({"ja4": "t13d_x_y"})], NOW.year, (), NOW)  # no name, a fingerprint
+    assert facts(d) == {(1234567890, "ja4", "t13d_x_y")}
+
+
 def test_a_fact_that_came_before_its_alert_is_kept() -> None:
     d = EveDecoder()
     tls = json.dumps(
@@ -192,6 +220,21 @@ def test_a_dns_answer_names_the_address_an_alert_later_talks_to() -> None:
     d.decode([dns], NOW.year, (), NOW)
     d.decode([eve()], NOW.year, (), NOW)
     assert (1234567890, "dns", "evil.example") in facts(d)
+
+
+def test_answered_names_are_taken_once_whether_or_not_an_alert_followed() -> None:
+    d = EveDecoder()
+    answers = [
+        {"rrname": "a.example", "rrtype": "A", "rdata": "203.0.113.9"},
+        {"rrname": "a.example", "rrtype": "AAAA", "rdata": "2001:db8::1"},
+        {"rrname": "b.example", "rrtype": "CNAME", "rdata": "c.example"},
+    ]
+    dns = json.dumps({"event_type": "dns", "flow_id": 7, "dns": {"answers": answers}})
+    d.decode([dns], NOW.year, (), NOW)
+    assert d.take_names() == ["a.example"] and d.take_names() == []
+    d.decode([dns], NOW.year, (), NOW)
+    d.reset()
+    assert d.take_names() == []
 
 
 def test_reset_forgets_what_was_seen() -> None:

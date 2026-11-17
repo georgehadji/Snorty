@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from snorty.attribution import AttributionService
+from snorty.attribution.ports import ConnectionHistory, NoHistory
 from snorty.core.bus import EventBus
 from snorty.core.decoder import AlertDecoder, EveDecoder, FastDecoder
 from snorty.core.localtz import LocalTimezone
@@ -27,6 +28,7 @@ from snorty.packets import NoDecoder, PacketService
 from snorty.respond import BlockService
 from snorty.rules.config import SURICATA_ET_URL, RulesConfig
 from snorty.rules.find import find_rule
+from snorty.rules.info import RuleInfo
 from snorty.rules.ports import SnortValidator, SuricataValidator, UrllibDownloader, Validator
 from snorty.rules.service import RulesService
 from snorty.rules.suricata_home import prepare_suricata_home
@@ -37,6 +39,7 @@ from snorty.snort import PERFMON_FILE, DropReader, Interface, SnortPaths, Subpro
 from snorty.snort.interfaces import find_local_ip
 from snorty.suricata import SuricataPaths
 from snorty.triage import TriageService
+from snorty.winevt import SysmonHistory, probe
 from snorty.winfw import PowerShellFirewall
 from snorty.winnet import WinConnectionLookup
 from snorty.wireshark import DumpcapRecorder, TsharkDecoder, WiresharkViewer, find_tools
@@ -96,6 +99,15 @@ class Runtime:
                 first = first or exc
         if first is not None:
             raise first
+
+
+def _connection_history() -> ConnectionHistory:
+    """The Sysmon log when it can be read, else nothing (said once in the log)."""
+    reason = probe()
+    if reason is None:
+        return SysmonHistory()
+    log.info("past connections are not attributed: %s", reason)
+    return NoHistory()
 
 
 def compose(
@@ -208,10 +220,13 @@ def compose(
         respond=blocker,
         explain=explainer,
         engine=engine,
+        rule_info=RuleInfo(lambda sid: find_rule(rules_config.rules_dir, sid)),
     )
     attribution = enrich = None
     if host_context:
-        attribution = AttributionService(bus, repo, WinConnectionLookup(), find_local_ip)
+        attribution = AttributionService(
+            bus, repo, WinConnectionLookup(), find_local_ip, _connection_history()
+        )
         enrich = EnrichService(
             bus, repo, data_dir / "enrich", fetch=urllib_fetch, rdns=ReverseDns()
         )

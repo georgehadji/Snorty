@@ -29,6 +29,19 @@
     <h3>Notifications</h3>
     <p>{% if notify %}{{ notify.toasts_shown }} toasts shown ({{ notify.threshold }}).{% else %}Off.{% endif %}</p>
   </section>
+  <section class="card">
+    <h2>First seen today</h2>
+    <div class="stats">
+      <div><span class="stat">{{ first_seen.names }}</span><span class="label">Names looked up</span></div>
+      <div><span class="stat">{{ first_seen.countries }}</span><span class="label">Countries in alerts</span></div>
+    </div>
+    {% if first_seen.learning_since %}<p class="muted">Learning since {{ first_seen.learning_since }}: in the first week nearly everything is new.</p>{% endif %}
+    <ol class="plain">
+      {% for kind, value, time in first_seen.rows %}<li><span class="muted">{{ time }} {{ kind }}</span> <span class="mono">{{ value }}</span></li>
+      {% else %}<li class="muted">Nothing new today.</li>{% endfor %}
+    </ol>
+    <p class="muted">Names come from Suricata's DNS log; Snort has none.</p>
+  </section>
 </div>
 <section class="card wide">
   <div class="row"><h2>Alerts per hour</h2><span class="muted">Last 24 hours · {{ chart.total }} in total</span></div>

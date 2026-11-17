@@ -226,9 +226,16 @@ document.addEventListener("htmx:beforeSwap", (event) => {
   refreshTimes();
   setInterval(refreshTimes, 30000);
   if (window.EventSource) connect();
+  // The export link carries the filters as they are now, not as the page was loaded.
+  function syncExport() {
+    const link = document.getElementById("export-csv");
+    if (link && form) link.href = `/alerts/export.csv?${new URLSearchParams(new FormData(form))}`;
+  }
   if (form) {
-    form.addEventListener("change", connect);
-    form.addEventListener("submit", connect);
+    for (const kind of ["change", "submit"]) {
+      form.addEventListener(kind, connect);
+      form.addEventListener(kind, syncExport);
+    }
   }
 })();
 

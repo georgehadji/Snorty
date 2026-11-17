@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 
+from snorty.core.rulemeta import Attack
 from snorty.dashboard.services import Svc
 from snorty.dashboard.ui import Ui
 
@@ -20,10 +21,13 @@ class Context:
     asn: str | None
     rdns: str | None
     seen: tuple[tuple[str, str], ...] = ()  # (kind, value) the engine saw on the flow
+    attack: Attack | None = None  # the rule's MITRE ATT&CK tags
 
     @property
     def empty(self) -> bool:
-        return not any((self.process, self.bad, self.country, self.asn, self.rdns, self.seen))
+        return not any(
+            (self.process, self.bad, self.country, self.asn, self.rdns, self.seen, self.attack)
+        )
 
 
 def process_text(raw: str | None) -> str | None:
@@ -39,13 +43,22 @@ def process_text(raw: str | None) -> str | None:
     if not data.get("found"):
         return "not known: the connection had already closed when it was looked up"
     image = str(data.get("image") or "unknown program")
-    return f"{image} (pid {data.get('pid')})"
+    source = ", from the Sysmon log" if data.get("via") == "sysmon" else ""
+    return f"{image} (pid {data.get('pid')}{source})"
 
 
-SEEN_LABELS = {"dns": "Looked up as", "tls": "TLS server name", "http": "Web request"}
+SEEN_LABELS = {
+    "dns": "Looked up as",
+    "tls": "TLS server name",
+    "http": "Web request",
+    "ja3": "Client fingerprint (JA3)",
+    "ja4": "Client fingerprint (JA4)",
+}
 
 
-def build_context(notes: dict[str, str], seen: tuple[tuple[str, str], ...] = ()) -> Context:
+def build_context(
+    notes: dict[str, str], seen: tuple[tuple[str, str], ...] = (), attack: Attack | None = None
+) -> Context:
     return Context(
         process_text(notes.get("process")),
         notes.get("bad"),
@@ -53,6 +66,7 @@ def build_context(notes: dict[str, str], seen: tuple[tuple[str, str], ...] = ())
         notes.get("asn"),
         notes.get("rdns"),
         seen,
+        attack,
     )
 
 
@@ -66,9 +80,14 @@ def add_context_routes(app: FastAPI, ui: Ui) -> None:
             if alert and alert.flow_id is not None
             else []
         )
+        attack = (
+            await asyncio.to_thread(svc.rule_info.attack, alert.sid, alert.rev)
+            if alert and svc.rule_info
+            else None
+        )
         return ui.page(
             request,
             "_alert_context.html",
-            ctx=build_context(notes, tuple(facts)),
+            ctx=build_context(notes, tuple(facts), attack),
             labels=SEEN_LABELS,
         )

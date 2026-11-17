@@ -29,7 +29,7 @@
     <h2>Auto-acknowledge rules</h2>
     {% if archive %}
     <table>
-      <thead><tr><th scope="col">SID</th><th scope="col">Note</th><th scope="col">Added</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+      <thead><tr><th scope="col">SID or host</th><th scope="col">Note</th><th scope="col">Added</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>
         {% for id, sid, note, created in archive %}
         <tr>

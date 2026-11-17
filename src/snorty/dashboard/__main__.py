@@ -62,7 +62,9 @@ def make_parser() -> argparse.ArgumentParser:
     p.add_argument("--vault", help="vault folder for notes, default $OBSIDIAN_VAULT_PATH")
     p.add_argument("--interface-ip", help="pin the capture interface by IP")
     p.add_argument(
-        "--engine", choices=["snort", "suricata"], help="detection engine (default snort)"
+        "--engine",
+        choices=["snort", "suricata"],
+        help="detection engine (default suricata when installed, else snort)",
     )
     p.add_argument("--data-dir", type=Path, help=r"default %%LOCALAPPDATA%%\Snorty")
     return p

@@ -8,6 +8,7 @@ from typing import Protocol
 from snorty.core.bus import EventBus
 from snorty.core.models import Alert, Block
 from snorty.core.repository import AlertRepository
+from snorty.core.rulemeta import Attack
 from snorty.explain import Explanation
 from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabJob, LabResult
@@ -112,6 +113,12 @@ class ExplainPort(Protocol):
         ...
 
 
+class RuleInfoPort(Protocol):
+    def attack(self, sid: int, rev: int) -> Attack | None:
+        """The rule's MITRE ATT&CK tags; reads rule files, so call it off the event loop."""
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class Services:
     sensor: SensorPort
@@ -127,6 +134,7 @@ class Services:
     respond: RespondPort | None = None
     explain: ExplainPort | None = None
     engine: str = "snort"  # the engine this run was built with
+    rule_info: RuleInfoPort | None = None
 
     @property
     def pcap_dir(self) -> Path:

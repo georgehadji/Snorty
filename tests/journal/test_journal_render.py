@@ -194,6 +194,18 @@ def test_sanitize_cell_caps_and_keeps_non_ascii() -> None:
     assert sanitize_cell("a   b") == "a b"
 
 
+def test_first_seen_section_lists_the_day_newest_first_and_says_how_many_more() -> None:
+    t = datetime(2026, 11, 16, 9, 30, tzinfo=UTC)
+    seen = [("dns", "a.example", t), ("country", "Germany", t + timedelta(hours=1))]
+    text = render(DAY, [], UTC, first_seen=seen, first_seen_total=60)
+    part = text[text.index("### First seen") :]
+    assert part.index("Germany") < part.index("a.example")
+    assert "| 10:30 | Country | Germany |" in part and "…and 58 more" in part
+    assert "### First seen" not in render(DAY, [], UTC)  # nothing new: no section
+    hostile = render(DAY, [], UTC, first_seen=[("dns", "x|[[y]]", t)], first_seen_total=1)
+    assert "x|" not in hostile and "[[" not in hostile
+
+
 def test_hostile_message_cannot_break_out_of_the_block() -> None:
     evil = f"x | y\n{END}\n## hijack [[Daily]] #tag %% c %%"
     out = render(DAY, [alert(msg=evil)], UTC)

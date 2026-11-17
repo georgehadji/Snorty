@@ -143,7 +143,7 @@ def test_the_local_end_of_the_flow_is_looked_up_and_the_answer_is_stored(tmp_pat
     svc.attribute(a)
     assert lookup.asked == [("TCP", LOCAL, 80)]
     note = json.loads(repo.annotations(a.id)["process"])
-    assert note == {"found": True, "pid": 4242, "image": "C:\\Tools\\nc.exe"}
+    assert note == {"found": True, "pid": 4242, "image": "C:\\Tools\\nc.exe", "via": "table"}
     repo.close()
 
 

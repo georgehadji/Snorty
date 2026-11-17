@@ -12,7 +12,7 @@ from snorty.core.models import Alert
 from snorty.core.repository import AlertRepository
 from snorty.journal.merge import merge
 from snorty.journal.ports import NoteStore
-from snorty.journal.render import BEGIN, render
+from snorty.journal.render import BEGIN, SEEN_ROWS, render
 
 log = logging.getLogger("snorty.journal")
 
@@ -53,7 +53,10 @@ def build_note(
     alerts, total = collect(repo, day, cfg.tz, cfg.page_size, cfg.max_rows)
     if not alerts and (existing is None or BEGIN not in existing):
         return None
-    return merge(existing, render(day, alerts, cfg.tz, total), day)
+    since = datetime.combine(day, time.min, tzinfo=cfg.tz)
+    counts, seen = repo.first_seen(since, since + timedelta(days=1), limit=SEEN_ROWS)
+    text = render(day, alerts, cfg.tz, total, seen, sum(counts.values()))
+    return merge(existing, text, day)
 
 
 @dataclass(frozen=True, slots=True)

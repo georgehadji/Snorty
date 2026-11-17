@@ -61,6 +61,18 @@ def test_overview_counts_top_rules_and_recent_alerts(tmp_path: Path) -> None:
     assert "×2" in top
 
 
+def test_overview_shows_what_was_first_seen_today_and_says_it_is_learning(tmp_path: Path) -> None:
+    c, s = make(tmp_path)
+    s.repo.note_seen("dns", ["old.example"], NOW - timedelta(days=1))
+    s.repo.note_seen("dns", ["new.example"], NOW - timedelta(minutes=5))
+    html = c.get("/").text
+    card = html[html.index("First seen today") :]
+    assert "new.example" in card and "old.example" not in card
+    assert "Learning since" in card
+    s.repo.note_seen("dns", ["older.example"], NOW - timedelta(days=8))
+    assert "Learning since" not in c.get("/").text
+
+
 def test_overview_answers_the_one_question_and_draws_the_hour_chart(tmp_path: Path) -> None:
     c, s = make(tmp_path)
     s.repo.add(alert(2001, msg="in the hour", priority=1, ts=T0 + timedelta(minutes=10)))

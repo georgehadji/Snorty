@@ -124,6 +124,8 @@ class EnrichService:
             if value:
                 notes[kind] = value
                 self._repo.annotate(alert.id, kind, value)
+        if "country" in notes:
+            self._repo.note_seen("country", [notes["country"]], alert.ts)
         return notes
 
     # --- data -------------------------------------------------------------------------

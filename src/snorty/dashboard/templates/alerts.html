@@ -6,6 +6,9 @@
 <form id="alert-filters" class="card filters" action="/alerts" method="get"{% if not f.group %}
       hx-get="/alerts/rows" hx-target="#alert-rows" hx-swap="innerHTML" hx-trigger="change, submit"{% endif %}>
   {% if f.group %}<input type="hidden" name="group" value="{{ f.group }}">{% endif %}
+  <label>Search
+    <input type="search" name="q" value="{{ f.text or '' }}" placeholder="rule text or address" maxlength="200" spellcheck="false">
+  </label>
   <label>SID
     <input name="sid" inputmode="numeric" pattern="[0-9]*" value="{{ f.sid if f.sid is not none else '' }}" placeholder="any">
   </label>
@@ -40,6 +43,7 @@
   {% for key, label in [("sid", "rule"), ("src_ip", "source"), ("dst_ip", "destination")] %}
   <a href="/alerts?{{ base }}&amp;group={{ key }}"{% if f.group == key %} aria-current="true"{% endif %}>{{ label }}</a>{% if not loop.last %} ·{% endif %}
   {% endfor %}
+  · <a id="export-csv" href="/alerts/export.csv?{{ base }}" download>Export CSV</a>
 </nav>
 {% if groups is not none %}
 <section class="card wide">

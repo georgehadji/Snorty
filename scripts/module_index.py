@@ -19,6 +19,8 @@ SPEC_NAMES = {
     "lab": "rule-lab",
     "journal": "vault-journal",
     "wireshark": "packets",
+    "winfw": "respond",  # adapters share the spec of the port they serve
+    "winevt": "winnet",
 }
 HEADER = """# Snorty packages
 

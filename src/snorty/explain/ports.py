@@ -13,5 +13,6 @@ class Explainer(Protocol):
     model: str  # which model answered, shown next to the text
 
     async def explain(self, rule_text: str, alert: Alert) -> str:
-        """Plain-English reading of the rule that fired. Never receives addresses."""
+        """Plain-English reading of the rule that fired. It receives the whole alert but must
+        leave the addresses out of whatever it sends to the model."""
         ...

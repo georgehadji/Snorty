@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from snorty.notify.ports import valid_channel_url
+from snorty.suricata import SuricataPaths
 
 CONFIG_NAME = "snorty.toml"
 _TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
@@ -33,7 +34,7 @@ class DashConfig:
     explain_model: str = ""  # an Ollama model that runs on this PC; empty switches explaining off
     journal: bool = True
     autostart_sensor: bool = False
-    engine: str = "snort"  # "snort" or "suricata"
+    engine: str = "snort"  # "snort" or "suricata"; load_config picks Suricata when it is installed
     rules_update_at: str = "03:00"  # local "HH:MM"; empty string disables the daily update
     retention_days: int = 90  # alerts older than this are deleted; 0 keeps everything
     channels: tuple[Mapping[str, str], ...] = ()  # extra toast channels: {kind, url}
@@ -42,6 +43,12 @@ class DashConfig:
 def default_data_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA")
     return (Path(base) if base else Path.home()) / "Snorty"
+
+
+def default_engine(suricata_exe: Path | None = None) -> str:
+    """Suricata when it is installed, else Snort."""
+    exe = suricata_exe or SuricataPaths().exe
+    return "suricata" if exe.is_file() else "snort"
 
 
 def _check_channels(value: object) -> tuple[Mapping[str, str], ...]:
@@ -92,6 +99,7 @@ def load_config(data_dir: Path, overrides: Mapping[str, object] | None = None) -
         except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
             raise ConfigError(f"{path} is not valid TOML: {exc}") from exc
     values.update({k: v for k, v in (overrides or {}).items() if v is not None})
+    values.setdefault("engine", default_engine())
     checked: dict[str, Any] = {k: _check(k, v) for k, v in values.items()}
     return replace(DashConfig(data_dir=data_dir), **checked)
 

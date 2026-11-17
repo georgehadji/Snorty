@@ -1,6 +1,6 @@
 """Pure view-models: turn domain objects into plain values the templates print."""
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Literal
@@ -9,7 +9,14 @@ from urllib.parse import urlencode
 from snorty.core.models import Alert
 from snorty.core.query import AlertQuery
 from snorty.core.repository import Group, GroupBy
-from snorty.dashboard.security import valid_group, valid_ip, valid_priority, valid_range, valid_sid
+from snorty.dashboard.security import (
+    valid_group,
+    valid_ip,
+    valid_priority,
+    valid_range,
+    valid_search,
+    valid_sid,
+)
 from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabResult
 from snorty.notify.service import NotifyStatus
@@ -57,6 +64,7 @@ class AlertFilters:
     src: str | None = None  # only alerts from this address
     dst: str | None = None
     group: GroupBy | None = None  # count alerts per rule, source or destination instead
+    text: str | None = None  # in the rule message, or an exact source or destination address
 
     def since(self, now: datetime) -> datetime | None:
         delta = _RANGE_DELTA[self.range]
@@ -73,10 +81,13 @@ class AlertFilters:
             min_priority=self.priority,
             src_ip=self.src,
             dst_ip=self.dst,
+            text=self.text,
         )
 
     def query_string(self, page: int) -> str:
         params: dict[str, str | int] = {}
+        if self.text is not None:
+            params["q"] = self.text
         if self.sid is not None:
             params["sid"] = self.sid
         if self.priority is not None:
@@ -90,6 +101,42 @@ class AlertFilters:
         params["range"] = self.range
         params["page"] = page
         return urlencode(params)
+
+
+CSV_HEADER = (
+    "time", "priority", "sid", "gid", "rev", "message", "classification", "proto",
+    "source", "source_port", "destination", "destination_port",
+)  # fmt: skip
+_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_cell(value: object) -> str:
+    """A spreadsheet must not run a cell as a formula: such text gets a leading quote."""
+    text = "" if value is None else str(value)
+    return "'" + text if text.startswith(_FORMULA_START) else text
+
+
+def csv_rows(alerts: Iterable[Alert], tz: tzinfo) -> list[list[str]]:
+    return [
+        [
+            csv_cell(v)
+            for v in (
+                a.ts.astimezone(tz).isoformat(timespec="seconds"),
+                a.priority,
+                a.sid,
+                a.gid,
+                a.rev,
+                a.msg,
+                a.classification,
+                a.proto,
+                a.src_ip,
+                a.src_port,
+                a.dst_ip,
+                a.dst_port,
+            )  # fmt: skip
+        ]
+        for a in alerts
+    ]
 
 
 def alert_matches(f: AlertFilters, a: Alert) -> bool:
@@ -113,6 +160,7 @@ def parse_alert_filters(params: Mapping[str, str]) -> AlertFilters:
         src=valid_ip(src) if src else None,
         dst=valid_ip(dst) if dst else None,
         group=valid_group(group) if group else None,
+        text=valid_search(params.get("q", "")),
     )
 
 
@@ -385,6 +433,36 @@ def lab_view(result: LabResult, tz: tzinfo) -> LabView:
 
 def _plural(n: int, word: str) -> str:
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+
+LEARNING = timedelta(days=7)  # until then, nearly everything is seen for the first time
+SEEN_KIND_LABELS = {"dns": "name", "country": "country"}
+
+
+@dataclass(frozen=True, slots=True)
+class FirstSeenView:
+    names: int
+    countries: int
+    rows: tuple[tuple[str, str, str], ...]  # (kind label, value, local time)
+    learning_since: str | None  # a date while the history is younger than LEARNING
+
+
+def first_seen_view(
+    counts: Mapping[str, int],
+    rows: Iterable[tuple[str, str, datetime]],
+    since: datetime | None,
+    now: datetime,
+    tz: tzinfo,
+) -> FirstSeenView:
+    learning = (
+        since.astimezone(tz).strftime("%Y-%m-%d") if since and now - since < LEARNING else None
+    )
+    return FirstSeenView(
+        counts.get("dns", 0),
+        counts.get("country", 0),
+        tuple((SEEN_KIND_LABELS.get(k, k), v, fmt_time(t, tz)[11:16]) for k, v, t in rows),
+        learning,
+    )
 
 
 def overview_finding(total: int, urgent: int, top_msg: str, top_count: int) -> str:

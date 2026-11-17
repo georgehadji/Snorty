@@ -441,3 +441,18 @@ async def test_what_the_decoder_saw_on_flows_is_stored(tmp_path: Path) -> None:
     assert r.repo.flow_facts(9) == [("tls", "evil.example")]
     await r.sensor.stop()
     r.repo.close()
+
+
+async def test_names_the_decoder_saw_answered_are_noted_as_seen(tmp_path: Path) -> None:
+    class Named(FastDecoder):
+        def take_names(self) -> list[str]:
+            return ["Evil.Example."]
+
+    r = Rig(tmp_path)
+    r.sensor._decoder = Named(UTC)
+    r.append(line(1))
+    await r.sensor.start()
+    counts, rows = r.repo.first_seen(datetime(2000, 1, 1, tzinfo=UTC))
+    assert counts == {"dns": 1} and rows[0][:2] == ("dns", "evil.example")
+    await r.sensor.stop()
+    r.repo.close()
