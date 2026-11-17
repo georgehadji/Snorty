@@ -1,6 +1,9 @@
 ﻿# Capability Map: Snorty — V1
 
-Status: approved 2026-11-16
+Status: approved 2026-11-16. This is the V1 design record. Since then Snorty gained Suricata as a
+second engine and the `triage`, `attribution`, `enrich`, `winnet`, `respond`, `winfw`, `explain`,
+`packets` and `wireshark` packages. The current package list is
+[docs/modules.md](docs/modules.md); the tables below describe V1 only.
 
 Module specs: `SPEC-<module-id>.md` in this folder, written in build order.
 
@@ -85,20 +88,20 @@ Each module is verified by its own tests and a CLI entry point until the
 - **Scheduling:** asyncio tasks in the app process (daily rules update, journal flush). No external scheduler.
 - **Logging:** stdlib `logging` to a rotating file in the app's data folder.
 - **Testing:** pytest + pytest-asyncio. Pure modules: unit tests. Adapters: integration tests marked `@pytest.mark.snort` that need `C:\Snort`. Dashboard: a few HTTP tests via FastAPI's TestClient.
-- **Dependencies (proposed):** fastapi, uvicorn, jinja2, pydantic-settings, httpx (ET download), winotify (toasts), pytest, pytest-asyncio. Nothing else without asking.
+- **Dependencies (proposed):** fastapi, uvicorn, jinja2, pydantic-settings, httpx (ET download), winotify (toasts), pytest, pytest-asyncio. Nothing else without asking. As built: config is read with stdlib `tomllib` and rules are downloaded with `urllib`, so pydantic-settings is not used and httpx is a dev-only test dependency; `pyproject.toml` is the list.
 
 ## Out of Scope (Deferred)
 
 - Monitoring other devices on the network: needs a mirror-port sensor or router-level Snort; this laptop only sees its own traffic on Wi-Fi.
-- Blocking traffic (inline IPS mode): needs a different Snort setup and risks cutting off the network.
+- Blocking traffic (inline IPS mode): needs a different Snort setup and risks cutting off the network. Still out; manual blocking of one address through Windows Firewall was added later (`respond`, `winfw`).
 - Snort 3 migration: the adapter layer makes it possible; not in V1.
 - Remote access, multiple users, authentication.
 - Running as a Windows service.
 
-## Open Questions
+## Open Questions (resolved)
 
-1. **Journal summary:** plain template summary (counts, top rules, new IPs), or a plain-language AI summary through the Claude API (needs an API key, small cost per day)?
-2. **Autostart:** start Snorty at Windows logon via Task Scheduler, or only when you launch it?
-3. **Rule-lab pcaps:** use only pcaps you supply and ones the app records itself, or also download public sample pcaps from third-party sites?
+1. **Journal summary:** plain template summary (counts, top rules, top addresses). No cloud AI; per-rule explanations later came from a local Ollama model (`explain`).
+2. **Autostart:** opt-in, through a script in the Startup folder (`python -m snorty.dashboard.autostart install`), not Task Scheduler.
+3. **Rule-lab pcaps:** only pcaps you upload, generate, or record with Wireshark's dumpcap; nothing is downloaded.
 
 Resolved: name `Snorty`, project root `C:\Users\tesse\Documents\Vibe Coding\Snorty`.

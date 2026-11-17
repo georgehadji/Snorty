@@ -1,6 +1,6 @@
 # Snorty
 
-A local dashboard and toolkit around an existing [Snort 2.9](https://www.snort.org/) install on Windows. Snorty starts and stops Snort cleanly, stores its alerts, shows them live in a browser, updates and mutes rules, raises Windows toast notifications, writes a daily security journal into an Obsidian vault, and gives you a lab for trying new rules against a pcap.
+A local dashboard and toolkit around an existing [Snort 2.9](https://www.snort.org/) or [Suricata 7](https://suricata.io/) install on Windows. Snorty starts and stops the engine cleanly, stores its alerts, shows them live in a browser, updates and mutes rules, raises Windows toast notifications, writes a daily security journal into an Obsidian vault, and gives you a lab for trying new rules against a pcap.
 
 Snorty is a single-user tool for one PC. It listens on `127.0.0.1` only and has no remote access.
 
@@ -15,6 +15,11 @@ Snorty is a single-user tool for one PC. It listens on `127.0.0.1` only and has 
 | **Journal** | Writes one Markdown note per day into `Security/Snort/` of an Obsidian vault, touching only its own marked block. |
 | **Rule lab** | Lints and tests your own rules in a sandbox copy of the Snort config, against a pcap you upload or generate. The live sensor is never touched. |
 | **Packets** | Optional, needs Wireshark. Shows the packet behind an alert and what it was for (DNS name, TLS server, HTTP host), offers a one-packet download and "Open in Wireshark", suggests display filters, decodes and summarises lab pcaps, and records 5 to 120 seconds of live traffic into the lab. |
+| **Engine** | Suricata 7 as the alternative to Snort, picked on the Overview page. Its EVE log adds what the engine saw on the alert's flow: the DNS name looked up, the TLS server name, the web request. |
+| **Host context** | Which program on this PC made the alert's connection, and what public data says about the remote address (country, owner, reverse DNS, known-bad lists). |
+| **Inbox** | Acknowledge or star alerts a rule at a time; an archive rule acknowledges a rule's future alerts as they arrive. |
+| **Blocking** | Blocks one public address in Windows Firewall for a set time, with undo. See below. |
+| **Explain** | A plain-English reading of an alert's rule from an Ollama model on this PC. See below. |
 
 ## Requirements
 
@@ -44,6 +49,7 @@ Settings come from defaults, then `snorty.toml` in the data folder, then command
 ```toml
 # %LOCALAPPDATA%\Snorty\snorty.toml
 port = 8765
+engine = "snort"                  # or "suricata"; see Engine below
 interface_ip = "192.168.1.20"     # pin the capture interface; default: the PC's route to the internet
 vault = "C:/Users/you/Vault"      # default: the OBSIDIAN_VAULT_PATH environment variable
 notify = true
@@ -64,7 +70,7 @@ explain_model = ""                # an Ollama model that runs on this PC, e.g. "
 
 **Dropped packets.** With Suricata the engine reports its own drop figure. With Snort, starting the sensor adds one marked `preprocessor perfmonitor` line to `C:\Snort\etc\snort.conf` (checked with `snort -T` first and put back if Snort refuses it; delete the line and the comment above it to turn it off). Snort writes the figure to `perfmon.csv` in its log folder about once a minute, and the Overview shows it once the first rows are flushed.
 
-Dashboard flags: `--port`, `--start-sensor`, `--no-notify`, `--no-journal`, `--vault`, `--interface-ip`, `--data-dir`.
+Dashboard flags: `--port`, `--start-sensor`, `--no-notify`, `--no-journal`, `--vault`, `--interface-ip`, `--engine`, `--data-dir`.
 
 ## Start at logon
 
@@ -103,22 +109,30 @@ A modular monolith in one asyncio process, built as ports and adapters: Snort, t
 
 ```
 src/snorty/
-  core/       alert model, parser, SQLite repository, event bus
-  snort/      the only code that runs Snort (commands, process control, pcap runs)
-  sensor/     supervisor: start, restart, tail alert.ids, publish events
+  core/       alert model, decoders (alert_fast, EVE), SQLite repository, event bus, triage
+  snort/      runs Snort (commands, process control, pcap runs, drop statistics)
+  suricata/   runs Suricata (commands, its own copy of the config and rules)
+  sensor/     supervisor: start, restart, tail the alert log, publish events
   rules/      ET Open update, mute, HOME_NET, rollback
   notify/     throttled Windows toasts
   journal/    daily Obsidian notes
   lab/        rule linting, sandbox, pcap generation
   packets/    alert-to-packet matching, pcap reader, display filters (no processes)
   wireshark/  the only code that runs tshark, dumpcap and Wireshark
+  triage/     archive rules that acknowledge matching alerts as they arrive
+  attribution/  which program on this PC made an alert's connection
+  enrich/     country, owner, reverse DNS and known-bad lists for a remote address
+  respond/    firewall blocks with expiry and undo (the policy; no processes)
+  winfw/      Windows Firewall adapter (PowerShell, one approval prompt per change)
+  winnet/     the PC's TCP and UDP connection tables (ctypes over iphlpapi)
+  explain/    plain-English reading of a rule from a local Ollama model
   dashboard/  FastAPI app, pages, security middleware, autostart
   services.py the Protocols and bundle the UI layer uses
   compose.py  wires the modules together (the one composition root)
   headless.py terminal runner behind `python -m snorty.sensor`
 ```
 
-The design is written up as one spec per module (`SPEC-*.md`) with the overall plan in [`CAPABILITY-MAP.md`](CAPABILITY-MAP.md).
+The V1 design is written up as one spec per module (`SPEC-*.md`) with the overall plan in [`CAPABILITY-MAP.md`](CAPABILITY-MAP.md). Packages added later have no spec; [`docs/modules.md`](docs/modules.md) lists every package with its spec and tests, and [`docs/effects.md`](docs/effects.md) says what else a change touches.
 
 ## Security model
 
@@ -152,7 +166,7 @@ Code style: Python 3.12, line length 100, `ruff format`, strict `mypy`. Tests li
 
 - Snort 3 is not supported. Moving to it would mean swapping one adapter and the alert parser.
 - If Snort rotates `alert.ids` and the new file grows past the old offset before the next read, the rotation is not noticed.
-- Alerts are only parsed in Snort's `alert_fast` format.
+- Snort alerts are read only in its `alert_fast` format; Suricata alerts come from its EVE JSON log.
 - An alert's packet is found in Snort's own `snort.log.*` files by timestamp. Two different packets stamped on the same microsecond cannot be told apart, and the page then says the match is ambiguous. See [`SPEC-packets.md`](SPEC-packets.md).
 - Recording needs the sensor running, because it records the adapter the sensor uses. Recorded captures are deleted after `retention_days`; uploaded pcaps are kept.
 
