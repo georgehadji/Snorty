@@ -21,6 +21,7 @@ from snorty.dashboard.config import ConfigError, DashConfig, default_data_dir, l
 from snorty.dashboard.schedule import run_daily
 from snorty.dashboard.security import new_token
 from snorty.journal.ports import NoteStore, VaultNoteStore
+from snorty.notify.ports import channel_notifier
 
 HOST = "127.0.0.1"
 LOG_NAME = "snorty.log"
@@ -123,6 +124,7 @@ async def run(
         cfg.data_dir,
         interface_ip=cfg.interface_ip,
         notify=cfg.notify,
+        notifier=channel_notifier(cfg.channels) if cfg.channels else None,
         journal_store=note_store(cfg),
         wireshark_dir=Path(cfg.wireshark_dir) if cfg.wireshark_dir else None,
         host_context=True,

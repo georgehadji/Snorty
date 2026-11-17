@@ -8,6 +8,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from snorty.notify.ports import valid_channel_url
+
 CONFIG_NAME = "snorty.toml"
 _TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 
@@ -29,11 +31,24 @@ class DashConfig:
     engine: str = "snort"  # "snort" or "suricata"
     rules_update_at: str = "03:00"  # local "HH:MM"; empty string disables the daily update
     retention_days: int = 90  # alerts older than this are deleted; 0 keeps everything
+    channels: tuple[Mapping[str, str], ...] = ()  # extra toast channels: {kind, url}
 
 
 def default_data_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA")
     return (Path(base) if base else Path.home()) / "Snorty"
+
+
+def _check_channels(value: object) -> tuple[Mapping[str, str], ...]:
+    msg = 'channels must be a list of {kind = "webhook" or "ntfy", url = "http(s)://..."}'
+    if not isinstance(value, list | tuple):
+        raise ConfigError(msg)
+    for c in value:
+        if not isinstance(c, Mapping) or c.get("kind") not in ("webhook", "ntfy"):
+            raise ConfigError(msg)
+        if not valid_channel_url(c.get("url")):
+            raise ConfigError("a channel url must be http or https")
+    return tuple({"kind": c["kind"], "url": c["url"]} for c in value)
 
 
 def _check(key: str, value: object) -> object:
@@ -49,6 +64,8 @@ def _check(key: str, value: object) -> object:
     elif key == "engine":
         if value not in ("snort", "suricata"):
             raise ConfigError('engine must be "snort" or "suricata"')
+    elif key == "channels":
+        value = _check_channels(value)
     elif key in ("interface_ip", "vault", "wireshark_dir"):
         if not isinstance(value, str):
             raise ConfigError(f"{key} must be text")

@@ -73,3 +73,24 @@ def test_a_bad_override_raises(tmp_path: Path) -> None:
 def test_default_data_dir_uses_localappdata(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LOCALAPPDATA", "C:/Users/x/AppData/Local")
     assert default_data_dir() == Path("C:/Users/x/AppData/Local") / "Snorty"
+
+
+def test_channels_come_from_the_toml_file(tmp_path: Path) -> None:
+    (tmp_path / "snorty.toml").write_text(
+        '[[channels]]\nkind = "ntfy"\nurl = "https://ntfy.sh/t"\n'
+        '[[channels]]\nkind = "webhook"\nurl = "http://nas.lan/hook"\n'
+    )
+    cfg = load_config(tmp_path)
+    assert [c["kind"] for c in cfg.channels] == ["ntfy", "webhook"]
+    assert load_config(tmp_path / "none").channels == ()
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ['channels = "x"', 'channels = [{kind = "sms", url = "https://x/y"}]',
+     'channels = [{kind = "ntfy", url = "file:///x"}]', 'channels = [{kind = "ntfy"}]'],
+)  # fmt: skip
+def test_bad_channels_are_refused(tmp_path: Path, bad: str) -> None:
+    (tmp_path / "snorty.toml").write_text(bad + "\n")
+    with pytest.raises(ConfigError, match="channel"):
+        load_config(tmp_path)

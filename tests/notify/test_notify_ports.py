@@ -1,8 +1,15 @@
+import json
 import time
 
 import pytest
 
-from snorty.notify.ports import ConsoleNotifier, WinotifyNotifier
+from snorty.notify.ports import (
+    ConsoleNotifier,
+    FanOutNotifier,
+    NtfyNotifier,
+    WebhookNotifier,
+    WinotifyNotifier,
+)
 from snorty.notify.toast import Toast
 
 TOAST = Toast("Snort P1: x", ("TCP 10.0.0.1:1 → 10.0.0.2:2", "SID 1:5 at 01:02:03"))
@@ -75,3 +82,70 @@ async def test_console_default_survives_a_console_that_cannot_encode_the_arrow(
 
     sys.stdout.flush()
     assert b"Snort P1: x" in raw.getvalue()
+
+
+class Wire:
+    def __init__(self, fail: bool = False) -> None:
+        self.sent: list[tuple[str, dict[str, object]]] = []
+        self.fail = fail
+
+    def __call__(self, url: str, body: bytes, timeout: float) -> None:
+        if self.fail:
+            raise OSError(f"cannot reach {url}")
+        self.sent.append((url, json.loads(body)))
+
+
+async def test_webhook_posts_title_lines_and_text() -> None:
+    wire = Wire()
+    await WebhookNotifier("https://hooks.example/abc", post=wire).show(TOAST)
+    ((url, body),) = wire.sent
+    assert url == "https://hooks.example/abc"
+    assert body["title"] == "Snort P1: x" and len(body["lines"]) == 2  # type: ignore[arg-type]
+    assert str(body["text"]).startswith("Snort P1: x\n")
+
+
+async def test_ntfy_publishes_as_json_to_the_server_root() -> None:
+    wire = Wire()
+    await NtfyNotifier("https://ntfy.sh/my-topic", post=wire).show(TOAST)
+    ((url, body),) = wire.sent
+    assert url == "https://ntfy.sh/"
+    assert body["topic"] == "my-topic" and body["title"] == "Snort P1: x"
+
+
+async def test_ntfy_on_a_self_hosted_path_uses_the_last_segment() -> None:
+    wire = Wire()
+    await NtfyNotifier("http://nas.lan:8080/ntfy/alerts", post=wire).show(TOAST)
+    assert wire.sent[0][0] == "http://nas.lan:8080/" and wire.sent[0][1]["topic"] == "alerts"
+
+
+@pytest.mark.parametrize("url", ["file:///c:/x", "ftp://h/x", "javascript:1", "https://", "x"])
+def test_channels_refuse_other_schemes(url: str) -> None:
+    with pytest.raises(ValueError, match="http"):
+        WebhookNotifier(url)
+
+
+def test_ntfy_needs_a_topic() -> None:
+    with pytest.raises(ValueError, match="topic"):
+        NtfyNotifier("https://ntfy.sh/")
+
+
+async def test_fan_out_survives_one_dead_channel_and_never_logs_the_address(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    good, bad = Wire(), Wire(fail=True)
+    fan = FanOutNotifier(
+        [
+            WebhookNotifier("https://a.example/s3cret", post=bad),
+            NtfyNotifier("https://n/t", post=good),
+        ]
+    )
+    with caplog.at_level("WARNING", logger="snorty.notify"):
+        await fan.show(TOAST)
+    assert len(good.sent) == 1
+    assert "webhook" in caplog.text and "s3cret" not in caplog.text
+
+
+async def test_fan_out_raises_when_every_channel_failed() -> None:
+    fan = FanOutNotifier([WebhookNotifier("https://a.example/x", post=Wire(fail=True))])
+    with pytest.raises(OSError):
+        await fan.show(TOAST)
