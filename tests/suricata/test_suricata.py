@@ -136,3 +136,10 @@ async def test_check_config_reads_the_e_prefixed_errors_of_this_build() -> None:
     err = "E: detect-parse: unknown rule keyword 'file.magic'.\ni: suricata: not an error"
     check = await check_config(PATHS, FakeRunner(RunResult(1, "", err)))
     assert check.errors == ("E: detect-parse: unknown rule keyword 'file.magic'.",)
+
+
+def test_ready_marker_matches_the_engines_real_log_line() -> None:
+    from snorty.suricata.service import _READY_MARKER
+
+    line = "i: threads: Threads created -> RX: 1 W: 24 FM: 1 FR: 1   Engine started."
+    assert _READY_MARKER in line.lower()

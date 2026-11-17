@@ -16,7 +16,7 @@ from snorty.snort.service import bind_to_job, stop_live
 from snorty.suricata.models import SuricataPaths
 
 IMAGE = "suricata.exe"
-_READY_MARKER = "engine started"
+_READY_MARKER = "engine started"  # the log says "Engine started."
 _RULES_LOADED = re.compile(r"(\d+) rules successfully loaded")
 # Older builds print "<Error> - ...", this one "E: ...".
 _ERROR_LINE = re.compile(r"^(?:E:.*|.*<Error>.*)$", re.MULTILINE)
@@ -68,7 +68,7 @@ async def start_live(
     deadline = loop.time() + ready_timeout
     while True:
         text = out_path.read_text(errors="replace")
-        if _READY_MARKER in text:
+        if _READY_MARKER in text.lower():
             return proc
         if proc.returncode is not None:
             raise SnortError(f"suricata exited early (code {proc.returncode}): {text[-500:]}")
