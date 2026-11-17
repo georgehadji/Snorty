@@ -1,0 +1,176 @@
+"""Adds what public data says about an alert's remote address, and flags known-bad ones."""
+
+import asyncio
+import ipaddress
+import logging
+import os
+import time
+from collections.abc import Callable
+from datetime import UTC, datetime
+from pathlib import Path
+
+from snorty.core.bus import EventBus, Subscription
+from snorty.core.events import AlertFlagged, AlertRaised, Event
+from snorty.core.models import Alert
+from snorty.core.repository import AlertRepository
+from snorty.enrich.fetch import Fetch, gunzip
+from snorty.enrich.ranges import RangeTable, parse_drop, parse_feodo
+from snorty.enrich.rdns import ReverseDns
+
+log = logging.getLogger("snorty.enrich")
+
+DAY = 86400.0
+FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist.txt"
+DROP_URL = "https://www.spamhaus.org/drop/drop.txt"
+
+
+def remote_address(alert: Alert) -> str | None:
+    """The end of the flow that is not on this network, or None when both ends are private."""
+    for text in (alert.src_ip, alert.dst_ip):
+        try:
+            if ipaddress.ip_address(text).is_global:
+                return text
+        except ValueError:
+            continue
+    return None
+
+
+class EnrichService:
+    """Pipeline: each step reads the loaded tables and adds a `kind: value` note. The tables come
+    from files in `folder`; with a `fetch` they are refreshed (lists daily, DB-IP monthly), and
+    without one only the files already there are used."""
+
+    def __init__(
+        self,
+        bus: EventBus,
+        repo: AlertRepository,
+        folder: Path,
+        *,
+        fetch: Fetch | None = None,
+        rdns: ReverseDns | None = None,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        self._bus = bus
+        self._repo = repo
+        self._folder = folder
+        self._fetch = fetch
+        self._rdns = rdns
+        self._now = now
+        self._clock = clock
+        self._bad: list[RangeTable] = []
+        self._country = RangeTable()
+        self._asn = RangeTable()
+        self._sub: Subscription | None = None
+        self._tasks: list[asyncio.Task[None]] = []
+
+    # --- life cycle -------------------------------------------------------------------
+
+    async def start(self) -> None:
+        if self._tasks:
+            return
+        await asyncio.to_thread(self.load)
+        self._sub = self._bus.subscribe(maxsize=500, accept=_wants, keep_oldest=True)
+        self._tasks = [
+            asyncio.create_task(self._consume(self._sub), name="enrich"),
+            asyncio.create_task(self._refresh_loop(), name="enrich-refresh"),
+        ]
+
+    async def stop(self) -> None:
+        for t in self._tasks:
+            t.cancel()
+        await asyncio.gather(*self._tasks, return_exceptions=True)
+        if self._sub is not None:
+            self._sub.close()
+        self._tasks, self._sub = [], None
+
+    async def _consume(self, sub: Subscription) -> None:
+        async for event in sub:
+            if not isinstance(event, AlertRaised):
+                continue
+            try:
+                notes = await asyncio.to_thread(self.enrich, event.alert)
+            except Exception:  # one bad alert must not end the consumer
+                log.exception("could not enrich alert %s", event.alert.id)
+                continue
+            if "bad" in notes:
+                self._bus.publish(AlertFlagged(event.alert, notes["bad"]))
+
+    async def _refresh_loop(self) -> None:
+        while self._fetch is not None:
+            try:
+                if await asyncio.to_thread(self.refresh):
+                    await asyncio.to_thread(self.load)
+            except Exception:  # offline or a changed address: try again tomorrow
+                log.exception("could not refresh the enrichment data")
+            await asyncio.sleep(DAY)
+
+    # --- the pipeline -----------------------------------------------------------------
+
+    def enrich(self, alert: Alert) -> dict[str, str]:
+        """Blocking: store and return the notes for `alert` (empty for private-only flows)."""
+        ip = remote_address(alert)
+        if ip is None or not alert.id:
+            return {}
+        notes: dict[str, str] = {}
+        steps: list[tuple[str, Callable[[str], str | None]]] = [
+            ("bad", lambda a: next((m for t in self._bad if (m := t.find(a))), None)),
+            ("country", self._country.find),
+            ("asn", self._asn.find),
+            ("rdns", self._rdns.name if self._rdns else lambda _: None),
+        ]
+        for kind, step in steps:
+            value = step(ip)
+            if value:
+                notes[kind] = value
+                self._repo.annotate(alert.id, kind, value)
+        return notes
+
+    # --- data -------------------------------------------------------------------------
+
+    def load(self) -> None:
+        """Read the tables from the files in the folder; a missing or broken file is skipped."""
+
+        def read(name: str) -> str:
+            try:
+                return (self._folder / name).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                return ""
+
+        self._bad = [parse_feodo(read("feodo.txt")), parse_drop(read("drop.txt"))]
+        self._country = RangeTable.from_csv(read("dbip-country.csv").splitlines(), slice(0, 1))
+        self._asn = RangeTable.from_csv(read("dbip-asn.csv").splitlines(), slice(0, 2))
+
+    def refresh(self) -> bool:
+        """Download whatever is out of date; True if any file changed."""
+        month = self._now().strftime("%Y-%m")
+        base = "https://download.db-ip.com/free/dbip-"
+        sources = [
+            ("feodo.txt", FEODO_URL, DAY, False),
+            ("drop.txt", DROP_URL, DAY, False),
+            ("dbip-country.csv", f"{base}country-lite-{month}.csv.gz", 30 * DAY, True),
+            ("dbip-asn.csv", f"{base}asn-lite-{month}.csv.gz", 30 * DAY, True),
+        ]
+        changed = False
+        self._folder.mkdir(parents=True, exist_ok=True)
+        for name, url, max_age, packed in sources:
+            target = self._folder / name
+            if target.exists() and self._clock() - target.stat().st_mtime < max_age:
+                continue
+            try:
+                assert self._fetch is not None
+                data = self._fetch(url)
+                if packed:
+                    data = gunzip(data)
+            except OSError:
+                log.warning("could not download %s", url)
+                continue
+            part = target.with_suffix(target.suffix + ".part")
+            part.write_bytes(data)
+            os.replace(part, target)  # a half-written file is never read
+            changed = True
+        return changed
+
+
+def _wants(event: Event) -> bool:
+    return isinstance(event, AlertRaised)

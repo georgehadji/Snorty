@@ -98,11 +98,21 @@ def _add_triage(conn: sqlite3.Connection) -> None:
     )
 
 
+def _add_annotations(conn: sqlite3.Connection) -> None:
+    """Facts learned about an alert after it was stored: owning process, country, name..."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS annotations ("
+        "alert_id INTEGER NOT NULL REFERENCES alerts(id) ON DELETE CASCADE, "
+        "kind TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (alert_id, kind))"
+    )
+
+
 # Append only: a database's `schema_version` is how many of these it has had.
 MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _rebuild_with_dup,
     _index_hosts,
     _add_triage,
+    _add_annotations,
 ]
 
 
@@ -372,6 +382,24 @@ class AlertRepository:
     def apply_archive_rules(self, now: datetime) -> int:
         """Acknowledge new alerts that match an archive rule; returns how many."""
         return sum(self.set_state(r.spec, "ack", now, only_new=True) for r in self.archive_rules())
+
+    def annotate(self, alert_id: int, kind: str, value: str) -> None:
+        """Remember a fact about an alert; a later one of the same kind replaces it. An alert that
+        was pruned meanwhile is skipped."""
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO annotations (alert_id, kind, value) "
+                "SELECT id, ?, ? FROM alerts WHERE id = ? "
+                "ON CONFLICT (alert_id, kind) DO UPDATE SET value = excluded.value",
+                (kind, value, alert_id),
+            )
+
+    def annotations(self, alert_id: int) -> dict[str, str]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT kind, value FROM annotations WHERE alert_id = ?", (alert_id,)
+            ).fetchall()
+        return {k: v for k, v in rows}
 
     def prune(self, before: datetime) -> int:
         """Delete alerts strictly older than `before`; returns the number deleted. Later reads of

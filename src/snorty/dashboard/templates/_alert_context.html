@@ -1,0 +1,13 @@
+<div class="alert-context">
+{% if ctx.empty %}
+  <p class="muted">No host details for this alert.</p>
+{% else %}
+  {% if ctx.bad %}<p class="error"><strong>Known bad:</strong> {{ ctx.bad }}</p>{% endif %}
+  <dl class="detail">
+    {% if ctx.process %}<dt>Program</dt><dd>{{ ctx.process }}</dd>{% endif %}
+    {% if ctx.country %}<dt>Country</dt><dd>{{ ctx.country }}</dd>{% endif %}
+    {% if ctx.asn %}<dt>Network</dt><dd>{{ ctx.asn }}</dd>{% endif %}
+    {% if ctx.rdns %}<dt>Hostname</dt><dd class="mono">{{ ctx.rdns }}</dd>{% endif %}
+  </dl>
+{% endif %}
+</div>

@@ -1,5 +1,6 @@
 """Dashboard: the packet behind an alert, its download, and opening it in Wireshark."""
 
+import json
 from pathlib import Path
 
 from dash_fakes import FakePackets, alert
@@ -146,3 +147,41 @@ def test_listing_alerts_does_not_look_at_any_packet(tmp_path: Path) -> None:
     c.get("/alerts")
     c.get("/")
     assert packets(s).alert_calls == [] and packets(s).calls == []
+
+
+def test_the_context_fragment_shows_the_program_the_network_and_a_known_bad_warning(
+    tmp_path: Path,
+) -> None:
+    c, s, aid = stored(tmp_path)
+    s.repo.annotate(
+        aid, "process", json.dumps({"found": True, "pid": 4242, "image": "C:/Tools/nc.exe"})
+    )
+    s.repo.annotate(aid, "country", "US")
+    s.repo.annotate(aid, "asn", "15169 GOOGLE")
+    s.repo.annotate(aid, "rdns", "dns.google")
+    s.repo.annotate(aid, "bad", "Feodo Tracker botnet C2")
+    html = c.get(f"/alerts/{aid}/context").text
+    for text in ("nc.exe (pid 4242)", "US", "15169 GOOGLE", "dns.google", "Known bad:"):
+        assert text in html
+
+
+def test_the_context_fragment_says_when_a_connection_had_closed_or_nothing_is_known(
+    tmp_path: Path,
+) -> None:
+    c, s, aid = stored(tmp_path)
+    assert "No host details" in c.get(f"/alerts/{aid}/context").text
+    s.repo.annotate(aid, "process", '{"found": false}')
+    assert "had already closed" in c.get(f"/alerts/{aid}/context").text
+
+
+def test_a_stored_note_cannot_inject_markup(tmp_path: Path) -> None:
+    c, s, aid = stored(tmp_path)
+    s.repo.annotate(aid, "rdns", "<script>alert(1)</script>")
+    html = c.get(f"/alerts/{aid}/context").text
+    assert "<script>alert" not in html and "&lt;script&gt;" in html
+
+
+def test_an_alert_row_loads_its_context_when_opened(tmp_path: Path) -> None:
+    c, s, aid = stored(tmp_path)
+    html = c.get("/alerts/rows").text
+    assert f'hx-get="/alerts/{aid}/context"' in html

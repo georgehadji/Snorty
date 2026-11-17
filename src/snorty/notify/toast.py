@@ -55,3 +55,14 @@ def build_toast(alert: Alert, same_sid: int = 0, other: int = 0, tz: tzinfo = UT
     if other:
         lines.append(f"+{other} other alerts")
     return Toast(title, tuple(lines))
+
+
+def build_flagged_toast(
+    alert: Alert, reason: str, same_sid: int = 0, other: int = 0, tz: tzinfo = UTC
+) -> Toast:
+    """The toast for an alert whose remote address is on a known-bad list."""
+    base = build_toast(alert, same_sid, other, tz)
+    return Toast(
+        sanitize(f"Known bad: {reason}", TITLE_LIMIT),
+        (sanitize(alert.msg, LINE_LIMIT), *base.lines),
+    )

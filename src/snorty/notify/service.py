@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from datetime import UTC, tzinfo
 
 from snorty.core.bus import EventBus, Subscription
-from snorty.core.events import AlertRaised
+from snorty.core.events import AlertFlagged, AlertRaised
 from snorty.notify.ports import Notifier
 from snorty.notify.throttle import Throttle
-from snorty.notify.toast import build_toast
+from snorty.notify.toast import build_flagged_toast, build_toast
 
 log = logging.getLogger("snorty.notify")
 
@@ -63,7 +63,8 @@ class NotifyService:
         self._sub = self._bus.subscribe(
             maxsize=1000,
             accept=lambda e: (
-                isinstance(e, AlertRaised) and e.alert.priority <= self._config.min_priority
+                isinstance(e, AlertFlagged)
+                or (isinstance(e, AlertRaised) and e.alert.priority <= self._config.min_priority)
             ),
             keep_oldest=True,
         )
@@ -80,7 +81,7 @@ class NotifyService:
     async def _consume(self, sub: Subscription) -> None:
         missed = 0
         async for event in sub:
-            if isinstance(event, AlertRaised):
+            if isinstance(event, AlertRaised | AlertFlagged):
                 try:
                     await self._handle(event)
                 except Exception:  # the consumer must outlive any single bad alert
@@ -90,17 +91,24 @@ class NotifyService:
                 self._throttle.missed(sub.dropped - missed)
                 missed = sub.dropped
 
-    async def _handle(self, event: AlertRaised) -> None:
+    async def _handle(self, event: AlertRaised | AlertFlagged) -> None:
         alert = event.alert
-        if alert.priority > self._config.min_priority:
+        flagged = isinstance(event, AlertFlagged)
+        if not flagged and alert.priority > self._config.min_priority:
             return
-        decision = self._throttle.decide(alert.sid, self._clock())
+        key = -alert.sid if flagged else alert.sid  # a flagged toast has its own throttle slot
+        decision = self._throttle.decide(key, self._clock())
         if not decision.show:
             return
-        toast = build_toast(alert, decision.same_sid, decision.other, self._config.tz)
+        tz = self._config.tz
+        toast = (
+            build_flagged_toast(alert, event.reason, decision.same_sid, decision.other, tz)
+            if isinstance(event, AlertFlagged)
+            else build_toast(alert, decision.same_sid, decision.other, tz)
+        )
         try:
             await asyncio.wait_for(self._notifier.show(toast), self._config.show_timeout)
         except Exception:  # nobody saw it: the next alert of this SID must not be throttled
-            self._throttle.release(alert.sid, decision)
+            self._throttle.release(key, decision)
             raise
         self._shown += 1

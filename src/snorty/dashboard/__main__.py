@@ -121,6 +121,7 @@ async def run(
         notify=cfg.notify,
         journal_store=note_store(cfg),
         wireshark_dir=Path(cfg.wireshark_dir) if cfg.wireshark_dir else None,
+        host_context=True,
     )
     services = runtime.services
     app = build_app(services, token=new_token(), port=cfg.port)

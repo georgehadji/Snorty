@@ -65,8 +65,8 @@ type = "forbidden"
 source_modules = ["snorty.core"]
 forbidden_modules = [
     "snorty.snort", "snorty.sensor", "snorty.rules", "snorty.notify", "snorty.journal",
-    "snorty.lab", "snorty.triage", "snorty.dashboard", "snorty.compose", "snorty.services",
-    "snorty.headless",
+    "snorty.lab", "snorty.triage", "snorty.attribution", "snorty.enrich", "snorty.winnet",
+    "snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless",
 ]
 
 [[tool.importlinter.contracts]]
@@ -74,8 +74,8 @@ name = "only the process adapters (snort, wireshark) run processes"
 type = "forbidden"
 source_modules = [
     "snorty.core", "snorty.sensor", "snorty.rules", "snorty.notify", "snorty.journal",
-    "snorty.lab", "snorty.packets", "snorty.triage", "snorty.dashboard", "snorty.compose",
-    "snorty.services", "snorty.headless",
+    "snorty.lab", "snorty.packets", "snorty.triage", "snorty.attribution", "snorty.enrich",
+    "snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless",
 ]
 forbidden_modules = ["subprocess"]
 allow_indirect_imports = true
@@ -85,7 +85,8 @@ name = "feature modules never reach up into the UI or the wiring"
 type = "forbidden"
 source_modules = [
     "snorty.snort", "snorty.sensor", "snorty.rules", "snorty.notify", "snorty.journal",
-    "snorty.lab", "snorty.packets", "snorty.triage", "snorty.wireshark",
+    "snorty.lab", "snorty.packets", "snorty.triage", "snorty.attribution", "snorty.enrich",
+    "snorty.winnet", "snorty.wireshark",
 ]
 forbidden_modules = ["snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless"]
 # the sensor's `-m` shim hands off to the headless runner; it is an entry point, not a dependency
@@ -102,6 +103,6 @@ name = "sibling features do not know each other"
 type = "independence"
 modules = [
     "snorty.sensor", "snorty.notify", "snorty.journal", "snorty.lab", "snorty.packets",
-    "snorty.triage",
+    "snorty.triage", "snorty.attribution", "snorty.enrich",
 ]
 ignore_imports = ["snorty.sensor.__main__ -> snorty.headless"]

@@ -9,9 +9,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from snorty.attribution import AttributionService
 from snorty.core.bus import EventBus
 from snorty.core.localtz import LocalTimezone
 from snorty.core.repository import AlertRepository
+from snorty.enrich import EnrichService, ReverseDns, urllib_fetch
 from snorty.journal.ports import NoteStore
 from snorty.journal.service import JournalConfig, JournalService
 from snorty.lab.service import LabService
@@ -24,7 +26,9 @@ from snorty.rules.service import RulesService
 from snorty.sensor import Sensor, SensorConfig, SnortAdapter
 from snorty.services import Services
 from snorty.snort import Interface, SnortPaths, SubprocessRunner
+from snorty.snort.interfaces import find_local_ip
 from snorty.triage import TriageService
+from snorty.winnet import WinConnectionLookup
 from snorty.wireshark import DumpcapRecorder, TsharkDecoder, WiresharkViewer, find_tools
 
 log = logging.getLogger("snorty")
@@ -38,6 +42,8 @@ class Runtime:
     notify: NotifyService | None
     journal: JournalService | None
     triage: TriageService | None = None
+    attribution: AttributionService | None = None
+    enrich: EnrichService | None = None
 
     async def start(self, *, sensor: bool = False) -> None:
         try:
@@ -47,6 +53,10 @@ class Runtime:
                 await self.journal.start()
             if self.triage:
                 await self.triage.start()
+            if self.attribution:
+                await self.attribution.start()
+            if self.enrich:
+                await self.enrich.start()
             if sensor:
                 await self.services.sensor.start()
         except BaseException:  # leave nothing half started
@@ -56,19 +66,19 @@ class Runtime:
     async def stop(self) -> None:
         """Stop everything that was started; does not close the repository. A part that fails
         to stop does not keep the others running."""
-        try:
-            await asyncio.shield(self.services.sensor.stop())
-        finally:
+        stops = [
+            self.services.sensor.stop,
+            *(p.stop for p in (self.enrich, self.attribution, self.triage, self.journal) if p),
+            *([self.notify.stop] if self.notify else []),
+        ]
+        first: BaseException | None = None
+        for i, stop in enumerate(stops):
             try:
-                if self.triage:
-                    await self.triage.stop()
-            finally:
-                try:
-                    if self.journal:
-                        await self.journal.stop()
-                finally:
-                    if self.notify:
-                        await self.notify.stop()
+                await (asyncio.shield(stop()) if i == 0 else stop())
+            except BaseException as exc:  # keep stopping the rest, then re-raise the first
+                first = first or exc
+        if first is not None:
+            raise first
 
 
 def compose(
@@ -82,8 +92,11 @@ def compose(
     paths: SnortPaths | None = None,
     select_interface: Callable[[list[Interface]], Interface | None] | None = None,
     wireshark_dir: Path | None = None,
+    host_context: bool = False,
 ) -> Runtime:
-    """Wire every module together. The journal runs only when a note store is given."""
+    """Wire every module together. The journal runs only when a note store is given. With
+    `host_context` the PC's connection table and public data downloads are used for alerts
+    (which program made the connection, where the remote address is, known-bad lists)."""
     paths = paths or SnortPaths()
     data_dir.mkdir(parents=True, exist_ok=True)
     tz = LocalTimezone()
@@ -127,4 +140,10 @@ def compose(
         scratch=data_dir / "opened",
     )
     services = Services(sensor, rules, journal, toasts, lab, repo, bus, tz, data_dir, packets)
-    return Runtime(services, toasts, journal, TriageService(bus, repo))
+    attribution = enrich = None
+    if host_context:
+        attribution = AttributionService(bus, repo, WinConnectionLookup(), find_local_ip)
+        enrich = EnrichService(
+            bus, repo, data_dir / "enrich", fetch=urllib_fetch, rdns=ReverseDns()
+        )
+    return Runtime(services, toasts, journal, TriageService(bus, repo), attribution, enrich)

@@ -5,7 +5,7 @@ import pytest
 from notify_fakes import FakeClock, RecordingNotifier, make_alert, raise_alert, settle
 
 from snorty.core.bus import EventBus
-from snorty.core.events import SensorStateChanged
+from snorty.core.events import AlertFlagged, SensorStateChanged
 from snorty.notify.service import NotifyConfig, NotifyService
 
 
@@ -110,3 +110,18 @@ async def test_a_flood_of_low_priority_alerts_cannot_evict_a_priority_one_alert(
         raise_alert(rig.bus, make_alert(2000000 + n, priority=2))
     await settle(lambda: len(rig.notifier.toasts) == 1)
     assert rig.notifier.toasts[0].title.endswith("rule 1000002")
+
+
+async def test_a_flagged_alert_toasts_whatever_its_priority_and_has_its_own_throttle(
+    rig: Rig,
+) -> None:
+    quiet = make_alert(1000003, priority=3)
+    rig.bus.publish(AlertFlagged(quiet, "Feodo Tracker botnet C2"))
+    rig.bus.publish(AlertFlagged(quiet, "Feodo Tracker botnet C2"))  # same SID: held back
+    raise_alert(rig.bus, make_alert(1000003, priority=1))  # the plain alert is not held back
+    await settle(lambda: len(rig.notifier.toasts) == 2)
+    await settle()
+    flagged, plain = rig.notifier.toasts
+    assert flagged.title == "Known bad: Feodo Tracker botnet C2"
+    assert flagged.lines[0] == "rule 1000003" and "SID 1:1000003" in flagged.lines[-1]
+    assert plain.title.startswith("Snort P1:")

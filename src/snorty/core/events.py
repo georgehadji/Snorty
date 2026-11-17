@@ -33,4 +33,13 @@ class AlertsBackfilled:
     last: datetime
 
 
-type Event = AlertRaised | AlertsBackfilled | SensorStateChanged | RulesUpdated
+@dataclass(frozen=True, slots=True)
+class AlertFlagged:
+    """An alert that deserves attention whatever its priority (its address is on a known-bad
+    list). Carries the stored alert so a consumer need not look it up."""
+
+    alert: Alert
+    reason: str
+
+
+type Event = AlertRaised | AlertsBackfilled | AlertFlagged | SensorStateChanged | RulesUpdated
