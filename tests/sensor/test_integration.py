@@ -46,7 +46,13 @@ def send_attack_traffic() -> None:
 
 
 @pytest.fixture
-def rig(tmp_path: Path) -> Iterator[tuple[Sensor, AlertRepository]]:
+def rig(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[tuple[Sensor, AlertRepository]]:
+    async def no_perfmon(*_: object) -> None:  # a test must not edit the real snort.conf
+        return None
+
+    monkeypatch.setattr("snorty.sensor.port.enable_perfmon", no_perfmon)
     log_dir = tmp_path / "log"
     log_dir.mkdir()
     paths = SnortPaths(log_dir=log_dir)

@@ -12,7 +12,7 @@ from typing import Literal
 
 from snorty.attribution import AttributionService
 from snorty.core.bus import EventBus
-from snorty.core.decoder import AlertDecoder, EveDecoder
+from snorty.core.decoder import AlertDecoder, EveDecoder, FastDecoder
 from snorty.core.localtz import LocalTimezone
 from snorty.core.repository import AlertRepository
 from snorty.enrich import EnrichService, ReverseDns, urllib_fetch
@@ -33,7 +33,7 @@ from snorty.rules.suricata_home import prepare_suricata_home
 from snorty.sensor import EnginePort, Sensor, SensorConfig, SnortAdapter
 from snorty.sensor.port import SuricataAdapter
 from snorty.services import Services
-from snorty.snort import Interface, SnortPaths, SubprocessRunner
+from snorty.snort import PERFMON_FILE, DropReader, Interface, SnortPaths, SubprocessRunner
 from snorty.snort.interfaces import find_local_ip
 from snorty.suricata import SuricataPaths
 from snorty.triage import TriageService
@@ -142,6 +142,7 @@ def compose(
     else:
         paths = paths or SnortPaths()
         sensor_paths = paths
+        decoder = FastDecoder(tz, DropReader(paths.log_dir / PERFMON_FILE))
         rules_config = RulesConfig(paths=paths)
         adapter, validator = SnortAdapter(paths), SnortValidator(paths)
     bus = EventBus()
@@ -206,6 +207,7 @@ def compose(
         packets,
         respond=blocker,
         explain=explainer,
+        engine=engine,
     )
     attribution = enrich = None
     if host_context:

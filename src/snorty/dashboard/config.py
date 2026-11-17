@@ -12,6 +12,9 @@ from snorty.notify.ports import valid_channel_url
 
 CONFIG_NAME = "snorty.toml"
 _TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
+ENGINES = ("snort", "suricata")
+_ENGINE_LINE = re.compile(r"^engine[ 	]*=.*$", re.M)
+_FIRST_TABLE = re.compile(r"^\[", re.M)
 
 
 class ConfigError(ValueError):
@@ -64,7 +67,7 @@ def _check(key: str, value: object) -> object:
         if type(value) is not int or not 0 <= value <= 36500:
             raise ConfigError("retention_days must be a whole number from 0 to 36500")
     elif key == "engine":
-        if value not in ("snort", "suricata"):
+        if value not in ENGINES:
             raise ConfigError('engine must be "snort" or "suricata"')
     elif key == "channels":
         value = _check_channels(value)
@@ -91,3 +94,23 @@ def load_config(data_dir: Path, overrides: Mapping[str, object] | None = None) -
     values.update({k: v for k, v in (overrides or {}).items() if v is not None})
     checked: dict[str, Any] = {k: _check(k, v) for k, v in values.items()}
     return replace(DashConfig(data_dir=data_dir), **checked)
+
+
+def save_engine(data_dir: Path, engine: str) -> None:
+    """Write `engine = "..."` into `<data_dir>/snorty.toml`, keeping the rest of the file. It takes
+    effect the next time the dashboard starts."""
+    if engine not in ENGINES:
+        raise ConfigError('engine must be "snort" or "suricata"')
+    path = data_dir / CONFIG_NAME
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    line = f'engine = "{engine}"'
+    if _ENGINE_LINE.search(text):
+        text = _ENGINE_LINE.sub(line, text, count=1)
+    elif table := _FIRST_TABLE.search(text):  # a top-level key must come before any [table]
+        text = f"{text[: table.start()]}{line}\n\n{text[table.start() :]}"
+    else:
+        text += ("" if not text or text.endswith("\n") else "\n") + line + "\n"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".toml.tmp")
+    tmp.write_text(text, encoding="utf-8", newline="")
+    tmp.replace(path)

@@ -1,0 +1,16 @@
+<section id="engine-card" class="card">
+  <h2>Detection engine</h2>
+  <dl>
+    <dt>Running now</dt><dd>{{ names[running] }}</dd>
+    <dt>Used after restart</dt><dd>{{ names[saved] }}</dd>
+  </dl>
+  <form hx-post="/engine" hx-target="#engine-card" hx-swap="outerHTML" hx-trigger="change">
+    <label for="engine-pick" class="sr-only">Detection engine</label>
+    <select id="engine-pick" name="engine">
+      {% for e in engines %}<option value="{{ e }}"{% if e == saved %} selected{% endif %}>{{ names[e] }}</option>{% endfor %}
+    </select>
+  </form>
+  {% if error %}<p class="error">{{ error }}</p>
+  {% elif saved != running %}<p class="muted">Saved. Stop the dashboard and start it again to switch to {{ names[saved] }}.</p>
+  {% else %}<p class="muted">Pick the other engine to switch the next time the dashboard starts.</p>{% endif %}
+</section>

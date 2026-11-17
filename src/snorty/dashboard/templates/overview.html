@@ -5,6 +5,7 @@
 <header class="title"><h1>Overview</h1><p class="sub" id="finding">{{ finding }}</p></header>
 <div class="grid">
   {% include "_sensor_card.html" %}
+  <div hx-get="/engine" hx-trigger="load" hx-swap="outerHTML"></div>
   <section class="card">
     <h2>Alerts</h2>
     <div class="stats">

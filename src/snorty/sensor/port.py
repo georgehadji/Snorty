@@ -8,6 +8,7 @@ from snorty.snort.models import Interface, SnortPaths, StopResult
 from snorty.snort.runner import Runner, SubprocessRunner
 from snorty.snort.service import (
     LiveProcess,
+    enable_perfmon,
     is_snort_running,
     kill_snort,
     list_interfaces,
@@ -42,6 +43,7 @@ class SnortAdapter:
         return await list_interfaces(self._paths, self._runner)
 
     async def start(self, iface: Interface) -> RunningSnort:
+        await enable_perfmon(self._paths, iface, self._runner)  # best effort: drop statistics
         return await start_live(self._paths, iface)
 
     async def stop(self, proc: RunningSnort, timeout: float) -> StopResult:

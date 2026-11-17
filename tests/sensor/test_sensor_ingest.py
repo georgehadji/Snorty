@@ -415,11 +415,11 @@ async def test_a_damaged_checkpoint_falls_back_to_reading_the_whole_file(tmp_pat
 
 
 async def test_a_new_drop_figure_from_the_decoder_is_published_once(rig: Rig) -> None:
-    decoder = FastDecoder(UTC)
-    rig.sensor._decoder = decoder
+    figure: list[float | None] = [None]
+    rig.sensor._decoder = FastDecoder(UTC, lambda: figure[0])
     await rig.sensor.start()
     rig.drain()
-    decoder.drop_pct = 3.5
+    figure[0] = 3.5
     rig.append(line(7))
     await eventually(lambda: rig.sensor.status().drop_pct == 3.5)
     await asyncio.sleep(0.02)  # later polls with the same figure stay quiet

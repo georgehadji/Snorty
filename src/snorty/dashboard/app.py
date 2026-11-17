@@ -21,6 +21,7 @@ from snorty.core.triage import INBOX
 from snorty.dashboard import views
 from snorty.dashboard.capture_routes import add_capture_routes
 from snorty.dashboard.context_routes import add_context_routes
+from snorty.dashboard.engine_routes import add_engine_routes
 from snorty.dashboard.explain_routes import add_explain_routes
 from snorty.dashboard.journal_routes import add_journal_routes
 from snorty.dashboard.lab_routes import add_lab_routes
@@ -223,6 +224,7 @@ def build_app(
     add_context_routes(app, ui)
     add_respond_routes(app, ui)
     add_explain_routes(app, ui)
+    add_engine_routes(app, ui)
     add_rules_routes(app, ui)
     add_journal_routes(app, ui)
     add_lab_routes(app, ui)

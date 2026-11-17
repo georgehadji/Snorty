@@ -126,6 +126,7 @@ class Services:
     packets: PacketsPort
     respond: RespondPort | None = None
     explain: ExplainPort | None = None
+    engine: str = "snort"  # the engine this run was built with
 
     @property
     def pcap_dir(self) -> Path:

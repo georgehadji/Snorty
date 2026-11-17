@@ -9,9 +9,12 @@ from snorty.snort.models import (
     SnortPaths,
     StopResult,
 )
+from snorty.snort.perfmon import FILE as PERFMON_FILE
+from snorty.snort.perfmon import DropReader
 from snorty.snort.runner import Runner, SubprocessRunner
 from snorty.snort.service import (
     check_config,
+    enable_perfmon,
     is_snort_running,
     list_interfaces,
     run_pcap,
@@ -20,6 +23,8 @@ from snorty.snort.service import (
 )
 
 __all__ = [
+    "PERFMON_FILE",
+    "DropReader",
     "ConfigCheck",
     "Interface",
     "RunResult",
@@ -29,6 +34,7 @@ __all__ = [
     "StopResult",
     "SubprocessRunner",
     "check_config",
+    "enable_perfmon",
     "find_local_ip",
     "is_snort_running",
     "list_interfaces",

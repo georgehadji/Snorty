@@ -24,6 +24,8 @@ from snorty.snort.commands import (
 )
 from snorty.snort.interfaces import parse_interfaces
 from snorty.snort.models import ConfigCheck, Interface, SnortError, SnortPaths, StopResult
+from snorty.snort.perfmon import FILE as PERFMON_FILE
+from snorty.snort.perfmon import with_perfmon
 from snorty.snort.runner import Runner
 
 log = logging.getLogger("snorty.snort")
@@ -188,6 +190,32 @@ async def check_config(
     if not errors:
         errors = (f"snort exited with code {result.returncode} and no error text",)
     return ConfigCheck(False, rule_count, errors)
+
+
+async def enable_perfmon(paths: SnortPaths, iface: Interface, runner: Runner) -> Path | None:
+    """Make sure `snort.conf` has Snorty's perfmonitor line, so drop statistics exist. A changed
+    config is checked with `snort -T` and put back as it was if Snort refuses it. Returns the file
+    Snort will write, or None when the line could not be added (alerts still work)."""
+    csv = paths.log_dir / PERFMON_FILE
+    try:
+        original = await asyncio.to_thread(paths.conf.read_bytes)
+        text = original.decode("utf-8")
+        wanted = with_perfmon(text, csv)
+        if wanted != text:
+            await asyncio.to_thread(
+                paths.conf.with_suffix(".conf.snorty-perfmon.bak").write_bytes, original
+            )
+            await asyncio.to_thread(paths.conf.write_bytes, wanted.encode("utf-8"))
+            check = await check_config(paths, iface, runner)
+            if not check.ok:
+                await asyncio.to_thread(paths.conf.write_bytes, original)
+                log.warning("snort refused the perfmonitor line, config restored: %s", check.errors)
+                return None
+        await asyncio.to_thread(csv.unlink, missing_ok=True)  # the figures of an earlier run
+    except (OSError, UnicodeError):
+        log.warning("could not add the perfmonitor line to snort.conf", exc_info=True)
+        return None
+    return csv
 
 
 async def run_pcap(

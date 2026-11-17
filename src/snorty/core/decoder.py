@@ -7,7 +7,7 @@ of a clock change). Suricata's EVE JSON carries a full timestamp with its offset
 import json
 import logging
 from collections import OrderedDict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, tzinfo
 from typing import Any, Protocol
@@ -58,11 +58,16 @@ def _settle_fold(ts: datetime, last: float | None, second: bool) -> tuple[dateti
 class FastDecoder:
     """Snort's `alert_fast` lines."""
 
-    def __init__(self, tz: tzinfo) -> None:
+    def __init__(self, tz: tzinfo, drop_source: Callable[[], float | None] | None = None) -> None:
         self._tz = tz
+        self._drop_source = drop_source
         self._last: float | None = None  # newest alert time read so far, for _settle_fold
         self._second = False  # reading the repeated hour of a clock change a second time
-        self.drop_pct: float | None = None  # Snort's fast alerts carry no drop statistics
+
+    @property
+    def drop_pct(self) -> float | None:
+        """Snort's fast alerts carry no drop statistics; its perfmonitor file does, if read."""
+        return self._drop_source() if self._drop_source else None
 
     def reset(self) -> None:
         self._last, self._second = None, False

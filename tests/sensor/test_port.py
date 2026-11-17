@@ -46,12 +46,16 @@ async def test_start_and_stop_delegate(monkeypatch: pytest.MonkeyPatch) -> None:
         seen["stop"] = (proc, timeout)
         return StopResult("clean", 0)
 
+    async def no_perfmon(*_: Any) -> None:  # never edit the real snort.conf from a test
+        seen["perfmon"] = True
+
+    monkeypatch.setattr(port_module, "enable_perfmon", no_perfmon)
     monkeypatch.setattr(port_module, "start_live", fake_start)
     monkeypatch.setattr(port_module, "stop_live", fake_stop)
     paths = SnortPaths()
     adapter = SnortAdapter(paths, FakeRunner(""))
     assert await adapter.start(IFACE) is sentinel
-    assert seen["start"] == (paths, IFACE)
+    assert seen["start"] == (paths, IFACE) and seen["perfmon"]
     result = await adapter.stop(sentinel, 7.5)  # type: ignore[arg-type]
     assert result.how == "clean" and seen["stop"] == (sentinel, 7.5)
 
