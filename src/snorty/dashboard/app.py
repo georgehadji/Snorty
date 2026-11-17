@@ -24,6 +24,7 @@ from snorty.dashboard.context_routes import add_context_routes
 from snorty.dashboard.journal_routes import add_journal_routes
 from snorty.dashboard.lab_routes import add_lab_routes
 from snorty.dashboard.packets_routes import add_packets_routes
+from snorty.dashboard.respond_routes import add_respond_routes
 from snorty.dashboard.rules_routes import add_rules_routes
 from snorty.dashboard.security import SecurityMiddleware
 from snorty.dashboard.services import Svc
@@ -113,6 +114,7 @@ def build_app(
     app.mount("/static", StaticFiles(directory=_STATIC), name="static")
     templates = Jinja2Templates(directory=_HERE / "templates")
     templates.env.globals["token"] = token
+    templates.env.globals["respond"] = services.respond is not None
     # Versioned asset URLs let the browser cache them for good; a changed file gets a new URL.
     stamps = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()[:10] for p in _STATIC.iterdir()}
     templates.env.globals["asset"] = lambda name: f"/static/{name}?v={stamps.get(name, '0')}"
@@ -217,6 +219,7 @@ def build_app(
 
     add_triage_routes(app, ui)
     add_context_routes(app, ui)
+    add_respond_routes(app, ui)
     add_rules_routes(app, ui)
     add_journal_routes(app, ui)
     add_lab_routes(app, ui)

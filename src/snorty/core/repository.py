@@ -7,7 +7,7 @@ from datetime import UTC, datetime, tzinfo
 from pathlib import Path
 from typing import Any, Literal
 
-from snorty.core.models import Alert
+from snorty.core.models import Alert, Block
 from snorty.core.query import AlertQuery, utc_text
 from snorty.core.triage import STATES, ArchiveRule, TriageState, spec_from_json, spec_to_json
 
@@ -107,12 +107,22 @@ def _add_annotations(conn: sqlite3.Connection) -> None:
     )
 
 
+def _add_blocks(conn: sqlite3.Connection) -> None:
+    """Addresses blocked in the firewall, so every block can be listed and reversed."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS blocks ("
+        "ip TEXT PRIMARY KEY, created TEXT NOT NULL, until TEXT, alert_id INTEGER, "
+        "state TEXT NOT NULL)"
+    )
+
+
 # Append only: a database's `schema_version` is how many of these it has had.
 MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _rebuild_with_dup,
     _index_hosts,
     _add_triage,
     _add_annotations,
+    _add_blocks,
 ]
 
 
@@ -400,6 +410,44 @@ class AlertRepository:
                 "SELECT kind, value FROM annotations WHERE alert_id = ?", (alert_id,)
             ).fetchall()
         return {k: v for k, v in rows}
+
+    def put_block(self, block: Block) -> None:
+        """Record a block; blocking an address again replaces its earlier row."""
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO blocks (ip, created, until, alert_id, state) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT (ip) DO UPDATE SET created = excluded.created, "
+                "until = excluded.until, alert_id = excluded.alert_id, state = excluded.state",
+                (
+                    block.ip,
+                    utc_text(block.created),
+                    utc_text(block.until) if block.until else None,
+                    block.alert_id,
+                    block.state,
+                ),
+            )
+
+    def blocks(self, state: str | None = None) -> list[Block]:
+        sql = "SELECT ip, created, until, alert_id, state FROM blocks"
+        with self._lock:
+            rows = self._conn.execute(
+                sql + (" WHERE state = ?" if state else "") + " ORDER BY created DESC",
+                (state,) if state else (),
+            ).fetchall()
+        return [
+            Block(
+                r[0],
+                datetime.fromisoformat(r[1]),
+                datetime.fromisoformat(r[2]) if r[2] else None,
+                r[3],
+                r[4],
+            )
+            for r in rows
+        ]
+
+    def set_block_state(self, ip: str, state: str) -> None:
+        with self._lock:
+            self._conn.execute("UPDATE blocks SET state = ? WHERE ip = ?", (state, ip))
 
     def prune(self, before: datetime) -> int:
         """Delete alerts strictly older than `before`; returns the number deleted. Later reads of

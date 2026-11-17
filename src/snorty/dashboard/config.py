@@ -26,6 +26,7 @@ class DashConfig:
     vault: str | None = None
     wireshark_dir: str | None = None  # folder holding tshark.exe; default: found automatically
     notify: bool = True
+    respond: bool = True  # offer Block buttons that add Windows Firewall rules
     journal: bool = True
     autostart_sensor: bool = False
     engine: str = "snort"  # "snort" or "suricata"
@@ -55,7 +56,7 @@ def _check(key: str, value: object) -> object:
     if key == "port":
         if type(value) is not int or not 0 < value < 65536:
             raise ConfigError("port must be a whole number from 1 to 65535")
-    elif key in ("notify", "journal", "autostart_sensor"):
+    elif key in ("notify", "respond", "journal", "autostart_sensor"):
         if type(value) is not bool:
             raise ConfigError(f"{key} must be true or false")
     elif key == "retention_days":

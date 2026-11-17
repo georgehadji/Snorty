@@ -20,4 +20,5 @@
   {% endif %}
 </div>
 {% if not load_error %}<div class="gap-top">{% include "_muted_card.html" %}</div>{% endif %}
+{% if blocks is defined %}<div class="gap-top">{% set oob = false %}{% include "_blocks_card.html" %}</div>{% endif %}
 {% endblock %}

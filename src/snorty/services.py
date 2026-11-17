@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Protocol
 
 from snorty.core.bus import EventBus
-from snorty.core.models import Alert
+from snorty.core.models import Alert, Block
 from snorty.core.repository import AlertRepository
 from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabJob, LabResult
@@ -19,6 +19,7 @@ from snorty.packets import (
     RecordResult,
     SummaryResult,
 )
+from snorty.respond import Outcome
 from snorty.rules.blocks import MutedRule, Track
 from snorty.rules.service import EditReport, UpdateReport
 from snorty.rules.state import RulesState
@@ -96,6 +97,14 @@ class PacketsPort(Protocol):
     async def record(self, device: str, seconds: int, target: Path) -> RecordResult: ...
 
 
+class RespondPort(Protocol):
+    def blocks(self, state: str | None = None) -> list[Block]: ...
+
+    async def block(self, ip: str, hours: float | None, alert_id: int | None = None) -> Outcome: ...
+
+    async def unblock(self, ip: str) -> Outcome: ...
+
+
 @dataclass(frozen=True, slots=True)
 class Services:
     sensor: SensorPort
@@ -108,6 +117,7 @@ class Services:
     tz: tzinfo
     data_dir: Path
     packets: PacketsPort
+    respond: RespondPort | None = None
 
     @property
     def pcap_dir(self) -> Path:

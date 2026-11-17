@@ -124,6 +124,7 @@ async def run(
         cfg.data_dir,
         interface_ip=cfg.interface_ip,
         notify=cfg.notify,
+        respond=cfg.respond,
         notifier=channel_notifier(cfg.channels) if cfg.channels else None,
         journal_store=note_store(cfg),
         wireshark_dir=Path(cfg.wireshark_dir) if cfg.wireshark_dir else None,

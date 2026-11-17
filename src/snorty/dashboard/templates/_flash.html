@@ -1,4 +1,5 @@
 <div id="flash" class="flash {{ 'ok' if msg.ok else 'bad' }}" role="status" aria-live="polite">{{ msg.text }}</div>
+{% if blocks is defined %}{% include "_blocks_card.html" %}{% endif %}
 {% if muted is defined %}{% include "_muted_card.html" %}{% endif %}
 {% if home is defined %}{% include "_home_net.html" %}{% endif %}
 {% if journal is defined %}{% include "_journal_card.html" %}{% endif %}

@@ -25,6 +25,17 @@ class Alert:
 
 
 @dataclass(frozen=True, slots=True)
+class Block:
+    """An address Snorty asked the firewall to block. `until` None means until unblocked."""
+
+    ip: str
+    created: datetime
+    until: datetime | None
+    alert_id: int | None
+    state: Literal["active", "released", "expired"]
+
+
+@dataclass(frozen=True, slots=True)
 class Suppression:
     gid: int
     sid: int

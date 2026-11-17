@@ -23,6 +23,7 @@ from snorty.lab.service import LabService
 from snorty.notify.ports import Notifier, WinotifyNotifier
 from snorty.notify.service import NotifyService
 from snorty.packets import NoDecoder, PacketService
+from snorty.respond import BlockService
 from snorty.rules.config import SURICATA_ET_URL, RulesConfig
 from snorty.rules.ports import SnortValidator, SuricataValidator, UrllibDownloader, Validator
 from snorty.rules.service import RulesService
@@ -34,6 +35,7 @@ from snorty.snort import Interface, SnortPaths, SubprocessRunner
 from snorty.snort.interfaces import find_local_ip
 from snorty.suricata import SuricataPaths
 from snorty.triage import TriageService
+from snorty.winfw import PowerShellFirewall
 from snorty.winnet import WinConnectionLookup
 from snorty.wireshark import DumpcapRecorder, TsharkDecoder, WiresharkViewer, find_tools
 
@@ -50,6 +52,7 @@ class Runtime:
     triage: TriageService | None = None
     attribution: AttributionService | None = None
     enrich: EnrichService | None = None
+    respond: BlockService | None = None
 
     async def start(self, *, sensor: bool = False) -> None:
         try:
@@ -63,6 +66,8 @@ class Runtime:
                 await self.attribution.start()
             if self.enrich:
                 await self.enrich.start()
+            if self.respond:
+                await self.respond.start()
             if sensor:
                 await self.services.sensor.start()
         except BaseException:  # leave nothing half started
@@ -74,7 +79,11 @@ class Runtime:
         to stop does not keep the others running."""
         stops = [
             self.services.sensor.stop,
-            *(p.stop for p in (self.enrich, self.attribution, self.triage, self.journal) if p),
+            *(
+                p.stop
+                for p in (self.respond, self.enrich, self.attribution, self.triage, self.journal)
+                if p
+            ),
             *([self.notify.stop] if self.notify else []),
         ]
         first: BaseException | None = None
@@ -101,6 +110,7 @@ def compose(
     host_context: bool = False,
     engine: Literal["snort", "suricata"] = "snort",
     suricata_install: Path | None = None,
+    respond: bool = False,
 ) -> Runtime:
     """Wire every module together. The journal runs only when a note store is given. With
     `host_context` the PC's connection table and public data downloads are used for alerts
@@ -170,11 +180,16 @@ def compose(
         snort_logs=sensor_paths.log_dir,
         scratch=data_dir / "opened",
     )
-    services = Services(sensor, rules, journal, toasts, lab, repo, bus, tz, data_dir, packets)
+    blocker = BlockService(repo, PowerShellFirewall(runner)) if respond else None
+    services = Services(
+        sensor, rules, journal, toasts, lab, repo, bus, tz, data_dir, packets, respond=blocker
+    )
     attribution = enrich = None
     if host_context:
         attribution = AttributionService(bus, repo, WinConnectionLookup(), find_local_ip)
         enrich = EnrichService(
             bus, repo, data_dir / "enrich", fetch=urllib_fetch, rdns=ReverseDns()
         )
-    return Runtime(services, toasts, journal, TriageService(bus, repo), attribution, enrich)
+    return Runtime(
+        services, toasts, journal, TriageService(bus, repo), attribution, enrich, blocker
+    )
