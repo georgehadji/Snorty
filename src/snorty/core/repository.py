@@ -167,6 +167,15 @@ def _add_seen(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS seen_first ON seen (first_ts)")
 
 
+def _add_explanation_style(conn: sqlite3.Connection) -> None:
+    """What each kept explanation was asked for (language/audience), so changing either makes
+    the next one again. Rows kept before it were English for a home user."""
+    if "style" not in {r[1] for r in conn.execute("PRAGMA table_info(explanations)")}:
+        conn.execute(
+            "ALTER TABLE explanations ADD COLUMN style TEXT NOT NULL DEFAULT 'English/home'"
+        )
+
+
 SEEN_MAX = 253  # the longest DNS name
 type SeenKind = Literal["dns", "country"]
 
@@ -190,6 +199,7 @@ MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _add_flows,
     _add_flow_id,
     _add_seen,
+    _add_explanation_style,
 ]
 
 
@@ -516,20 +526,24 @@ class AlertRepository:
                 ),
             )
 
-    def explanation(self, sid: int, rev: int) -> tuple[str, str] | None:
-        """(model, text) kept for this rule version, or None."""
+    def explanation(self, sid: int, rev: int, *, style: str) -> tuple[str, str] | None:
+        """(model, text) kept for this rule version in this style, or None."""
         with self._lock:
             row = self._conn.execute(
-                "SELECT model, text FROM explanations WHERE sid = ? AND rev = ?", (sid, rev)
+                "SELECT model, text FROM explanations WHERE sid = ? AND rev = ? AND style = ?",
+                (sid, rev, style),
             ).fetchone()
         return (row[0], row[1]) if row else None
 
-    def put_explanation(self, sid: int, rev: int, model: str, text: str, created: datetime) -> None:
+    def put_explanation(
+        self, sid: int, rev: int, model: str, text: str, created: datetime, *, style: str
+    ) -> None:
+        """Keep one explanation per rule version; a new style replaces the old one."""
         with self._lock:
             self._conn.execute(
-                "INSERT OR REPLACE INTO explanations (sid, rev, model, text, created) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (sid, rev, model, text, utc_text(created)),
+                "INSERT OR REPLACE INTO explanations (sid, rev, model, text, created, style) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (sid, rev, model, text, utc_text(created), style),
             )
 
     def add_flow_facts(self, facts: Iterable[FlowFact]) -> None:

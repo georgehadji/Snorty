@@ -11,6 +11,7 @@ class ExplainError(Exception):
 
 class Explainer(Protocol):
     model: str  # which model answered, shown next to the text
+    style: str  # "language/audience" asked for; an answer kept in another style is made again
 
     async def explain(self, rule_text: str, alert: Alert) -> str:
         """Plain-English reading of the rule that fired. It receives the whole alert but must

@@ -58,6 +58,7 @@ class Runtime:
     attribution: AttributionService | None = None
     enrich: EnrichService | None = None
     respond: BlockService | None = None
+    explain: ExplainService | None = None
 
     async def start(self, *, sensor: bool = False) -> None:
         try:
@@ -73,6 +74,8 @@ class Runtime:
                 await self.enrich.start()
             if self.respond:
                 await self.respond.start()
+            if self.explain:
+                await self.explain.start()
             if sensor:
                 await self.services.sensor.start()
         except BaseException:  # leave nothing half started
@@ -86,7 +89,14 @@ class Runtime:
             self.services.sensor.stop,
             *(
                 p.stop
-                for p in (self.respond, self.enrich, self.attribution, self.triage, self.journal)
+                for p in (
+                    self.explain,
+                    self.respond,
+                    self.enrich,
+                    self.attribution,
+                    self.triage,
+                    self.journal,
+                )
                 if p
             ),
             *([self.notify.stop] if self.notify else []),
@@ -126,6 +136,9 @@ def compose(
     suricata_install: Path | None = None,
     respond: bool = False,
     explain_model: str = "",
+    explain_language: str = "English",
+    explain_audience: str = "home",
+    explain_prewarm: bool = False,
 ) -> Runtime:
     """Wire every module together. The journal runs only when a note store is given. With
     `host_context` the PC's connection table and public data downloads are used for alerts
@@ -200,8 +213,9 @@ def compose(
     explainer = (
         ExplainService(
             repo,
-            OllamaExplainer(explain_model),
+            OllamaExplainer(explain_model, language=explain_language, audience=explain_audience),
             lambda sid: find_rule(rules_config.rules_dir, sid),
+            bus=bus if explain_prewarm else None,
         )
         if explain_model
         else None
@@ -231,5 +245,5 @@ def compose(
             bus, repo, data_dir / "enrich", fetch=urllib_fetch, rdns=ReverseDns()
         )
     return Runtime(
-        services, toasts, journal, TriageService(bus, repo), attribution, enrich, blocker
+        services, toasts, journal, TriageService(bus, repo), attribution, enrich, blocker, explainer
     )

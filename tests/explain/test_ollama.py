@@ -79,6 +79,24 @@ def test_the_prompt_has_the_rule_but_no_addresses() -> None:
     assert a.src_ip not in prompt and a.dst_ip not in prompt
 
 
+def test_the_prompt_asks_for_the_language_and_reader() -> None:
+    prompt = build_prompt("rule", make_alert(), language="Greek", audience="analyst")
+    assert "Write the answer in Greek." in prompt and "a security analyst" in prompt
+    assert "home computer user" in build_prompt("rule", make_alert())
+
+
+async def test_the_style_reaches_the_model_and_names_the_cache() -> None:
+    fake = FakeOllama()
+    ex = OllamaExplainer("qwen3:8b", language="Greek", audience="office", transport=fake)
+    assert ex.style == "Greek/office"
+    assert OllamaExplainer("qwen3:8b").style == "English/home"  # what older answers were
+    await ex.explain("rule", make_alert())
+    prompt = fake.calls[-1][1]["prompt"]  # type: ignore[index]
+    assert "in Greek" in prompt and "small office" in prompt
+    with pytest.raises(ValueError, match="audience"):
+        OllamaExplainer("qwen3:8b", audience="boss")
+
+
 def test_a_long_rule_is_cut_and_the_reply_is_cleaned_and_capped() -> None:
     assert "x" * 5000 not in build_prompt("x" * 5000, make_alert())
     assert clean("<think>secret plan</think>Answer.") == "Answer."

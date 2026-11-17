@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from snorty.explain.ollama import AUDIENCES
 from snorty.notify.ports import valid_channel_url
 from snorty.suricata import SuricataPaths
 
@@ -16,6 +17,7 @@ _TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 ENGINES = ("snort", "suricata")
 _ENGINE_LINE = re.compile(r"^engine[ 	]*=.*$", re.M)
 _FIRST_TABLE = re.compile(r"^\[", re.M)
+_LANGUAGE = re.compile(r"[^\W\d_]+(?:[ -][^\W\d_]+){0,3}")  # letters in any script, up to 4 words
 
 
 class ConfigError(ValueError):
@@ -32,6 +34,9 @@ class DashConfig:
     notify: bool = True
     respond: bool = True  # offer Block buttons that add Windows Firewall rules
     explain_model: str = ""  # an Ollama model that runs on this PC; empty switches explaining off
+    explain_language: str = "English"  # the language explanations are written in
+    explain_audience: str = "home"  # who reads them: "home", "office" or "analyst"
+    explain_prewarm: bool = True  # explain each rule the first time it fires, in the background
     journal: bool = True
     autostart_sensor: bool = False
     engine: str = "snort"  # "snort" or "suricata"; load_config picks Suricata when it is installed
@@ -67,7 +72,7 @@ def _check(key: str, value: object) -> object:
     if key == "port":
         if type(value) is not int or not 0 < value < 65536:
             raise ConfigError("port must be a whole number from 1 to 65535")
-    elif key in ("notify", "respond", "journal", "autostart_sensor"):
+    elif key in ("notify", "respond", "journal", "autostart_sensor", "explain_prewarm"):
         if type(value) is not bool:
             raise ConfigError(f"{key} must be true or false")
     elif key == "retention_days":
@@ -78,6 +83,12 @@ def _check(key: str, value: object) -> object:
             raise ConfigError('engine must be "snort" or "suricata"')
     elif key == "channels":
         value = _check_channels(value)
+    elif key == "explain_language":  # goes into the prompt, so one short name only
+        if not isinstance(value, str) or not _LANGUAGE.fullmatch(value):
+            raise ConfigError('explain_language must be a language name, such as "Greek"')
+    elif key == "explain_audience":
+        if value not in AUDIENCES:
+            raise ConfigError('explain_audience must be "home", "office" or "analyst"')
     elif key in ("interface_ip", "vault", "wireshark_dir", "explain_model"):
         if not isinstance(value, str):
             raise ConfigError(f"{key} must be text")
