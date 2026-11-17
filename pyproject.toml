@@ -3,6 +3,9 @@ name = "snorty"
 version = "0.1.0"
 description = "Local dashboard and tooling around a Snort 2.9 install"
 requires-python = ">=3.12"
+license = "LicenseRef-Proprietary"
+license-files = ["LICENSE"]
+classifiers = ["Private :: Do Not Upload"]  # PyPI refuses packages with this classifier
 dependencies = [
     "fastapi>=0.163.1",
     "jinja2>=3.1.6",

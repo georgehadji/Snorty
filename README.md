@@ -174,4 +174,7 @@ Code style: Python 3.12, line length 100, `ruff format`, strict `mypy`. Tests li
 
 ## License
 
-No license has been chosen yet. Until one is added, all rights are reserved.
+Proprietary, all rights reserved; see [LICENSE](LICENSE). The code being visible here grants no
+right to use, copy or share it without written permission. Third-party components (htmx, the
+Python dependencies, the engines and tools Snorty drives, and the data it downloads) keep their
+own licences, listed in the same file.
