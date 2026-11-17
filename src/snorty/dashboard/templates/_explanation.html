@@ -1,0 +1,8 @@
+<div class="explanation">
+{% if error %}
+  <p class="error">{{ error }}</p>
+{% else %}
+  <p class="prose">{{ result.text }}</p>
+  <p class="muted">Suggested reading, generated locally by {{ result.model }}{% if result.cached %} (saved from earlier){% endif %}. It can be wrong; check the rule.</p>
+{% endif %}
+</div>

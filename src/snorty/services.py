@@ -8,6 +8,7 @@ from typing import Protocol
 from snorty.core.bus import EventBus
 from snorty.core.models import Alert, Block
 from snorty.core.repository import AlertRepository
+from snorty.explain import Explanation
 from snorty.journal.service import JournalStatus
 from snorty.lab.models import LabJob, LabResult
 from snorty.notify.service import NotifyStatus
@@ -105,6 +106,12 @@ class RespondPort(Protocol):
     async def unblock(self, ip: str) -> Outcome: ...
 
 
+class ExplainPort(Protocol):
+    async def explain(self, alert_id: int) -> Explanation:
+        """Raises ExplainError, with a message for the user, when it cannot."""
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class Services:
     sensor: SensorPort
@@ -118,6 +125,7 @@ class Services:
     data_dir: Path
     packets: PacketsPort
     respond: RespondPort | None = None
+    explain: ExplainPort | None = None
 
     @property
     def pcap_dir(self) -> Path:

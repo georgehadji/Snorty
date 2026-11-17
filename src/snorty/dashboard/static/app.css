@@ -344,3 +344,5 @@ textarea { width: 100%; resize: vertical; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+.explanation .prose { white-space: pre-wrap; max-width: 70ch; }

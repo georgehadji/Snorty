@@ -27,6 +27,7 @@ class DashConfig:
     wireshark_dir: str | None = None  # folder holding tshark.exe; default: found automatically
     notify: bool = True
     respond: bool = True  # offer Block buttons that add Windows Firewall rules
+    explain_model: str = ""  # an Ollama model that runs on this PC; empty switches explaining off
     journal: bool = True
     autostart_sensor: bool = False
     engine: str = "snort"  # "snort" or "suricata"
@@ -67,7 +68,7 @@ def _check(key: str, value: object) -> object:
             raise ConfigError('engine must be "snort" or "suricata"')
     elif key == "channels":
         value = _check_channels(value)
-    elif key in ("interface_ip", "vault", "wireshark_dir"):
+    elif key in ("interface_ip", "vault", "wireshark_dir", "explain_model"):
         if not isinstance(value, str):
             raise ConfigError(f"{key} must be text")
     elif key == "rules_update_at":

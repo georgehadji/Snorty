@@ -116,6 +116,15 @@ def _add_blocks(conn: sqlite3.Connection) -> None:
     )
 
 
+def _add_explanations(conn: sqlite3.Connection) -> None:
+    """A model's reading of a rule, kept per rule version so it is made once."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS explanations ("
+        "sid INTEGER NOT NULL, rev INTEGER NOT NULL, model TEXT NOT NULL, "
+        "text TEXT NOT NULL, created TEXT NOT NULL, PRIMARY KEY (sid, rev))"
+    )
+
+
 # Append only: a database's `schema_version` is how many of these it has had.
 MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _rebuild_with_dup,
@@ -123,6 +132,7 @@ MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _add_triage,
     _add_annotations,
     _add_blocks,
+    _add_explanations,
 ]
 
 
@@ -425,6 +435,22 @@ class AlertRepository:
                     block.alert_id,
                     block.state,
                 ),
+            )
+
+    def explanation(self, sid: int, rev: int) -> tuple[str, str] | None:
+        """(model, text) kept for this rule version, or None."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT model, text FROM explanations WHERE sid = ? AND rev = ?", (sid, rev)
+            ).fetchone()
+        return (row[0], row[1]) if row else None
+
+    def put_explanation(self, sid: int, rev: int, model: str, text: str, created: datetime) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO explanations (sid, rev, model, text, created) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (sid, rev, model, text, utc_text(created)),
             )
 
     def blocks(self, state: str | None = None) -> list[Block]:

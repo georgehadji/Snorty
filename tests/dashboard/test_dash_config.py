@@ -94,3 +94,12 @@ def test_bad_channels_are_refused(tmp_path: Path, bad: str) -> None:
     (tmp_path / "snorty.toml").write_text(bad + "\n")
     with pytest.raises(ConfigError, match="channel"):
         load_config(tmp_path)
+
+
+def test_explain_model_is_text_and_off_by_default(tmp_path: Path) -> None:
+    assert load_config(tmp_path).explain_model == ""
+    (tmp_path / "snorty.toml").write_text('explain_model = "qwen3:8b"\n')
+    assert load_config(tmp_path).explain_model == "qwen3:8b"
+    (tmp_path / "snorty.toml").write_text("explain_model = 5\n")
+    with pytest.raises(ConfigError, match="explain_model"):
+        load_config(tmp_path)

@@ -16,6 +16,7 @@ from snorty.core.decoder import AlertDecoder, EveDecoder
 from snorty.core.localtz import LocalTimezone
 from snorty.core.repository import AlertRepository
 from snorty.enrich import EnrichService, ReverseDns, urllib_fetch
+from snorty.explain import ExplainService, OllamaExplainer
 from snorty.journal.ports import NoteStore
 from snorty.journal.service import JournalConfig, JournalService
 from snorty.lab.engines import LabEngine, SuricataLabEngine
@@ -25,6 +26,7 @@ from snorty.notify.service import NotifyService
 from snorty.packets import NoDecoder, PacketService
 from snorty.respond import BlockService
 from snorty.rules.config import SURICATA_ET_URL, RulesConfig
+from snorty.rules.find import find_rule
 from snorty.rules.ports import SnortValidator, SuricataValidator, UrllibDownloader, Validator
 from snorty.rules.service import RulesService
 from snorty.rules.suricata_home import prepare_suricata_home
@@ -111,6 +113,7 @@ def compose(
     engine: Literal["snort", "suricata"] = "snort",
     suricata_install: Path | None = None,
     respond: bool = False,
+    explain_model: str = "",
 ) -> Runtime:
     """Wire every module together. The journal runs only when a note store is given. With
     `host_context` the PC's connection table and public data downloads are used for alerts
@@ -181,8 +184,28 @@ def compose(
         scratch=data_dir / "opened",
     )
     blocker = BlockService(repo, PowerShellFirewall(runner)) if respond else None
+    explainer = (
+        ExplainService(
+            repo,
+            OllamaExplainer(explain_model),
+            lambda sid: find_rule(rules_config.rules_dir, sid),
+        )
+        if explain_model
+        else None
+    )
     services = Services(
-        sensor, rules, journal, toasts, lab, repo, bus, tz, data_dir, packets, respond=blocker
+        sensor,
+        rules,
+        journal,
+        toasts,
+        lab,
+        repo,
+        bus,
+        tz,
+        data_dir,
+        packets,
+        respond=blocker,
+        explain=explainer,
     )
     attribution = enrich = None
     if host_context:

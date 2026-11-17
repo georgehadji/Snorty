@@ -66,7 +66,7 @@ source_modules = ["snorty.core"]
 forbidden_modules = [
     "snorty.snort", "snorty.suricata", "snorty.sensor", "snorty.rules", "snorty.notify",
     "snorty.journal", "snorty.lab", "snorty.triage", "snorty.attribution", "snorty.enrich",
-    "snorty.winnet", "snorty.winfw", "snorty.respond",
+    "snorty.winnet", "snorty.winfw", "snorty.respond", "snorty.explain",
     "snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless",
 ]
 
@@ -76,7 +76,7 @@ type = "forbidden"
 source_modules = [
     "snorty.core", "snorty.sensor", "snorty.rules", "snorty.notify", "snorty.journal",
     "snorty.lab", "snorty.packets", "snorty.triage", "snorty.attribution", "snorty.enrich",
-    "snorty.respond",
+    "snorty.respond", "snorty.explain",
     "snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless",
 ]
 forbidden_modules = ["subprocess"]
@@ -89,6 +89,7 @@ source_modules = [
     "snorty.snort", "snorty.suricata", "snorty.sensor", "snorty.rules", "snorty.notify",
     "snorty.journal", "snorty.lab", "snorty.packets", "snorty.triage", "snorty.attribution",
     "snorty.enrich", "snorty.winnet", "snorty.wireshark", "snorty.winfw", "snorty.respond",
+    "snorty.explain",
 ]
 forbidden_modules = ["snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless"]
 # the sensor's `-m` shim hands off to the headless runner; it is an entry point, not a dependency
@@ -106,5 +107,6 @@ type = "independence"
 modules = [
     "snorty.sensor", "snorty.notify", "snorty.journal", "snorty.lab", "snorty.packets",
     "snorty.triage", "snorty.attribution", "snorty.enrich", "snorty.respond",
+    "snorty.explain",
 ]
 ignore_imports = ["snorty.sensor.__main__ -> snorty.headless"]
