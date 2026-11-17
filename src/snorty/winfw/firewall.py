@@ -35,6 +35,8 @@ def elevated(script: str) -> str:
 def _clean(ip: str) -> str:
     """The address in canonical form. Anything else never reaches the PowerShell command line."""
     try:
+        if "%" in ip:  # an IPv6 scope id would carry free text into the elevated script
+            raise ValueError(ip)
         return str(ipaddress.ip_address(ip))
     except ValueError as exc:
         raise FirewallError(f"not an IP address: {ip[:45]!r}") from exc

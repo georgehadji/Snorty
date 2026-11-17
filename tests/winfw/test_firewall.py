@@ -116,3 +116,13 @@ async def test_blocked_and_protected_keep_single_addresses_only() -> None:
     fw = PowerShellFirewall(FakeRunner(RunResult(0, out, "")))
     assert await fw.blocked() == ["8.8.4.4", "8.8.8.4"]
     assert await fw.protected() == frozenset({"8.8.4.4", "8.8.8.4"})
+
+
+def test_a_scope_id_is_rejected_before_any_script_is_built() -> None:
+    from snorty.winfw.firewall import block_script, unblock_script
+
+    for bad in ("2606:4700::1%x';Start-Process calc;'", "fe80::1%eth0"):
+        with pytest.raises(FirewallError):
+            block_script(bad)
+        with pytest.raises(FirewallError):
+            unblock_script(bad)

@@ -10,6 +10,8 @@ def refusal(ip: str, protected: Collection[str]) -> str | None:
     Only public addresses can be blocked. That covers loopback, the home network, link-local and
     multicast ranges at once; `protected` adds the gateways and DNS servers, which can be public."""
     try:
+        if "%" in ip:  # scope ids are not addresses we block
+            raise ValueError(ip)
         addr = ipaddress.ip_address(ip)
     except ValueError:
         return "not an IP address"

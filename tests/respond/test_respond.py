@@ -167,3 +167,54 @@ async def test_reconcile_adopts_stray_rules_and_releases_lost_ones(rig: Rig) -> 
     assert {b.ip for b in rig.svc.blocks("active")} == {"8.8.8.4"}
     assert next(b for b in rig.svc.blocks() if b.ip == GLOBAL).state == "released"
     assert next(b for b in rig.svc.blocks() if b.ip == "8.8.8.4").until is None
+
+
+async def test_a_scope_id_never_reaches_the_firewall(rig: Rig) -> None:
+    for bad in ("2606:4700::1%x';calc;'", "2606:4700::1%eth0"):
+        assert refusal(bad, frozenset()) is not None
+        out = await rig.svc.block(bad, 1)
+        assert not out.ok and rig.fw.rules == set()
+
+
+async def test_a_failed_block_cleans_up_a_half_made_rule(rig: Rig) -> None:
+    class Half(FakeFirewall):
+        async def block(self, ip: str) -> None:
+            self.rules.add(ip)
+            raise FirewallError("second rule failed")
+
+    rig.svc = BlockService(rig.repo, fw := Half(), now=rig.clock)
+    assert not (await rig.svc.block(GLOBAL, 1)).ok
+    assert fw.rules == set()
+
+
+async def test_only_one_change_waits_for_approval_at_a_time(rig: Rig) -> None:
+    import asyncio
+
+    gate = asyncio.Event()
+    inner = rig.fw.block
+
+    async def slow(ip: str) -> None:
+        await gate.wait()
+        await inner(ip)
+
+    rig.fw.block = slow  # type: ignore[method-assign]
+    first = asyncio.create_task(rig.svc.block(GLOBAL, 1))
+    await asyncio.sleep(0.01)
+    second = await rig.svc.block("8.8.8.8", 1)
+    assert not second.ok and "waiting for your approval" in second.detail
+    gate.set()
+    assert (await first).ok
+
+
+async def test_declined_sweeps_back_off_longer_each_time(rig: Rig) -> None:
+    await rig.svc.block(GLOBAL, 1)
+    rig.clock.now += timedelta(hours=2)
+    rig.fw.error = NeedsAdmin("declined")
+    await rig.svc.sweep()
+    first = rig.svc._retry_at
+    assert first is not None
+    rig.clock.now = first
+    await rig.svc.sweep()
+    assert rig.svc._retry_at is not None and rig.svc._retry_at - rig.clock.now == 2 * (
+        first - T0 - timedelta(hours=2)
+    )

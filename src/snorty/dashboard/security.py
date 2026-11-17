@@ -72,6 +72,8 @@ def valid_priority(text: str) -> int:
 
 def valid_ip(text: str) -> str:
     try:
+        if "%" in text:
+            raise ValueError(text)
         return str(ipaddress.ip_address(text))
     except ValueError:
         raise ValueError("address must be a single IP address") from None

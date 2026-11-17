@@ -4,6 +4,7 @@ Manual only: nothing here blocks on its own. Every block is a row in the `blocks
 can be listed, expires on schedule and can be reversed."""
 
 import asyncio
+import contextlib
 import ipaddress
 import logging
 from collections.abc import Callable
@@ -43,6 +44,8 @@ class BlockService:
         self._every = sweep_every
         self._task: asyncio.Task[None] | None = None
         self._retry_at: datetime | None = None
+        self._declines = 0
+        self._busy = asyncio.Lock()
 
     async def start(self) -> None:
         if self._task is None:
@@ -67,26 +70,36 @@ class BlockService:
         """Block `ip` for `hours` (None: until unblocked)."""
         if hours is not None and not 0 < hours <= MAX_HOURS:
             return Outcome(False, f"hours must be from 1 to {MAX_HOURS}")
-        try:
-            ip = str(ipaddress.ip_address(ip))
-            reason = refusal(ip, await self._fw.protected())
-            if reason:
-                return Outcome(False, f"{ip} not blocked: {reason}")
-            await self._fw.block(ip)
-        except ValueError:
-            return Outcome(False, "not an IP address")
-        except FirewallError as exc:
-            return Outcome(False, f"{ip} not blocked: {exc}")
+        if self._busy.locked():
+            return Outcome(False, "another change is waiting for your approval")
+        async with self._busy:
+            try:
+                if "%" in ip:
+                    raise ValueError(ip)
+                ip = str(ipaddress.ip_address(ip))
+                reason = refusal(ip, await self._fw.protected())
+                if reason:
+                    return Outcome(False, f"{ip} not blocked: {reason}")
+                await self._fw.block(ip)
+            except ValueError:
+                return Outcome(False, "not an IP address")
+            except FirewallError as exc:
+                with contextlib.suppress(FirewallError):  # a half-made pair of rules must not stay
+                    await self._fw.unblock(ip)
+                return Outcome(False, f"{ip} not blocked: {exc}")
         now = self._now()
         until = now + timedelta(hours=hours) if hours else None
         await asyncio.to_thread(self._repo.put_block, Block(ip, now, until, alert_id, "active"))
         return Outcome(True, f"{ip} blocked" + (f" for {hours:g} h" if hours else ""))
 
     async def unblock(self, ip: str) -> Outcome:
-        try:
-            await self._fw.unblock(ip)
-        except FirewallError as exc:
-            return Outcome(False, f"{ip} not unblocked: {exc}")
+        if self._busy.locked():
+            return Outcome(False, "another change is waiting for your approval")
+        async with self._busy:
+            try:
+                await self._fw.unblock(ip)
+            except FirewallError as exc:
+                return Outcome(False, f"{ip} not unblocked: {exc}")
         await asyncio.to_thread(self._repo.set_block_state, ip, "released")
         return Outcome(True, f"{ip} unblocked")
 
@@ -94,7 +107,7 @@ class BlockService:
         """Remove blocks whose time is up, in one go; returns how many. Removing needs the
         user's approval, so a refusal is not retried until `RETRY_AFTER` has passed."""
         now = self._now()
-        if self._retry_at and now < self._retry_at:
+        if (self._retry_at and now < self._retry_at) or self._busy.locked():
             return 0
         due = [
             b.ip
@@ -103,12 +116,17 @@ class BlockService:
         ]
         if not due:
             return 0
-        try:
-            await self._fw.unblock(*due)
-        except FirewallError:
-            log.warning("could not remove %d expired block(s); will ask again later", len(due))
-            self._retry_at = now + RETRY_AFTER
-            return 0
+        async with self._busy:
+            try:
+                await self._fw.unblock(*due)
+            except FirewallError:
+                log.warning("could not remove %d expired block(s); will ask again later", len(due))
+                self._declines += 1  # 30 min, 1 h, 2 h ... at most a day
+                self._retry_at = now + min(
+                    RETRY_AFTER * 2 ** (self._declines - 1), timedelta(days=1)
+                )
+                return 0
+        self._declines = 0
         for ip in due:
             await asyncio.to_thread(self._repo.set_block_state, ip, "expired")
         return len(due)
