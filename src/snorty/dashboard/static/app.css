@@ -109,6 +109,8 @@ nav a[aria-current="page"] { color: var(--text); border-bottom: 2px solid var(--
 .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 
 main { max-width: 1280px; margin: 0 auto; padding: var(--s4); }
+.credits { max-width: 1280px; margin: 0 auto; padding: 0 var(--s4) var(--s4); font-size: 13px; }
+.credits a { color: inherit; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--s4); }
 .card {
   background: var(--surface);

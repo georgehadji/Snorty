@@ -40,6 +40,9 @@ def test_overview_has_nav_sensor_card_and_the_token(tmp_path: Path) -> None:
     assert r.status_code == 200
     for link in ("/alerts", "/rules", "/journal", "/lab"):
         assert f'href="{link}"' in r.text
+    # the address data's licences ask for credit wherever it is shown
+    assert 'href="https://db-ip.com"' in r.text and "IP Geolocation by DB-IP" in r.text
+    assert "The Spamhaus Project" in r.text
     assert 'id="sensor-card"' in r.text and "Stopped" in r.text
     assert TOKEN in r.text and "X-Snorty-Token" in r.text
     assert 'name="htmx-config"' in r.text and "<script>" not in r.text
@@ -231,8 +234,9 @@ def test_static_files_are_served_locally(tmp_path: Path) -> None:
     assert c.get("/static/app.css").status_code == 200
     assert c.get("/static/../app.py").status_code in (400, 404)
     html = c.get("/").text
-    assert "http://" not in html.replace(f"http://127.0.0.1:{PORT}", "")
-    assert "https://" not in html
+    # nothing is loaded from elsewhere; plain links out (the data credits) are fine
+    loaded = re.findall(r"<(?:script|link|img|iframe|source|video|audio)\b[^>]*>", html)
+    assert loaded and not any("http://" in t or "https://" in t or "//" in t for t in loaded)
 
 
 def test_every_page_header_shows_the_sensor_state(tmp_path: Path) -> None:
