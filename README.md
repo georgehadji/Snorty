@@ -41,6 +41,14 @@ uv run python -m snorty.dashboard --start-sensor
 
 Open <http://127.0.0.1:8765/>. Without `--start-sensor` the dashboard starts with the sensor stopped, and you can start it from the Overview page.
 
+To stop it, press Ctrl+C in its window, or, when it runs without one (at logon, or hidden), run:
+
+```bash
+uv run python -m snorty.dashboard --stop
+```
+
+This stops the sensor, closes the alert database and waits until the dashboard has finished. Do not end Snorty with Task Manager or `Stop-Process`: a hard stop can leave the database damaged.
+
 Data lives in `%LOCALAPPDATA%\Snorty`: the alert database `snorty.db`, the log `snorty.log`, uploaded pcaps and the optional `snorty.toml`. Use `--data-dir` to put it elsewhere.
 
 ## Configuration
@@ -74,7 +82,7 @@ explain_prewarm = true            # explain each rule in the background the firs
 
 **Dropped packets.** With Suricata the engine reports its own drop figure. With Snort, starting the sensor adds one marked `preprocessor perfmonitor` line to `C:\Snort\etc\snort.conf` (checked with `snort -T` first and put back if Snort refuses it; delete the line and the comment above it to turn it off). Snort writes the figure to `perfmon.csv` in its log folder about once a minute, and the Overview shows it once the first rows are flushed.
 
-Dashboard flags: `--port`, `--start-sensor`, `--no-notify`, `--no-journal`, `--vault`, `--interface-ip`, `--engine`, `--data-dir`.
+Dashboard flags: `--port`, `--start-sensor`, `--no-notify`, `--no-journal`, `--vault`, `--interface-ip`, `--engine`, `--data-dir`, `--stop`.
 
 ## Start at logon
 

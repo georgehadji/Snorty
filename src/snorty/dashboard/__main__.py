@@ -6,7 +6,9 @@ import contextlib
 import logging
 import logging.handlers
 import os
+import socket
 import sys
+import time
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -25,19 +27,101 @@ from snorty.notify.ports import channel_notifier
 
 HOST = "127.0.0.1"
 LOG_NAME = "snorty.log"
+STOP_NAME = "stop.request"  # `--stop` writes it; the running dashboard stops and deletes it
+STOP_POLL = 1.0  # seconds between looks for the stop request
+STOP_WAIT = 90.0  # how long `--stop` waits for the dashboard (and the sensor) to finish
+STOP_GRACE = 5  # an open browser tab keeps its live stream; cut it after this many seconds
 log = logging.getLogger("snorty.dashboard")
 
 Build = Callable[..., Runtime]
-Serve = Callable[[FastAPI, str, int], Awaitable[None]]
+Serve = Callable[[FastAPI, str, int, asyncio.Event], Awaitable[None]]
 
 
-async def serve_uvicorn(app: FastAPI, host: str, port: int) -> None:
+class _StreamCutIsNotAnError(logging.Filter):
+    """The grace limit cancels open live streams; that is a normal stop, not a crash."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.exc_info and isinstance(record.exc_info[1], asyncio.CancelledError):
+            return False  # uvicorn's "Exception in ASGI application" for a cancelled stream
+        if record.getMessage().endswith("timeout graceful shutdown exceeded"):
+            record.levelno, record.levelname = logging.INFO, "INFO"
+        return True
+
+
+_STREAM_CUT = _StreamCutIsNotAnError()  # one instance: adding it again is a no-op
+
+
+async def serve_uvicorn(
+    app: FastAPI, host: str, port: int, stop: asyncio.Event, *, grace: int = STOP_GRACE
+) -> None:
+    """Serve until Ctrl+C or until `stop` is set; both end the same graceful way.
+
+    Open requests get `grace` seconds to finish. Without that limit an open dashboard tab,
+    whose live stream never ends, would keep the process waiting for ever.
+    """
     import uvicorn
 
     server = uvicorn.Server(
-        uvicorn.Config(app, host=host, port=port, log_config=None, access_log=False)
+        uvicorn.Config(
+            app,
+            host=host,
+            port=port,
+            log_config=None,
+            access_log=False,
+            timeout_graceful_shutdown=grace,
+        )
     )
-    await server.serve()
+
+    async def exit_on_stop() -> None:
+        await stop.wait()
+        server.should_exit = True
+
+    # Stays on after serve() returns: the cancelled streams log their error after that.
+    logging.getLogger("uvicorn.error").addFilter(_STREAM_CUT)
+    watcher = asyncio.create_task(exit_on_stop(), name="dashboard-stop")
+    try:
+        await server.serve()
+    finally:
+        watcher.cancel()
+
+
+async def watch_stop_request(path: Path, stop: asyncio.Event, poll: float = STOP_POLL) -> None:
+    while not path.exists():
+        await asyncio.sleep(poll)
+    log.info("stop requested")
+    stop.set()
+
+
+def _answers(port: int) -> bool:
+    try:
+        with socket.create_connection((HOST, port), timeout=2):
+            return True
+    except OSError:
+        return False
+
+
+def request_stop(
+    cfg: DashConfig,
+    *,
+    answers: Callable[[int], bool] = _answers,
+    wait: float = STOP_WAIT,
+    poll: float = 0.5,
+) -> int:
+    """Ask the dashboard using `cfg.data_dir` to stop, and wait until it has finished."""
+    if not answers(cfg.port):
+        print(f"no Snorty dashboard is answering on {HOST}:{cfg.port}", file=sys.stderr)
+        return 1
+    path = cfg.data_dir / STOP_NAME
+    path.touch()
+    print("asked the dashboard to stop; waiting for it to finish...", flush=True)
+    deadline = time.monotonic() + wait
+    while path.exists():
+        if time.monotonic() > deadline:
+            print(f"the dashboard did not finish within {wait:.0f} s", file=sys.stderr)
+            return 1
+        time.sleep(poll)
+    print("Snorty stopped.")
+    return 0
 
 
 def setup_logging(data_dir: Path) -> logging.Handler:
@@ -67,6 +151,11 @@ def make_parser() -> argparse.ArgumentParser:
         help="detection engine (default suricata when installed, else snort)",
     )
     p.add_argument("--data-dir", type=Path, help=r"default %%LOCALAPPDATA%%\Snorty")
+    p.add_argument(
+        "--stop",
+        action="store_true",
+        help="stop the running dashboard and its sensor cleanly, then exit",
+    )
     return p
 
 
@@ -139,6 +228,10 @@ async def run(
     )
     services = runtime.services
     app = build_app(services, token=new_token(), port=cfg.port)
+    stop_file = cfg.data_dir / STOP_NAME
+    stop_file.unlink(missing_ok=True)  # left by a `--stop` that found nothing to stop
+    stop = asyncio.Event()
+    watch = asyncio.create_task(watch_stop_request(stop_file, stop), name="stop-request")
     schedule = asyncio.create_task(
         run_daily(lambda: services.rules.update(), cfg.rules_update_at), name="rules-schedule"
     )
@@ -155,8 +248,12 @@ async def run(
             services.repo, cfg.retention_days, services.pcap_dir
         )  # the PC is often off at 03:30
         await runtime.start(sensor=cfg.autostart_sensor)
-        print(f"Snorty dashboard: http://{HOST}:{cfg.port}/  (Ctrl+C to stop)", flush=True)
-        await serve(app, host, cfg.port)
+        print(
+            f"Snorty dashboard: http://{HOST}:{cfg.port}/  "
+            "(Ctrl+C or `python -m snorty.dashboard --stop` to stop)",
+            flush=True,
+        )
+        await serve(app, host, cfg.port, stop)
     except SystemExit as exc:  # uvicorn exits with 1 when it cannot bind the port
         code = exc.code if isinstance(exc.code, int) else 1
         print(f"could not serve on {HOST}:{cfg.port}; is the port in use?", file=sys.stderr)
@@ -165,11 +262,12 @@ async def run(
         print("dashboard failed; see snorty.log in the data folder", file=sys.stderr)
         code = 1
     finally:
-        schedule.cancel()
-        prune.cancel()
-        await asyncio.gather(schedule, prune, return_exceptions=True)
+        for task in (schedule, prune, watch):
+            task.cancel()
+        await asyncio.gather(schedule, prune, watch, return_exceptions=True)
         await runtime.stop()
         services.repo.close()
+        stop_file.unlink(missing_ok=True)  # last: tells `--stop` that everything has finished
     return code
 
 
@@ -183,6 +281,8 @@ def main(
     except ConfigError as exc:
         print(f"snorty: {exc}", file=sys.stderr)
         return 2
+    if args.stop:
+        return request_stop(cfg)
     handler = setup_logging(cfg.data_dir)
     try:
         with contextlib.suppress(KeyboardInterrupt):

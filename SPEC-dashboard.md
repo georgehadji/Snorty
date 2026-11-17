@@ -15,7 +15,7 @@ User: you, on this PC only. Success: you run `uv run python -m snorty.dashboard`
 3. **Stack (from the map):** FastAPI + uvicorn + Jinja2 templates, htmx for partial updates, Server-Sent Events for live alerts. No front-end build step, no SPA framework. New runtime dependencies: `fastapi`, `uvicorn`, `jinja2`. Dev: `httpx2` (Starlette's TestClient; it replaced `httpx`, which Starlette 1.10 deprecates). Not added: `pydantic-settings` (config is read with stdlib `tomllib`), `python-multipart` (form bodies are parsed with `urllib.parse.parse_qs`).
 4. **htmx is vendored,** not loaded from a CDN: one file in `static/`, with its version and SHA-256 noted in the spec's deviations. The page makes no request to any third-party host.
 5. **Config:** optional `snorty.toml` in the data folder (stdlib `tomllib`). Keys: `port`, `interface_ip`, `vault` (journal path), `notify` (bool), `journal` (bool), `autostart_sensor` (bool, default false), `rules_update_at` (`"HH:MM"` local, default `"03:00"`, empty string disables). Missing file means defaults. CLI flags override the file.
-6. **The sensor does not start by itself** unless `autostart_sensor` is true or `--start-sensor` is given: you press Start. Closing the dashboard (Ctrl+C) stops the sensor cleanly, like the sensor CLI does today.
+6. **The sensor does not start by itself** unless `autostart_sensor` is true or `--start-sensor` is given: you press Start. Closing the dashboard (Ctrl+C) stops the sensor cleanly, like the sensor CLI does today. `--stop` does the same for a dashboard with no console window: it writes `stop.request` in the data folder; the dashboard looks for it every second (`watch_stop_request`), sets uvicorn's `should_exit` (`serve_uvicorn`), stops every service, closes the repository and deletes the file last; `--stop` waits up to 90 s for the file to go. A stale request is deleted at startup. Open requests get 5 s to finish (`STOP_GRACE`, uvicorn's `timeout_graceful_shutdown`); after that uvicorn cancels them, so an open tab's live stream cannot hold up a stop, and that cancel is logged as INFO, not as an error.
 7. **Scheduling:** an asyncio task runs `RulesService.update()` once a day at `rules_update_at` while the dashboard is running. A missed time (PC off) is not caught up in V1. No Task Scheduler / autostart at logon in V1 (map open question 2: answered "launch it yourself" unless you say otherwise).
 8. **Data folder:** `%LOCALAPPDATA%\Snorty` (database, `snorty.toml`, `pcaps\`, rotating `snorty.log`). Same db path the sensor CLI uses today; if that differs on disk, the dashboard reads the sensor's current default.
 9. **Rule-lab pcaps** come from `data\pcaps\` only: you drop a file there, upload one in the page (raw body, 50 MB cap), or generate one with the page's form (the lab's `make_frames`/`build_pcap`). Names are sanitised; no path from the browser is ever opened directly.
@@ -67,9 +67,11 @@ User: you, on this PC only. Success: you run `uv run python -m snorty.dashboard`
 
 ```
 uv run python -m snorty.dashboard [--port N] [--start-sensor] [--no-notify] [--no-journal] [--vault PATH] [--interface-ip IP] [--data-dir PATH]
+uv run python -m snorty.dashboard --stop [--data-dir PATH]
 ```
 
-Exit codes: 0 clean stop, 1 sensor failed to start or port in use, 2 usage.
+Exit codes: 0 clean stop, 1 sensor failed to start or port in use, 2 usage. `--stop`: 0 once the
+dashboard has finished, 1 when none answers on the configured port or it does not finish in 90 s.
 
 ## Commands
 
