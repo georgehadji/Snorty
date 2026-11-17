@@ -4,14 +4,16 @@ import re
 from pathlib import Path
 
 _DROP = re.compile(
-    r"^\s*include\s+(?:\$(?:RULE_PATH|PREPROC_RULE_PATH)/\S+\.rules|threshold\.conf)\s*$",
+    r"^\s*(?:include\s+(?:\$(?:RULE_PATH|PREPROC_RULE_PATH)/\S+\.rules|threshold\.conf)\s*$"
+    r"|preprocessor\s+perfmonitor\b)",  # it would write the live sensor's statistics file
     re.IGNORECASE,
 )
 
 
 def build_lab_conf(live_conf_text: str, rules_path: str) -> str:
-    """The live config minus every rules, preprocessor-rules and threshold include, plus one
-    include of the lab rules. Everything else, line endings included, is kept.
+    """The live config minus every rules, preprocessor-rules and threshold include and any
+    perfmonitor line, plus one include of the lab rules. Everything else, line endings included,
+    is kept.
 
     Snort's `include` takes an unquoted path, so a path with whitespace is refused."""
     if any(c.isspace() for c in rules_path):

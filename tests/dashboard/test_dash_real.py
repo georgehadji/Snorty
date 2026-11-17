@@ -88,7 +88,13 @@ def live_untouched() -> Iterator[None]:
     assert not snort_running()
 
 
-def test_start_alert_lab_and_stop_through_http(tmp_path: Path, live_untouched: None) -> None:
+def test_start_alert_lab_and_stop_through_http(
+    tmp_path: Path, live_untouched: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def no_perfmon(*_: object) -> None:  # a test must not edit the real snort.conf
+        return None
+
+    monkeypatch.setattr("snorty.sensor.port.enable_perfmon", no_perfmon)
     log_dir = tmp_path / "log"
     log_dir.mkdir()
     runtime = compose(
@@ -115,7 +121,8 @@ def test_start_alert_lab_and_stop_through_http(tmp_path: Path, live_untouched: N
             assert c.post("/lab/run", content=form, headers=FORM).status_code == 200
 
             def lab_done() -> bool:
-                return "hx-get" not in c.get("/lab/status").text
+                # only the running state polls itself; a finished result may load other parts
+                return 'hx-get="/lab/status"' not in c.get("/lab/status").text
 
             eventually(lab_done, timeout=60)
             html = c.get("/lab/status").text

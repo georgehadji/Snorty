@@ -73,6 +73,19 @@ def test_a_conf_without_a_final_newline_still_gets_the_include_on_its_own_line()
     assert out == f"include classification.config\ninclude {LAB}\n"
 
 
+def test_a_perfmonitor_line_is_dropped_so_the_lab_never_writes_live_statistics() -> None:
+    live = (
+        "var X 1\n# snorty: perfmonitor (drop statistics)\n"
+        "preprocessor perfmonitor: time 60 file C:\\Snort\\log\\perfmon.csv pktcnt 1000\n"
+        "  PREPROCESSOR  PerfMonitor: time 5\npreprocessor perfmonitor_x: kept\n"
+    )
+    out = build_lab_conf(live, LAB)
+    assert out == (
+        "var X 1\n# snorty: perfmonitor (drop statistics)\n"
+        f"preprocessor perfmonitor_x: kept\ninclude {LAB}\n"
+    )
+
+
 def test_an_empty_conf_gets_just_the_include() -> None:
     assert build_lab_conf("", LAB) == f"include {LAB}\n"
 
