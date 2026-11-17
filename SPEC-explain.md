@@ -53,8 +53,9 @@ service, never uses a model that Ollama runs remotely, and does not judge the al
 7. Before the first request the adapter asks `/api/tags` (10 s timeout) and refuses a model that
    is not installed or that carries `remote_host` or `remote_model`. The check passes once per
    adapter instance (`ollama.py:48-57`).
-8. Request: `/api/generate` with `stream: false`, `think: false`, temperature 0.2, at most 500
-   tokens, timeout 180 s.
+8. Request: `/api/generate` with `stream: false`, `think: false`, temperature 0.2, at most 1500
+   tokens (`MAX_ANSWER_TOKENS`: Greek and other scripts take several times more tokens than
+   English), timeout 180 s. An answer that hit the limit (`done_reason: "length"`) ends in "…".
 9. The prompt names the reader (`AUDIENCES`: home, office, analyst, `ollama.py:61`) and asks for
    the answer in the configured language. It holds the alert's message, classification, priority
    and protocol, and the rule text cut to 4000 characters. It holds no addresses or ports

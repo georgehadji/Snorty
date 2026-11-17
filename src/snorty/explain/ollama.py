@@ -14,6 +14,8 @@ from snorty.explain.ports import ExplainError
 OLLAMA_URL = "http://127.0.0.1:11434"  # never anything but this PC
 MAX_RULE_CHARS = 4000
 MAX_TEXT_CHARS = 3000
+# 150 words take about 200 tokens in English but several times that in Greek or other scripts
+MAX_ANSWER_TOKENS = 1500
 MAX_REPLY_BYTES = 256 * 1024
 _THINK = re.compile(r"<think>.*?</think>", re.DOTALL)
 
@@ -121,12 +123,14 @@ class OllamaExplainer:
             ),
             "stream": False,
             "think": False,
-            "options": {"temperature": 0.2, "num_predict": 500},
+            "options": {"temperature": 0.2, "num_predict": MAX_ANSWER_TOKENS},
         }
         reply = self._transport(f"{OLLAMA_URL}/api/generate", payload, self._timeout)
         text = reply.get("response")
         if not isinstance(text, str) or not clean(text):
             raise ExplainError("the model gave no answer")
+        if reply.get("done_reason") == "length":  # ran out of tokens mid-sentence: show it
+            return clean(text).rstrip(" .…") + "…"
         return clean(text)
 
     async def explain(self, rule_text: str, alert: Alert) -> str:

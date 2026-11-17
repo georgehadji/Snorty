@@ -97,6 +97,13 @@ async def test_the_style_reaches_the_model_and_names_the_cache() -> None:
         OllamaExplainer("qwen3:8b", audience="boss")
 
 
+async def test_an_answer_cut_by_the_token_limit_is_marked() -> None:
+    fake = FakeOllama(reply={"response": "Ελέγξτε τις εφαρμογές που", "done_reason": "length"})
+    text = await OllamaExplainer("qwen3:8b", transport=fake).explain("rule", make_alert())
+    assert text == "Ελέγξτε τις εφαρμογές που…"
+    assert fake.calls[-1][1]["options"]["num_predict"] >= 1500  # type: ignore[index]
+
+
 def test_a_long_rule_is_cut_and_the_reply_is_cleaned_and_capped() -> None:
     assert "x" * 5000 not in build_prompt("x" * 5000, make_alert())
     assert clean("<think>secret plan</think>Answer.") == "Answer."
