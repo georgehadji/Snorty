@@ -1,19 +1,19 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass, replace
-from datetime import datetime, timedelta, tzinfo
+from dataclasses import dataclass
+from datetime import datetime, tzinfo
 from pathlib import Path
 from typing import Literal
 
 from snorty.core.bus import EventBus
+from snorty.core.decoder import AlertDecoder, FastDecoder
 from snorty.core.events import AlertRaised, AlertsBackfilled, SensorStateChanged
 from snorty.core.models import Alert
-from snorty.core.parser import parse_line
 from snorty.core.repository import TAIL_KEY, AlertRepository
 from snorty.sensor.config import SensorConfig
 from snorty.sensor.policy import backoff_delay, should_give_up
-from snorty.sensor.port import RunningSnort, SnortPort
+from snorty.sensor.port import EnginePort, RunningSnort
 from snorty.sensor.states import State, check_transition
 from snorty.sensor.tail import decode_state, encode_state, read_new_lines
 from snorty.snort.interfaces import pick_interface
@@ -55,21 +55,6 @@ def _remove_pid(path: Path) -> None:
     path.unlink(missing_ok=True)
 
 
-def _settle_fold(ts: datetime, last: float | None, second: bool) -> tuple[datetime, float, bool]:
-    """Snort writes local wall time. When the clocks go back, that hour is written twice and both
-    passes parse to the first. A time that steps back inside such an hour starts the second pass;
-    its lines get fold=1 until a time outside the repeated hour shows up.
-    `last` is the newest instant read so far. Returns the time, the new `last` and `second`."""
-    if ts.utcoffset() == ts.replace(fold=1).utcoffset():
-        second = False
-    elif not second and last is not None and ts.timestamp() < last - 1:
-        second = True
-    if second:
-        ts = ts.replace(fold=1)
-    instant = ts.timestamp()
-    return ts, instant if last is None else max(instant, last), second
-
-
 class Sensor:
     """Keeps Snort running and turns its output into events.
 
@@ -80,7 +65,7 @@ class Sensor:
     def __init__(
         self,
         config: SensorConfig,
-        port: SnortPort,
+        port: EnginePort,
         repo: AlertRepository,
         bus: EventBus,
         *,
@@ -89,6 +74,7 @@ class Sensor:
         tz: tzinfo,
         select_interface: Callable[[list[Interface]], Interface | None] | None = None,
         wall: Callable[[], datetime] | None = None,
+        decoder: AlertDecoder | None = None,
     ) -> None:
         self._config = config
         self._port = port
@@ -100,14 +86,13 @@ class Sensor:
         self._select_interface = select_interface
         self._wall = wall or (lambda: datetime.now(tz))
         self._pid_path = config.paths.log_dir / "snorty-sensor.pid"
-        self._alert_path = config.paths.log_dir / "alert.ids"
+        self._alert_path = config.paths.log_dir / config.paths.alert_file
         # Resume where the last run stopped: each line is read once in its lifetime, so startup
         # does not slow down as alert.ids grows, and old year-less lines are never read again.
         self._tail = decode_state(repo.meta_get(TAIL_KEY))
         self._backlog_done = False
         self._ingest_task: asyncio.Task[None] | None = None
-        self._last_instant: float | None = None  # newest alert time read so far, for _settle_fold
-        self._second_pass = False  # reading the repeated hour of a clock change a second time
+        self._decoder: AlertDecoder = decoder or FastDecoder(tz)
 
         self._state = State.STOPPED
         self._reason: str | None = None
@@ -444,7 +429,7 @@ class Sensor:
         result = await asyncio.to_thread(read_new_lines, self._alert_path, self._tail)
         if result.rotated:
             log.warning("alert file was rotated or replaced; reading it from the start")
-            self._last_instant, self._second_pass = None, False
+            self._decoder.reset()
         moved = result.rotated or result.state.offset != self._tail.offset
         if result.state != self._tail or result.rotated:
             # Rows and checkpoint are stored together, so a restart resumes exactly here.
@@ -479,22 +464,6 @@ class Sensor:
     ) -> tuple[list[Alert], int]:
         """Runs in a worker thread: parse and store. Returns (new alerts, unparsed count).
         `ties[i]` says which of several identical lines `lines[i]` is (0 when not given)."""
-        alerts: list[Alert] = []
-        bad = 0
-        last, second = self._last_instant, self._second_pass
-        now = self._wall()
-        for i, text in enumerate(lines):
-            alert = parse_line(text, default_year=year, tz=self._tz)
-            if alert is not None and alert.ts > now + timedelta(days=1):
-                # Snort writes no year: a December line read in January is from last year.
-                alert = parse_line(text, default_year=year - 1, tz=self._tz)
-            if alert is None:
-                bad += 1
-                log.warning("unparsed alert line: %.120s", text)
-            else:
-                ts, last, second = _settle_fold(alert.ts, last, second)
-                alert = replace(alert, ts=ts)
-                alerts.append(replace(alert, dup=ties[i]) if i < len(ties) else alert)
+        alerts, bad = self._decoder.decode(lines, year, ties, self._wall())
         new = self._repo.add_new(alerts, checkpoint)
-        self._last_instant, self._second_pass = last, second  # only once the lines are stored
         return new, bad

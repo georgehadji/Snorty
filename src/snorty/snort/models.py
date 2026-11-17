@@ -9,6 +9,10 @@ class SnortPaths:
     conf: Path = Path(r"C:\Snort\etc\snort.conf")
     log_dir: Path = Path(r"C:\Snort\log")
 
+    @property
+    def alert_file(self) -> str:
+        return "alert.ids"
+
 
 @dataclass(frozen=True, slots=True)
 class Interface:

@@ -7,7 +7,7 @@ from datetime import datetime
 
 from snorty.core.bus import EventBus
 from snorty.rules.config import RulesConfig
-from snorty.rules.ports import SnortValidator, UrllibDownloader
+from snorty.rules.ports import UrllibDownloader, validator_for
 from snorty.rules.service import EditReport, RulesService
 from snorty.sensor.states import State
 
@@ -30,7 +30,7 @@ def build_service() -> RulesService:
     return RulesService(
         config,
         UrllibDownloader(),
-        SnortValidator(config.paths),
+        validator_for(config.paths),
         NoSensor(),
         EventBus(),
         clock=lambda: datetime.now().astimezone(),

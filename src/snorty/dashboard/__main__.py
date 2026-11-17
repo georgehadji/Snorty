@@ -60,6 +60,9 @@ def make_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-journal", action="store_true", help="no daily Obsidian notes")
     p.add_argument("--vault", help="vault folder for notes, default $OBSIDIAN_VAULT_PATH")
     p.add_argument("--interface-ip", help="pin the capture interface by IP")
+    p.add_argument(
+        "--engine", choices=["snort", "suricata"], help="detection engine (default snort)"
+    )
     p.add_argument("--data-dir", type=Path, help=r"default %%LOCALAPPDATA%%\Snorty")
     return p
 
@@ -72,6 +75,7 @@ def config_from(args: argparse.Namespace) -> DashConfig:
         "journal": False if args.no_journal else None,
         "vault": args.vault,
         "interface_ip": args.interface_ip,
+        "engine": args.engine,
     }
     return load_config(args.data_dir or default_data_dir(), overrides)
 
@@ -122,6 +126,7 @@ async def run(
         journal_store=note_store(cfg),
         wireshark_dir=Path(cfg.wireshark_dir) if cfg.wireshark_dir else None,
         host_context=True,
+        engine="suricata" if cfg.engine == "suricata" else "snort",
     )
     services = runtime.services
     app = build_app(services, token=new_token(), port=cfg.port)

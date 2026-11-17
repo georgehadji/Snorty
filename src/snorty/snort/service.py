@@ -45,7 +45,7 @@ class LiveProcess(Protocol):
 _job: int | None = None  # one job for every Snort we start; Windows closes it when we die
 
 
-def _bind_to_job(pid: int) -> None:
+def bind_to_job(pid: int) -> None:
     """Make Windows kill Snort when this process ends, however it ends (a kill, a crash, a closed
     console). Without it a dead dashboard leaves Snort running, and the next start is refused.
     Best effort: a failure is logged and Snort simply runs unbound, as before."""
@@ -127,7 +127,7 @@ async def start_live(
             )
         except OSError as e:
             raise SnortError(f"cannot start {paths.exe}: {e}") from e
-    _bind_to_job(proc.pid)
+    bind_to_job(proc.pid)
     loop = asyncio.get_running_loop()
     deadline = loop.time() + ready_timeout
     while True:
@@ -248,13 +248,14 @@ async def kill_snort(pid: int, runner: Runner) -> None:
         pass
 
 
-async def is_snort_running(pid: int, runner: Runner) -> bool:
-    """True if `pid` is a live snort.exe. Anything unexpected counts as not running."""
+async def is_snort_running(pid: int, runner: Runner, image: str = "snort.exe") -> bool:
+    """True if `pid` is a live `image` (snort.exe unless told otherwise).
+    Anything unexpected counts as not running."""
     try:
         result = await runner(tasklist_command(pid), timeout=15)
     except SnortError:
         return False
     for row in csv.reader(result.stdout.splitlines()):
-        if len(row) >= 2 and row[0].lower() == "snort.exe" and row[1] == str(pid):
+        if len(row) >= 2 and row[0].lower() == image and row[1] == str(pid):
             return True
     return False

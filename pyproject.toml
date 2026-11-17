@@ -48,7 +48,7 @@ select = ["E", "F", "I", "B", "UP"]
 python_version = "3.12"
 
 [[tool.mypy.overrides]]
-module = ["snorty.core.*", "snorty.snort.*", "snorty.sensor.*", "snorty.rules.*", "snorty.notify.*", "snorty.journal.*", "snorty.lab.*", "snorty.dashboard.*", "snorty.compose"]
+module = ["snorty.core.*", "snorty.snort.*", "snorty.suricata.*", "snorty.sensor.*", "snorty.rules.*", "snorty.notify.*", "snorty.journal.*", "snorty.lab.*", "snorty.dashboard.*", "snorty.compose"]
 strict = true
 
 [[tool.mypy.overrides]]
@@ -64,13 +64,14 @@ name = "core is the domain: it imports no other snorty module"
 type = "forbidden"
 source_modules = ["snorty.core"]
 forbidden_modules = [
-    "snorty.snort", "snorty.sensor", "snorty.rules", "snorty.notify", "snorty.journal",
-    "snorty.lab", "snorty.triage", "snorty.attribution", "snorty.enrich", "snorty.winnet",
+    "snorty.snort", "snorty.suricata", "snorty.sensor", "snorty.rules", "snorty.notify",
+    "snorty.journal", "snorty.lab", "snorty.triage", "snorty.attribution", "snorty.enrich",
+    "snorty.winnet",
     "snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless",
 ]
 
 [[tool.importlinter.contracts]]
-name = "only the process adapters (snort, wireshark) run processes"
+name = "only the process adapters (snort, suricata, wireshark) run processes"
 type = "forbidden"
 source_modules = [
     "snorty.core", "snorty.sensor", "snorty.rules", "snorty.notify", "snorty.journal",
@@ -84,9 +85,9 @@ allow_indirect_imports = true
 name = "feature modules never reach up into the UI or the wiring"
 type = "forbidden"
 source_modules = [
-    "snorty.snort", "snorty.sensor", "snorty.rules", "snorty.notify", "snorty.journal",
-    "snorty.lab", "snorty.packets", "snorty.triage", "snorty.attribution", "snorty.enrich",
-    "snorty.winnet", "snorty.wireshark",
+    "snorty.snort", "snorty.suricata", "snorty.sensor", "snorty.rules", "snorty.notify",
+    "snorty.journal", "snorty.lab", "snorty.packets", "snorty.triage", "snorty.attribution",
+    "snorty.enrich", "snorty.winnet", "snorty.wireshark",
 ]
 forbidden_modules = ["snorty.dashboard", "snorty.compose", "snorty.services", "snorty.headless"]
 # the sensor's `-m` shim hands off to the headless runner; it is an entry point, not a dependency
@@ -96,7 +97,7 @@ ignore_imports = ["snorty.sensor.__main__ -> snorty.headless"]
 name = "packets is the port side: it never imports its adapters"
 type = "forbidden"
 source_modules = ["snorty.packets"]
-forbidden_modules = ["snorty.wireshark", "snorty.snort"]
+forbidden_modules = ["snorty.wireshark", "snorty.snort", "snorty.suricata"]
 
 [[tool.importlinter.contracts]]
 name = "sibling features do not know each other"

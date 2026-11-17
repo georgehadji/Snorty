@@ -21,13 +21,10 @@ from snorty.rules.blocks import (
     MutedRule,
     Track,
     apply_block,
-    get_home_net,
     read_block,
-    rewrite_include,
-    rewrite_rule_path,
-    set_home_net,
 )
 from snorty.rules.config import RulesConfig
+from snorty.rules.dialects import failed_rule
 from snorty.rules.ports import Downloader, SensorControl, Validator
 from snorty.rules.state import RulesState, load_state, save_state
 from snorty.sensor.states import State
@@ -58,6 +55,27 @@ def _label(sid: int, track: Track | None, ip: str | None) -> str:
     return (
         f"{sid} for {'source' if track == 'by_src' else 'destination'} {ip}" if track else str(sid)
     )
+
+
+MAX_DISABLED = 50  # more unloadable rules than this means the ruleset does not fit the engine
+
+
+def disable_rule(rules_dir: Path, path: Path, line: int) -> bool:
+    """Comment out one rule line. Only a rule inside `rules_dir` and not yet disabled is touched;
+    returns whether anything changed (False tells the caller it cannot make progress)."""
+    try:
+        if path.resolve().parent != rules_dir.resolve():
+            return False
+        lines = read_text(path).splitlines(keepends=True)
+        if not 1 <= line <= len(lines) or lines[line - 1].lstrip().startswith("#"):
+            return False
+        if "sid:" not in lines[line - 1]:
+            return False
+        lines[line - 1] = "#" + lines[line - 1]
+        write_text(path, "".join(lines))
+    except OSError:
+        return False
+    return True
 
 
 def read_text(path: Path) -> str:
@@ -153,26 +171,44 @@ class RulesService:
         skipped, count = await asyncio.to_thread(self._stage, tarball, new_dir)
 
         self._step = "validate"
-        stage_conf = cfg.paths.conf.with_name("snorty-stage.conf")
-        text = rewrite_rule_path(read_text(cfg.paths.conf), str(new_dir))
-        write_text(stage_conf, text)
+        conf = cfg.paths.conf
+        stage_conf = conf.with_name("snorty-stage.conf")
+        old_conf = read_text(conf)
+        present = {p.name for p in new_dir.glob("*.rules")}
+        new_conf = cfg.dialect.rewrite_rule_files(old_conf, present)
+        write_text(stage_conf, cfg.dialect.rewrite_rule_path(new_conf, str(new_dir)))
+        disabled = 0
         try:
             check = await self._validator.check(stage_conf)
+            # An engine that stops at its first unloadable rule: switch it off, check again.
+            while not check.ok and disabled < MAX_DISABLED:
+                bad = failed_rule(check.errors)
+                if bad is None or not await asyncio.to_thread(disable_rule, new_dir, *bad):
+                    break
+                disabled += 1
+                check = await self._validator.check(stage_conf)
         finally:
             stage_conf.unlink(missing_ok=True)
         if not check.ok:
             raise ValueError("; ".join(check.errors))
+        if disabled:
+            count = await asyncio.to_thread(count_rules, new_dir)
 
         self._step = "swap"
+        if new_conf != old_conf:  # before the swap: if it cannot be written, nothing has changed
+            await asyncio.to_thread(write_text, conf, new_conf)
         await asyncio.to_thread(self._swap, new_dir)
         if self._sensor.state in (State.RUNNING, State.STARTING):
             self._step = "restart"
             if not await self._restart_ok():
                 await self._roll_back()
+                await asyncio.to_thread(write_text, conf, old_conf)
                 raise RuntimeError("sensor did not come back with the new rules; rolled back")
 
         saved = RulesState(expected, self._clock().isoformat(), count, "ok")
         detail = f"{count} rules"
+        if disabled:
+            detail += f", {disabled} switched off because this engine build cannot load them"
         try:
             await asyncio.to_thread(save_state, cfg.state_path, saved)
         except OSError as e:  # the rules are live and healthy: do not call that a failure
@@ -281,7 +317,7 @@ class RulesService:
     async def home_net(self) -> tuple[str, str]:
         """(current value in snort.conf, the value `set_home_net()` would write)."""
         text = await asyncio.to_thread(read_text, self._config.paths.conf)
-        return get_home_net(text), self._config.home_net_default
+        return self._config.dialect.get_home_net(text), self._config.home_net_default
 
     async def set_home_net(self, value: str | None = None, *, restart: bool = True) -> EditReport:
         conf = self._config.paths.conf
@@ -289,7 +325,7 @@ class RulesService:
         async with self._lock:
             try:
                 old = await asyncio.to_thread(read_text, conf)
-                new = set_home_net(old, new_value)
+                new = self._config.dialect.set_home_net(old, new_value)
                 return await self._commit(
                     conf, old, new, lambda _: new, f"HOME_NET {new_value}", restart
                 )
@@ -307,7 +343,7 @@ class RulesService:
                 conf_text = await asyncio.to_thread(read_text, self._config.paths.conf)
 
                 def stage_text(candidate: Path) -> str:
-                    return rewrite_include(conf_text, "threshold.conf", str(candidate))
+                    return self._config.dialect.rewrite_threshold(conf_text, str(candidate))
 
                 return await self._commit(target, old, new, stage_text, done, restart)
             except Exception as e:

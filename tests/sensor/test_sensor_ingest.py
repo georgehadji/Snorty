@@ -8,6 +8,7 @@ import pytest
 from fakes import FakeClock, FakePort
 
 from snorty.core.bus import EventBus, Subscription
+from snorty.core.decoder import FastDecoder
 from snorty.core.events import AlertRaised, AlertsBackfilled, Event
 from snorty.core.repository import AlertRepository
 from snorty.sensor import tail
@@ -317,7 +318,7 @@ class Athens(tzinfo):
 
 def test_the_repeated_hour_of_a_clock_change_is_read_in_the_right_order(tmp_path: Path) -> None:
     rig = Rig(tmp_path)
-    rig.sensor._tz = Athens()
+    rig.sensor._decoder = FastDecoder(Athens())
     rig.sensor._wall = lambda: datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
 
     def at(hm: str, n: int) -> str:

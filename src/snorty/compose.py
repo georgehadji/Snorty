@@ -8,25 +8,31 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 from snorty.attribution import AttributionService
 from snorty.core.bus import EventBus
+from snorty.core.decoder import AlertDecoder, EveDecoder
 from snorty.core.localtz import LocalTimezone
 from snorty.core.repository import AlertRepository
 from snorty.enrich import EnrichService, ReverseDns, urllib_fetch
 from snorty.journal.ports import NoteStore
 from snorty.journal.service import JournalConfig, JournalService
+from snorty.lab.engines import LabEngine, SuricataLabEngine
 from snorty.lab.service import LabService
 from snorty.notify.ports import Notifier, WinotifyNotifier
 from snorty.notify.service import NotifyService
 from snorty.packets import NoDecoder, PacketService
-from snorty.rules.config import RulesConfig
-from snorty.rules.ports import SnortValidator, UrllibDownloader
+from snorty.rules.config import SURICATA_ET_URL, RulesConfig
+from snorty.rules.ports import SnortValidator, SuricataValidator, UrllibDownloader, Validator
 from snorty.rules.service import RulesService
-from snorty.sensor import Sensor, SensorConfig, SnortAdapter
+from snorty.rules.suricata_home import prepare_suricata_home
+from snorty.sensor import EnginePort, Sensor, SensorConfig, SnortAdapter
+from snorty.sensor.port import SuricataAdapter
 from snorty.services import Services
 from snorty.snort import Interface, SnortPaths, SubprocessRunner
 from snorty.snort.interfaces import find_local_ip
+from snorty.suricata import SuricataPaths
 from snorty.triage import TriageService
 from snorty.winnet import WinConnectionLookup
 from snorty.wireshark import DumpcapRecorder, TsharkDecoder, WiresharkViewer, find_tools
@@ -93,31 +99,56 @@ def compose(
     select_interface: Callable[[list[Interface]], Interface | None] | None = None,
     wireshark_dir: Path | None = None,
     host_context: bool = False,
+    engine: Literal["snort", "suricata"] = "snort",
+    suricata_install: Path | None = None,
 ) -> Runtime:
     """Wire every module together. The journal runs only when a note store is given. With
     `host_context` the PC's connection table and public data downloads are used for alerts
     (which program made the connection, where the remote address is, known-bad lists)."""
-    paths = paths or SnortPaths()
     data_dir.mkdir(parents=True, exist_ok=True)
+    runner = SubprocessRunner()
     tz = LocalTimezone()
+    adapter: EnginePort
+    decoder: AlertDecoder | None = None
+    validator: Validator
+    lab_engine: LabEngine | None = None
+    sensor_paths: SnortPaths | SuricataPaths
+    if engine == "suricata":
+        # Snorty edits its own copy of the config and rules, not the read-only install.
+        install = suricata_install or SuricataPaths().exe.parent
+        sensor_paths = prepare_suricata_home(install, data_dir / "suricata")
+        rules_config = RulesConfig(
+            paths=sensor_paths,
+            engine="suricata",
+            rules_dir=sensor_paths.conf.parent / "rules",
+            url=SURICATA_ET_URL,
+        )
+        adapter, decoder = SuricataAdapter(sensor_paths, runner), EveDecoder()
+        validator = SuricataValidator(sensor_paths, runner)
+        lab_engine = SuricataLabEngine(sensor_paths, runner)
+    else:
+        paths = paths or SnortPaths()
+        sensor_paths = paths
+        rules_config = RulesConfig(paths=paths)
+        adapter, validator = SnortAdapter(paths), SnortValidator(paths)
     bus = EventBus()
     repo = AlertRepository(db_path or data_dir / "snorty.db")
-    config = SensorConfig(paths=paths, interface_ip=interface_ip)
+    config = SensorConfig(paths=sensor_paths, interface_ip=interface_ip)
     sensor = Sensor(
         config,
-        SnortAdapter(paths),
+        adapter,
         repo,
         bus,
         clock=time.monotonic,
         sleep=asyncio.sleep,
         tz=tz,
         select_interface=select_interface,
+        decoder=decoder,
     )
-    rules_config = RulesConfig(paths=paths)
     rules = RulesService(
         rules_config,
         UrllibDownloader(),
-        SnortValidator(paths),
+        validator,
         sensor,
         bus,
         clock=lambda: datetime.now().astimezone(),
@@ -126,7 +157,7 @@ def compose(
         rules.recover()
     except OSError:
         log.exception("could not repair an interrupted rules swap")
-    lab = LabService(paths, SubprocessRunner(), tz=tz)
+    lab = LabService(paths or SnortPaths(), runner, tz=tz, engine=lab_engine)
     toasts = NotifyService(bus, notifier or WinotifyNotifier()) if notify else None
     journal = (
         JournalService(bus, repo, journal_store, JournalConfig(tz=tz)) if journal_store else None
@@ -136,7 +167,7 @@ def compose(
         TsharkDecoder(tools.tshark) if tools.tshark else NoDecoder(),
         WiresharkViewer(tools.wireshark) if tools.wireshark else None,
         DumpcapRecorder(tools.dumpcap) if tools.dumpcap else None,
-        snort_logs=paths.log_dir,
+        snort_logs=sensor_paths.log_dir,
         scratch=data_dir / "opened",
     )
     services = Services(sensor, rules, journal, toasts, lab, repo, bus, tz, data_dir, packets)

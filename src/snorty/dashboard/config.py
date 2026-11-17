@@ -26,6 +26,7 @@ class DashConfig:
     notify: bool = True
     journal: bool = True
     autostart_sensor: bool = False
+    engine: str = "snort"  # "snort" or "suricata"
     rules_update_at: str = "03:00"  # local "HH:MM"; empty string disables the daily update
     retention_days: int = 90  # alerts older than this are deleted; 0 keeps everything
 
@@ -45,6 +46,9 @@ def _check(key: str, value: object) -> object:
     elif key == "retention_days":
         if type(value) is not int or not 0 <= value <= 36500:
             raise ConfigError("retention_days must be a whole number from 0 to 36500")
+    elif key == "engine":
+        if value not in ("snort", "suricata"):
+            raise ConfigError('engine must be "snort" or "suricata"')
     elif key in ("interface_ip", "vault", "wireshark_dir"):
         if not isinstance(value, str):
             raise ConfigError(f"{key} must be text")

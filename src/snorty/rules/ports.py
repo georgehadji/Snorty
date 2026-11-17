@@ -10,6 +10,8 @@ from snorty.sensor.states import State
 from snorty.snort.models import ConfigCheck, SnortPaths
 from snorty.snort.runner import Runner, SubprocessRunner
 from snorty.snort.service import check_config, list_interfaces
+from snorty.suricata import SuricataPaths
+from snorty.suricata import check_config as check_suricata
 
 
 class DownloadError(Exception):
@@ -66,3 +68,21 @@ class SnortValidator:
             return ConfigCheck(False, None, ("no network interface found for snort -T",))
         iface = next((i for i in interfaces if "Loopback" in i.device), interfaces[0])
         return await check_config(self._paths, iface, self._runner, conf=conf)
+
+
+class SuricataValidator:
+    """`suricata -T` against any config file."""
+
+    def __init__(self, paths: SuricataPaths, runner: Runner | None = None) -> None:
+        self._paths = paths
+        self._runner: Runner = runner or SubprocessRunner()
+
+    async def check(self, conf: Path) -> ConfigCheck:
+        return await check_suricata(self._paths, self._runner, conf=conf)
+
+
+def validator_for(paths: SnortPaths | SuricataPaths, runner: Runner | None = None) -> Validator:
+    """The validator that matches the paths' engine."""
+    if isinstance(paths, SuricataPaths):
+        return SuricataValidator(paths, runner)
+    return SnortValidator(paths, runner)
