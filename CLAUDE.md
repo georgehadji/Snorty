@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Snorty
 
 Local Windows dashboard around an IDS engine: Suricata (the default when installed) or Snort 2.9.20 at `C:\Snort`. One
@@ -21,7 +25,33 @@ This file routes. Facts live in the files it points at.
 | Tests | `tests/<package>/` (host context and triage tests are in `tests/core/`) |
 | CI (the gate minus `-m snort`, Windows runner) | `.github/workflows/ci.yml` |
 | Runtime data (outside the repo) | `%LOCALAPPDATA%\Snorty`: `snorty.toml`, `snorty.db`, `suricata/`, `snorty.log` |
-| Current work notes (untracked) | `PLAN-enhancements.md`, `RESEARCH-enhancements.md` |
+| Current work notes (untracked) | `PLAN-*.md`, `RESEARCH-*.md` |
+
+## How it fits together
+
+The engine runs as a child process behind `EnginePort` (`sensor/port.py`). `Sensor`
+(`sensor/sensor.py`) supervises it (restart with backoff, network-change restart, log rotation) and
+tails its alert file. An `AlertDecoder` (`core/decoder.py`: `FastDecoder` for Snort, `EveDecoder`
+for Suricata) turns lines into `Alert`s, which go into `AlertRepository` (SQLite) and onto the
+`EventBus` (`core/bus.py`) as `AlertRaised`. The feature services (notify, journal, triage,
+attribution, enrich, explain) and the dashboard's SSE stream subscribe to the bus; none of them
+know each other. `compose()` builds all of it once; the dashboard reaches features only through the
+protocols in `services.py`.
+
+## Run
+
+```bash
+uv run python -m snorty.dashboard --start-sensor   # dashboard + engine
+uv run python -m snorty.dashboard --stop           # clean stop; never kill the process
+```
+
+Restart without a console window (then poll `http://127.0.0.1:8765/` until it returns 200):
+
+```powershell
+uv run python -m snorty.dashboard --stop; Start-Process uv -ArgumentList 'run','python','-m','snorty.dashboard','--start-sensor' -WindowStyle Hidden
+```
+
+One test: `uv run pytest -q tests/dashboard/test_dash_capture.py::test_name`.
 
 ## Gate (all must pass before calling work done)
 
@@ -34,9 +64,10 @@ uv run pytest -q -m "not snort"    # run three times; flaky counts as failing
 uv run pytest -q -m tshark
 ```
 
-`uv run pytest -q -m snort` drives the real `C:\Snort` (about 90 s); run it when the snort,
-suricata or sensor adapters change. After adding, removing or redescribing a package, run
-`uv run python scripts/module_index.py`; a test fails while `docs/modules.md` is out of date.
+`uv run pytest -q -m snort` drives the real engines (about 160 s); run it when the snort,
+suricata or sensor adapters change. `-m sysmon` reads the real Sysmon log and skips without it.
+After adding, removing or redescribing a package, run `uv run python scripts/module_index.py`; a
+test fails while `docs/modules.md` is out of date.
 
 ## Hard rules
 
@@ -49,5 +80,5 @@ suricata or sensor adapters change. After adding, removing or redescribing a pac
 - Explain uses only a local Ollama model. Alert data never goes to a remote service.
 - Tests never touch the real `C:\Snort` config or rules; stub the adapter (see
   `tests/sensor/test_port.py`).
-- `PLAN-enhancements.md` and `RESEARCH-enhancements.md` stay untracked.
+- `PLAN-*.md` and `RESEARCH-*.md` stay untracked.
 - Commit and push only when the user asks.
