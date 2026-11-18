@@ -184,4 +184,9 @@ def test_a_stored_note_cannot_inject_markup(tmp_path: Path) -> None:
 def test_an_alert_row_loads_its_context_when_opened(tmp_path: Path) -> None:
     c, s, aid = stored(tmp_path)
     html = c.get("/alerts/rows").text
-    assert f'hx-get="/alerts/{aid}/context"' in html
+    # Its own target: htmx would inherit the <details>' "find .alert-packet", which finds
+    # nothing from this div, and then never sends the request.
+    assert (
+        f'hx-get="/alerts/{aid}/context" hx-trigger="toggle from:closest details once" '
+        'hx-target="this"' in html
+    )
