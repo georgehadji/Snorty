@@ -214,6 +214,28 @@ def test_a_file_on_an_alerted_flow_gives_its_name_and_md5() -> None:
     }
 
 
+def test_a_file_name_suricata_wrote_with_question_marks_is_read_from_its_url() -> None:
+    d = EveDecoder()
+    d.decode([eve()], NOW.year, (), NOW)
+
+    def record(name: str, url: str) -> str:
+        info = {"filename": name}
+        event = {"event_type": "fileinfo", "timestamp": TS, "flow_id": 1234567890}
+        return json.dumps(event | {"fileinfo": info, "http": {"url": url}})
+
+    greek = "/%CE%97%CE%BC%CE%B5%CF%81%CE%AE%CF%83%CE%B9%CE%B5%CF%82/a?id=1"
+    d.decode(
+        [
+            record("/??e??s?e?/a", greek),  # Suricata's lossy name for "Ημερήσιες"
+            record("r?port.pdf", "/download?id=7"),  # a header's name: not the URL path
+        ],
+        NOW.year,
+        (),
+        NOW,
+    )
+    assert {v for _, k, v in facts(d) if k == "file"} == {"/Ημερήσιες/a", "r?port.pdf"}
+
+
 def test_a_fact_that_came_before_its_alert_is_kept() -> None:
     d = EveDecoder()
     tls = json.dumps(

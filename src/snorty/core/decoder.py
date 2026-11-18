@@ -12,6 +12,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta, tzinfo
 from typing import Any, Protocol
+from urllib.parse import unquote
 
 from snorty.core.models import Alert, Anomaly, Conn, FactKind, FlowFact, Lookup
 from snorty.core.parser import parse_line
@@ -155,6 +156,22 @@ def _text(value: object) -> str | None:
         return None
     cleaned = "".join(ch for ch in value if ch.isprintable())[:_VALUE_CHARS].strip()
     return cleaned or None
+
+
+def _file_name(info: dict[str, object], data: dict[str, object]) -> object:
+    """The file's name. Suricata writes a downloaded file's name as its decoded URL path with
+    each character it cannot map in one byte as "?" (Greek "Ημερήσιες" as "??e??s?e?"); the
+    event's own percent-encoded URL still has the real name, so it is decoded from there when
+    it lines up character for character. A name from a Content-Disposition header differs in
+    length and is kept as written."""
+    name, http = info.get("filename"), data.get("http")
+    if isinstance(name, str) and "?" in name and isinstance(http, dict):
+        url = http.get("url")
+        if isinstance(url, str):
+            path = unquote(url.split("?")[0], errors="replace")
+            if len(path) == len(name):
+                return path
+    return name
 
 
 def _stamp(value: object) -> datetime | None:
@@ -376,7 +393,7 @@ class EveDecoder:
             parts = (_text(info.get("app_proto")), _text(info.get("event")))
             found = [("anomaly", " ".join(p for p in parts if p))]
         elif kind == "fileinfo":  # its MD5 only when the config forces hashing (home_conf does)
-            found = [("file", info.get("filename")), ("md5", info.get("md5"))]
+            found = [("file", _file_name(info, data)), ("md5", info.get("md5"))]
         else:
             ja3 = info.get("ja3")
             found = [
