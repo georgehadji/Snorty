@@ -76,6 +76,10 @@ def test_a_second_click_during_a_capture_is_refused_and_does_not_start_another(
         assert "Recording" in record(c).text
         again = record(c, "30")
         assert "already running" in again.text and "Recording on Ethernet" in again.text
+        for _ in range(100):  # the job reaches record() after a thread hop, maybe after the POSTs
+            if packets(s).recorded:
+                break
+            time.sleep(0.02)
         assert len(packets(s).recorded) == 1
         assert "hx-get" in c.get("/lab/capture/status").text  # still polling
         c.portal.call(gate.set)  # type: ignore[union-attr]
