@@ -13,7 +13,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, tzinfo
 from typing import Any, Protocol
 
-from snorty.core.models import Alert, Conn, FactKind, FlowFact, Lookup
+from snorty.core.models import Alert, Anomaly, Conn, FactKind, FlowFact, Lookup
 from snorty.core.parser import parse_line
 
 log = logging.getLogger("snorty.core")
@@ -47,6 +47,11 @@ class AlertDecoder(Protocol):
     def take_context(self) -> tuple[list[Conn], list[Lookup]]:
         """Connections that ended and DNS answers seen since the last call (alert or not), then
         forgotten. They are the context shown around an alert."""
+        ...
+
+    def take_anomalies(self) -> list[Anomaly]:
+        """Protocol anomalies the engine logged since the last call (alert or not), then
+        forgotten."""
         ...
 
 
@@ -90,6 +95,9 @@ class FastDecoder:
 
     def take_context(self) -> tuple[list[Conn], list[Lookup]]:
         return [], []  # nor about other connections
+
+    def take_anomalies(self) -> list[Anomaly]:
+        return []  # nor about protocol anomalies
 
     def decode(
         self, lines: Sequence[str], year: int, ties: Sequence[int], now: datetime
@@ -205,12 +213,35 @@ def _conn(data: dict[str, object]) -> Conn | None:
     )
 
 
+def _anomaly(data: dict[str, object]) -> Anomaly | None:
+    """Suricata's `anomaly` event, or None when it lacks its time, ends or event name."""
+    info, ts = data.get("anomaly"), _stamp(data.get("timestamp"))
+    src, dst = _text(data.get("src_ip")), _text(data.get("dest_ip"))
+    if not isinstance(info, dict) or ts is None or not src or not dst:
+        return None
+    kind, event = _text(info.get("type")), _text(info.get("event"))
+    if not kind or not event:
+        return None
+    flow = data.get("flow_id")
+    return Anomaly(
+        ts=ts,
+        flow_id=flow if type(flow) is int else None,
+        kind=kind,
+        event=event,
+        app_proto=_text(info.get("app_proto")),
+        src_ip=src,
+        dst_ip=dst,
+        dst_port=_port(data.get("dest_port")),
+        proto=_text(data.get("proto")) or "",
+    )
+
+
 class EveDecoder:
-    """Suricata's EVE JSON, one object per line. Only `alert` events become alerts. TLS and HTTP
-    events and DNS answers are not alerts, but what they say about an alert's flow is kept for its
-    detail (`take_flows`); a stats event feeds `drop_pct`. Every ended flow and DNS answer is
-    also kept as context (`take_context`). Everything else is skipped without counting as a
-    failure."""
+    """Suricata's EVE JSON, one object per line. Only `alert` events become alerts. TLS, HTTP,
+    file and anomaly events and DNS answers are not alerts, but what they say about an alert's
+    flow is kept for its detail (`take_flows`); a stats event feeds `drop_pct`. Every ended flow
+    and DNS answer is also kept as context (`take_context`), and every anomaly
+    (`take_anomalies`). Everything else is skipped without counting as a failure."""
 
     def __init__(self) -> None:
         self.drop_pct: float | None = None
@@ -221,6 +252,7 @@ class EveDecoder:
         self._answered: dict[str, None] = {}  # DNS names answered since take_names, in order
         self._conns: list[Conn] = []  # since take_context; one decode call's worth at most
         self._lookups: list[Lookup] = []
+        self._anomalies: list[Anomaly] = []  # since take_anomalies, one decode call's worth
 
     def reset(self) -> None:
         self.drop_pct = None
@@ -231,6 +263,7 @@ class EveDecoder:
         self._answered.clear()
         self._conns.clear()
         self._lookups.clear()
+        self._anomalies.clear()
 
     def take_flows(self) -> list[FlowFact]:
         out, self._out = self._out, []
@@ -238,6 +271,10 @@ class EveDecoder:
 
     def take_names(self) -> list[str]:
         out, self._answered = list(self._answered), {}
+        return out
+
+    def take_anomalies(self) -> list[Anomaly]:
+        out, self._anomalies = self._anomalies, []
         return out
 
     def take_context(self) -> tuple[list[Conn], list[Lookup]]:
@@ -264,6 +301,10 @@ class EveDecoder:
                         self._conns.append(conn)
                 elif kind in ("dns", "tls", "http", "fileinfo"):
                     self._note_event(kind, data)
+                elif kind == "anomaly":
+                    if anomaly := _anomaly(data):
+                        self._anomalies.append(anomaly)
+                        self._note_event(kind, data)
                 continue
             alert = self._alert(data, text) if isinstance(data, dict) else None
             if alert is None:
@@ -293,7 +334,10 @@ class EveDecoder:
                 self._out.append(fact)
                 continue
             facts = self._pending.setdefault(fact.flow_id, [])
-            if len(facts) < _PER_FLOW:
+            # a repeated fact (one anomaly logged many times) must not crowd out the others
+            if len(facts) < _PER_FLOW and all(
+                (f.kind, f.value) != (fact.kind, fact.value) for f in facts
+            ):
                 facts.append(fact)
             _remember(self._pending, fact.flow_id, facts)
 
@@ -328,7 +372,10 @@ class EveDecoder:
             value = _text(f"{host or ''}{url.split('?')[0] if url else ''}")
             return [FlowFact(flow, "http", value, ts)] if value else []
         found: list[tuple[FactKind, object]]
-        if kind == "fileinfo":  # its MD5 only when the config forces hashing (home_conf does)
+        if kind == "anomaly":  # e.g. "http INVALID_GAP"
+            parts = (_text(info.get("app_proto")), _text(info.get("event")))
+            found = [("anomaly", " ".join(p for p in parts if p))]
+        elif kind == "fileinfo":  # its MD5 only when the config forces hashing (home_conf does)
             found = [("file", info.get("filename")), ("md5", info.get("md5"))]
         else:
             ja3 = info.get("ja3")

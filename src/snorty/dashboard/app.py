@@ -75,6 +75,10 @@ def _overview_data(svc: Services, now: datetime) -> dict[str, Any]:
         "first_seen": views.first_seen_view(
             *svc.repo.first_seen(midnight), svc.repo.seen_since(), now, svc.tz
         ),
+        "anomalies": views.anomaly_view(
+            svc.repo.anomaly_counts(now - timedelta(hours=24)),
+            svc.repo.anomaly_peers(now - timedelta(hours=24)),
+        ),
     }
 
 

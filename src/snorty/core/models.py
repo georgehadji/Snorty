@@ -61,14 +61,14 @@ class Suppression:
         return line
 
 
-type FactKind = Literal["dns", "tls", "http", "ja3", "ja4", "file", "md5"]
+type FactKind = Literal["dns", "tls", "http", "ja3", "ja4", "file", "md5", "anomaly"]
 
 
 @dataclass(frozen=True, slots=True)
 class FlowFact:
     """Something the engine saw on the flow of an alert: a name looked up, a TLS server name, a
-    web request, the client's TLS fingerprint (JA3 hash, JA4), a file's name and MD5. Shown in
-    the alert's detail."""
+    web request, the client's TLS fingerprint (JA3 hash, JA4), a file's name and MD5, a
+    protocol anomaly. Shown in the alert's detail."""
 
     flow_id: int
     kind: FactKind
@@ -105,3 +105,20 @@ class Lookup:
     client: str
     name: str
     address: str
+
+
+@dataclass(frozen=True, slots=True)
+class Anomaly:
+    """Traffic that broke its protocol's rules, as Suricata logged it (`anomaly` event): a
+    malformed packet (`decode`), a broken TCP stream (`stream`) or an application protocol it
+    could not follow (`applayer`). Mostly gaps in the capture; rarely an attack by itself."""
+
+    ts: datetime
+    flow_id: int | None
+    kind: str  # decode, stream or applayer
+    event: str  # e.g. INVALID_GAP
+    app_proto: str | None
+    src_ip: str
+    dst_ip: str
+    dst_port: int | None
+    proto: str

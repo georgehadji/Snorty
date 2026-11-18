@@ -42,6 +42,22 @@
     </ol>
     <p class="muted">Names come from Suricata's DNS log; Snort has none.</p>
   </section>
+  <section class="card">
+    <h2>Protocol anomalies</h2>
+    <div class="stats">
+      <div><span class="stat" id="count-anomalies">{{ anomalies.total }}</span><span class="label">Last 24 hours</span></div>
+    </div>
+    {% if anomalies.rows %}
+    <ol class="plain">
+      {% for label, hint, count in anomalies.rows %}<li><span class="mono">{{ label }}</span> <span class="muted">×{{ count }}</span>{% if hint %}<br><span class="muted">{{ hint }}</span>{% endif %}</li>{% endfor %}
+    </ol>
+    <h3>Connections with most</h3>
+    <ol class="plain">
+      {% for route, count in anomalies.peers %}<li><span class="mono">{{ route }}</span> <span class="muted">×{{ count }}</span></li>{% endfor %}
+    </ol>
+    {% else %}<p class="muted">None logged.</p>{% endif %}
+    <p class="muted">Traffic Suricata could not follow the way its protocol expects. Mostly gaps in the capture; rarely an attack by itself. Snort logs none.</p>
+  </section>
 </div>
 <section class="card wide">
   <div class="row"><h2>Alerts per hour</h2><span class="muted">Last 24 hours · {{ chart.total }} in total</span></div>

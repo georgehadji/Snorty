@@ -186,3 +186,5 @@ The dashboard deletes alerts older than `retention_days` (default 90, `0` keeps 
 - up to 20 other connections with that address that started 5 minutes either side.
 
 `EveDecoder` turns every `flow` event and every A/AAAA DNS answer into `Conn` and `Lookup` rows (`take_context`), alert or not. The sensor stores them with `add_context`.
+
+**Protocol anomalies.** `EveDecoder` also turns every Suricata `anomaly` event into an `Anomaly` row (`take_anomalies`, stored with `add_anomalies`, pruned with the other context). The Overview has a "Protocol anomalies" card for the last 24 hours: the total, the six most frequent events (application protocol and event name, with a plain hint for the four that are usual on a home network: `ANOMALY_HINTS` in `views.py`) and the five connections with most. An anomaly on an alerted flow is also a flow fact (`anomaly`, e.g. `http INVALID_GAP`), shown in the alert detail as "Protocol anomaly"; a repeated fact is held once while its flow waits for an alert, so it cannot crowd out the others. Snort logs none.

@@ -64,6 +64,41 @@ def test_overview_counts_top_rules_and_recent_alerts(tmp_path: Path) -> None:
     assert "×2" in top
 
 
+def test_overview_counts_the_last_days_anomalies_with_hints_and_connections(
+    tmp_path: Path,
+) -> None:
+    from snorty.core.models import Anomaly
+
+    c, s = make(tmp_path)
+
+    def seen(minutes: int, event: str, proto: str | None, dst: str, port: int) -> Anomaly:
+        ts = NOW - timedelta(minutes=minutes)
+        return Anomaly(ts, 1, "applayer", event, proto, "10.0.0.7", dst, port, "TCP")
+
+    s.repo.add_anomalies(
+        [
+            seen(5, "INVALID_GAP", "http", "203.0.113.9", 80),
+            seen(6, "INVALID_GAP", "http", "203.0.113.9", 80),
+            seen(7, "APPLAYER_WRONG_DIRECTION_FIRST_DATA", None, "2001:db8::1", 443),
+            seen(60 * 25, "INVALID_GAP", "http", "198.51.100.1", 80),  # older than a day
+        ]
+    )
+    html = c.get("/").text
+    assert re.search(r'id="count-anomalies">3<', html)
+    card = html[html.index("Protocol anomalies") :]
+    assert card.index("http INVALID_GAP") < card.index("APPLAYER_WRONG_DIRECTION_FIRST_DATA")
+    assert "Packets missing from the stream" in card and "×2" in card
+    assert "10.0.0.7 to 203.0.113.9:80" in card and "10.0.0.7 to [2001:db8::1]:443" in card
+    assert "198.51.100.1" not in card
+
+
+def test_overview_says_when_no_anomaly_was_logged(tmp_path: Path) -> None:
+    c, _ = make(tmp_path)
+    html = c.get("/").text
+    assert re.search(r'id="count-anomalies">0<', html)
+    assert "None logged." in html[html.index("Protocol anomalies") :]
+
+
 def test_overview_shows_what_was_first_seen_today_and_says_it_is_learning(tmp_path: Path) -> None:
     c, s = make(tmp_path)
     s.repo.note_seen("dns", ["old.example"], NOW - timedelta(days=1))

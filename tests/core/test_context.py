@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from snorty.core.decoder import EveDecoder, FastDecoder
-from snorty.core.models import Conn, Lookup
+from snorty.core.models import Anomaly, Conn, Lookup
 from snorty.core.repository import AlertRepository
 
 NOW = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
@@ -157,6 +157,103 @@ def test_old_context_is_pruned(tmp_path: Path) -> None:
         old, new = T0 - timedelta(days=8), T0
         lookups = [Lookup(old, "pc", "a", "x"), Lookup(new, "pc", "b", "x")]
         repo.add_context([conn(1, old), conn(2, new)], lookups)
+        repo.add_anomalies([anomaly(old, "INVALID_GAP"), anomaly(new, "INVALID_GAP")])
         repo.prune_context(T0 - timedelta(days=7))
         assert repo.conn(1) is None and repo.conn(2) is not None
         assert [x.name for x in repo.lookups_of("x", T0, timedelta(days=30))] == ["b"]
+        assert repo.anomaly_counts(T0 - timedelta(days=30)) == [
+            ("applayer", "http", "INVALID_GAP", 1)
+        ]
+
+
+# --- protocol anomalies -----------------------------------------------------------------
+
+
+def anomaly_event(**info: object) -> str:
+    return json.dumps(
+        {
+            "timestamp": "2026-11-17T10:16:50.552215+0200",
+            "flow_id": 42,
+            "event_type": "anomaly",
+            "src_ip": "192.168.1.25",
+            "src_port": 51000,
+            "dest_ip": PEER,
+            "dest_port": 80,
+            "proto": "TCP",
+            "anomaly": {"type": "applayer", "event": "INVALID_GAP", "layer": "proto_parser"} | info,
+        }
+    )
+
+
+ALERT = json.dumps(
+    {
+        "timestamp": "2026-11-17T10:16:53.000000+0200",
+        "flow_id": 42,
+        "event_type": "alert",
+        "src_ip": "192.168.1.25",
+        "src_port": 51000,
+        "dest_ip": PEER,
+        "dest_port": 80,
+        "proto": "TCP",
+        "alert": {"signature_id": 1, "rev": 1, "signature": "t", "severity": 2},
+    }
+)
+
+
+def anomaly(ts: datetime, event: str, dst: str = PEER, port: int | None = 80) -> Anomaly:
+    return Anomaly(ts, 42, "applayer", event, "http", "192.168.1.25", dst, port, "TCP")
+
+
+def test_an_anomaly_event_is_kept_and_named_on_its_alerted_flow() -> None:
+    d = EveDecoder()
+    d.decode([anomaly_event(app_proto="http"), anomaly_event(event="")], NOW.year, (), NOW)
+    [a] = d.take_anomalies()  # the one with no event name is skipped
+    assert (a.kind, a.event, a.app_proto, a.flow_id) == ("applayer", "INVALID_GAP", "http", 42)
+    assert (a.src_ip, a.dst_ip, a.dst_port, a.proto) == ("192.168.1.25", PEER, 80, "TCP")
+    assert d.take_anomalies() == [] and FastDecoder(UTC).take_anomalies() == []
+    d.decode([ALERT], NOW.year, (), NOW)
+    assert [(f.kind, f.value) for f in d.take_flows()] == [("anomaly", "http INVALID_GAP")]
+
+
+def test_a_repeated_anomaly_before_its_alert_does_not_crowd_out_other_facts() -> None:
+    d = EveDecoder()
+    tls = json.dumps(
+        {
+            "event_type": "tls",
+            "timestamp": "2026-11-17T10:16:52.000000+0200",
+            "flow_id": 42,
+            "tls": {"sni": "evil.example"},
+        }
+    )
+    d.decode([anomaly_event()] * 10 + [tls], NOW.year, (), NOW)
+    d.decode([ALERT], NOW.year, (), NOW)
+    assert {(f.kind, f.value) for f in d.take_flows()} >= {
+        ("anomaly", "INVALID_GAP"),
+        ("tls", "evil.example"),
+    }
+
+
+def test_anomalies_are_kept_once_counted_and_grouped_by_connection(tmp_path: Path) -> None:
+    with closing(AlertRepository(tmp_path / "a.db")) as repo:
+        gap = anomaly(T0, "INVALID_GAP")
+        repo.add_anomalies(
+            [
+                gap,
+                gap,  # read twice
+                anomaly(T0 + timedelta(seconds=1), "INVALID_GAP"),
+                anomaly(
+                    T0 + timedelta(seconds=2), "RESPONSE_HEADER_REPETITION", "2001:db8::1", 443
+                ),
+                anomaly(T0 - timedelta(days=2), "UNABLE_TO_MATCH_RESPONSE_TO_REQUEST"),
+            ]
+        )
+        since = T0 - timedelta(hours=1)
+        assert repo.anomaly_counts(since) == [
+            ("applayer", "http", "INVALID_GAP", 2),
+            ("applayer", "http", "RESPONSE_HEADER_REPETITION", 1),
+        ]
+        assert repo.anomaly_peers(since) == [
+            ("192.168.1.25", PEER, 80, 2),
+            ("192.168.1.25", "2001:db8::1", 443, 1),
+        ]
+        assert len(repo.anomaly_peers(since, limit=1)) == 1

@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
 from typing import Any, Literal
 
-from snorty.core.models import Alert, Block, Conn, FlowFact, Lookup
+from snorty.core.models import Alert, Anomaly, Block, Conn, FlowFact, Lookup
 from snorty.core.query import AlertQuery, utc_text
 from snorty.core.triage import (
     STATES,
@@ -198,6 +198,18 @@ def _add_context(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS lookups_ts ON lookups (ts)")
 
 
+def _add_anomalies(conn: sqlite3.Connection) -> None:
+    """Every protocol anomaly Suricata logged, alert or not. Kept as long as the other context
+    (`prune_context`); one read twice is kept once. The key starts with `ts`, so it also serves
+    the time range queries."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS anomalies ("
+        "ts TEXT NOT NULL, flow_id INTEGER, kind TEXT NOT NULL, event TEXT NOT NULL, "
+        "app_proto TEXT, src_ip TEXT NOT NULL, dst_ip TEXT NOT NULL, dst_port INTEGER, "
+        "proto TEXT NOT NULL, PRIMARY KEY (ts, src_ip, dst_ip, event))"
+    )
+
+
 _CONN_COLUMNS = (
     "flow_id, start, end_ts, proto, app_proto, src_ip, src_port, dst_ip, dst_port, "
     "pkts_out, pkts_in, bytes_out, bytes_in, state"
@@ -233,6 +245,7 @@ MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _add_seen,
     _add_explanation_style,
     _add_context,
+    _add_anomalies,
 ]
 
 
@@ -690,12 +703,60 @@ class AlertRepository:
             ).fetchall()
         return [Lookup(datetime.fromisoformat(t), c, n, address) for t, c, n in rows]
 
+    def add_anomalies(self, anomalies: Iterable[Anomaly]) -> None:
+        """Keep protocol anomalies; one read twice is kept once."""
+        rows = [
+            (
+                utc_text(a.ts),
+                a.flow_id,
+                a.kind,
+                a.event,
+                a.app_proto,
+                a.src_ip,
+                a.dst_ip,
+                a.dst_port,
+                a.proto,
+            )
+            for a in anomalies
+        ]
+        if rows:
+            with self._lock:
+                self._conn.executemany(
+                    "INSERT OR IGNORE INTO anomalies (ts, flow_id, kind, event, app_proto, "
+                    "src_ip, dst_ip, dst_port, proto) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    rows,
+                )
+
+    def anomaly_counts(self, since: datetime) -> list[tuple[str, str | None, str, int]]:
+        """(kind, app_proto, event, count) of the anomalies since `since`, most frequent first."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT kind, app_proto, event, COUNT(*) AS n FROM anomalies WHERE ts >= ? "
+                "GROUP BY kind, app_proto, event ORDER BY n DESC, event LIMIT 50",
+                (utc_text(since),),
+            ).fetchall()
+        return [(k, p, e, n) for k, p, e, n in rows]
+
+    def anomaly_peers(
+        self, since: datetime, limit: int = 5
+    ) -> list[tuple[str, str, int | None, int]]:
+        """(src_ip, dst_ip, dst_port, count): the connections with most anomalies since `since`."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT src_ip, dst_ip, dst_port, COUNT(*) AS n FROM anomalies WHERE ts >= ? "
+                "GROUP BY src_ip, dst_ip, dst_port ORDER BY n DESC, dst_ip LIMIT ?",
+                (utc_text(since), limit),
+            ).fetchall()
+        return [(s, d, p, n) for s, d, p, n in rows]
+
     def prune_context(self, before: datetime) -> None:
-        """Forget connections that started, and DNS answers given, before `before`."""
+        """Forget connections that started, and DNS answers and anomalies logged, before
+        `before`."""
         cutoff = utc_text(before)
         with self._lock:
             self._conn.execute("DELETE FROM conns WHERE start < ?", (cutoff,))
             self._conn.execute("DELETE FROM lookups WHERE ts < ?", (cutoff,))
+            self._conn.execute("DELETE FROM anomalies WHERE ts < ?", (cutoff,))
 
     def blocks(self, state: str | None = None) -> list[Block]:
         sql = "SELECT ip, created, until, alert_id, state FROM blocks"

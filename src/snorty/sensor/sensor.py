@@ -489,4 +489,5 @@ class Sensor:
         self._repo.add_flow_facts(facts)
         self._repo.note_seen("dns", self._decoder.take_names(), self._wall())
         self._repo.add_context(*self._decoder.take_context())
+        self._repo.add_anomalies(self._decoder.take_anomalies())
         return new, bad, tuple(f for f in facts if f.kind == "md5")

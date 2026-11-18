@@ -15,7 +15,7 @@ from snorty.core.repository import AlertRepository
 from snorty.core.rulemeta import Attack
 from snorty.dashboard.services import Svc
 from snorty.dashboard.ui import Ui
-from snorty.dashboard.views import fmt_size, fmt_time
+from snorty.dashboard.views import fmt_end, fmt_size, fmt_time
 from snorty.enrich.service import remote_address
 
 
@@ -55,11 +55,6 @@ class Around:
     nearby: tuple[tuple[str, str], ...]  # (time, connection) to or from `peer`
 
 
-def _end(ip: str, port: int | None) -> str:
-    host = f"[{ip}]" if ":" in ip else ip
-    return f"{host}:{port}" if port is not None else ip
-
-
 def flow_text(c: Conn) -> str:
     secs = max(0, round((c.end - c.start).total_seconds()))
     took = f"{secs} s" if secs < 120 else f"{round(secs / 60)} min"
@@ -69,7 +64,7 @@ def flow_text(c: Conn) -> str:
 
 def conn_text(c: Conn) -> str:
     app = f" {c.app_proto}" if c.app_proto and c.app_proto != "failed" else ""
-    route = f"{_end(c.src_ip, c.src_port)} to {_end(c.dst_ip, c.dst_port)}"
+    route = f"{fmt_end(c.src_ip, c.src_port)} to {fmt_end(c.dst_ip, c.dst_port)}"
     return f"{c.proto}{app} {route}, {fmt_size(c.bytes_out)} out / {fmt_size(c.bytes_in)} in"
 
 
@@ -119,6 +114,7 @@ SEEN_LABELS = {
     "ja4": "Client fingerprint (JA4)",
     "file": "File",
     "md5": "File MD5",
+    "anomaly": "Protocol anomaly",
 }
 
 

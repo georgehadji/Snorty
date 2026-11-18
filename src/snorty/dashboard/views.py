@@ -471,6 +471,47 @@ def first_seen_view(
     )
 
 
+def fmt_end(ip: str, port: int | None) -> str:
+    """One end of a connection: `ip:port`, with an IPv6 address in brackets."""
+    host = f"[{ip}]" if ":" in ip else ip
+    return f"{host}:{port}" if port is not None else ip
+
+
+# What the anomalies Suricata logs most often on a home network usually mean.
+ANOMALY_HINTS = {
+    "APPLAYER_WRONG_DIRECTION_FIRST_DATA": "The server spoke first: the start of the session "
+    "was probably not captured.",
+    "INVALID_GAP": "Packets missing from the stream: they were not captured.",
+    "RESPONSE_HEADER_REPETITION": "A web server sent the same header twice.",
+    "UNABLE_TO_MATCH_RESPONSE_TO_REQUEST": "A reply whose request was not captured.",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class AnomalyView:
+    total: int
+    rows: tuple[tuple[str, str | None, int], ...]  # (protocol and event, hint, count)
+    peers: tuple[tuple[str, int], ...]  # (connection, count)
+
+
+def anomaly_view(
+    counts: Iterable[tuple[str, str | None, str, int]],
+    peers: Iterable[tuple[str, str, int | None, int]],
+    shown: int = 6,
+) -> AnomalyView:
+    """The Overview's anomaly card: the most frequent events with a plain hint, and the
+    connections that had most of them."""
+    counts = list(counts)
+    return AnomalyView(
+        sum(n for *_, n in counts),
+        tuple(
+            (" ".join(p for p in (proto, event) if p), ANOMALY_HINTS.get(event), n)
+            for _, proto, event, n in counts[:shown]
+        ),
+        tuple((f"{fmt_end(s, None)} to {fmt_end(d, p)}", n) for s, d, p, n in peers),
+    )
+
+
 def overview_finding(total: int, urgent: int, top_msg: str, top_count: int) -> str:
     """The one sentence under the Overview title: does anything need attention today?"""
     if total == 0:
