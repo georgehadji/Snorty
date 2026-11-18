@@ -15,7 +15,7 @@ from snorty.core.repository import AlertRepository
 from snorty.core.rulemeta import Attack
 from snorty.dashboard.services import Svc
 from snorty.dashboard.ui import Ui
-from snorty.dashboard.views import fmt_end, fmt_size, fmt_time
+from snorty.dashboard.views import fmt_end, fmt_size, fmt_time, readable_url
 from snorty.enrich.service import remote_address
 
 
@@ -130,7 +130,7 @@ def build_context(
         notes.get("country"),
         notes.get("asn"),
         notes.get("rdns"),
-        seen,
+        tuple((k, readable_url(v) if k == "http" else v) for k, v in seen),
         attack,
         nearby,
         notes.get("osint"),

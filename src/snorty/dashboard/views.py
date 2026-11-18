@@ -1,10 +1,11 @@
 """Pure view-models: turn domain objects into plain values the templates print."""
 
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Literal
-from urllib.parse import urlencode
+from urllib.parse import unquote_to_bytes, urlencode
 
 from snorty.core.models import Alert
 from snorty.core.query import AlertQuery
@@ -469,6 +470,24 @@ def first_seen_view(
         tuple((SEEN_KIND_LABELS.get(k, k), v, fmt_time(t, tz)[11:16]) for k, v, t in rows),
         learning,
     )
+
+
+_HIGH_ESCAPES = re.compile(r"(?:%[89A-Fa-f][0-9A-Fa-f])+")
+
+
+def readable_url(text: str) -> str:
+    """A logged URL with its percent-encoded non-ASCII letters (Greek, accents) shown as
+    letters. Escapes of ASCII characters ("%2e", "%3C", "%00") and bytes that are not valid
+    UTF-8 stay as written, so an encoded attack still reads as one."""
+
+    def letters(m: re.Match[str]) -> str:
+        try:
+            decoded = unquote_to_bytes(m.group()).decode("utf-8")
+        except UnicodeDecodeError:
+            return m.group()
+        return decoded if decoded.isprintable() else m.group()
+
+    return _HIGH_ESCAPES.sub(letters, text)
 
 
 def fmt_end(ip: str, port: int | None) -> str:

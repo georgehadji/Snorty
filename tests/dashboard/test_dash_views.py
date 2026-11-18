@@ -13,6 +13,7 @@ from snorty.dashboard.views import (
     group_rows,
     hourly_chart,
     overview_finding,
+    readable_url,
     rules_summary,
     sensor_card,
     update_message,
@@ -23,6 +24,15 @@ from snorty.sensor import State
 from snorty.snort.models import Interface
 
 PLUS2 = timezone(timedelta(hours=2))
+
+
+def test_a_web_request_shows_non_ascii_letters_but_keeps_ascii_escapes() -> None:
+    greek = "site.gr/%CE%9A%CE%91%CE%A3/a%20b"
+    assert readable_url(greek) == "site.gr/ΚΑΣ/a%20b"
+    attack = "x/%2e%2e/%3Cscript%3E/%00"
+    assert readable_url(attack) == attack  # an encoded attack still reads as one
+    assert readable_url("x/%FF%FE") == "x/%FF%FE"  # not UTF-8: kept as written
+    assert readable_url("x/%C2%85") == "x/%C2%85"  # decodes to a control character: kept
 
 
 def test_fmt_time_is_local_and_plain() -> None:
