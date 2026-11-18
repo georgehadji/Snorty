@@ -165,9 +165,18 @@ class EnrichService:
             except OSError:
                 return ""
 
+        def dbip(name: str, label_columns: slice) -> RangeTable:
+            # streamed line by line: the whole file as one string and its lines cost far more
+            # than the finished table
+            try:
+                with (self._folder / name).open(encoding="utf-8", errors="replace") as f:
+                    return RangeTable.from_csv(f, label_columns)
+            except OSError:
+                return RangeTable()
+
         self._bad = [parse_feodo(read("feodo.txt")), parse_drop(read("drop.txt"))]
-        self._country = RangeTable.from_csv(read("dbip-country.csv").splitlines(), slice(0, 1))
-        self._asn = RangeTable.from_csv(read("dbip-asn.csv").splitlines(), slice(0, 2))
+        self._country = dbip("dbip-country.csv", slice(0, 1))
+        self._asn = dbip("dbip-asn.csv", slice(0, 2))
         self._osint = OsintIndex.parse(
             read("circl-manifest.json"), read("circl-hashes.csv").splitlines()
         )

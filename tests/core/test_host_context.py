@@ -209,6 +209,17 @@ def test_the_feodo_and_drop_lists_are_parsed() -> None:
     assert drop.find("198.51.100.9") == "Spamhaus DROP SBL12345"
 
 
+def test_ranges_given_out_of_order_are_sorted_and_the_last_equal_start_wins() -> None:
+    top = 2**128 - 1
+    table = RangeTable(
+        [(4, 30, 40, "late"), (6, top - 4, top, "top"), (4, 10, 20, "b"), (4, 10, 20, "a")]
+    )
+    assert len(table) == 4 and table.find("0.0.0.15") == "b" and table.find("0.0.0.35") == "late"
+    assert table.find("0.0.0.25") is None and table.find("0.0.0.9") is None
+    assert table.find("ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff") == "top"
+    assert table.find("0.0.0.30") == "late" and table.find("::1e") is None
+
+
 # --- reverse DNS ----------------------------------------------------------------------------
 
 
