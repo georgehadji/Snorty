@@ -35,5 +35,5 @@ These components keep their own licences. This notice does not cover them.
   (tshark, dumpcap), Sysmon and Ollama. Each one is installed separately by the user
   under its own licence.
 - Data that Snorty downloads at run time: DB-IP Lite (CC BY 4.0), Spamhaus DROP,
-  abuse.ch Feodo Tracker and Emerging Threats Open rules, each under its provider's
-  terms.
+  abuse.ch Feodo Tracker, the CIRCL OSINT feed (TLP:CLEAR), the CERT Polska warning
+  list and Emerging Threats Open rules, each under its provider's terms.

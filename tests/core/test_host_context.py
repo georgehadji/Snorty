@@ -325,6 +325,9 @@ def test_stale_files_are_downloaded_once_and_fresh_ones_are_left_alone(tmp_path:
             "https://www.spamhaus.org/drop/drop.txt",
             "https://download.db-ip.com/free/dbip-country-lite-2026-11.csv.gz",
             "https://download.db-ip.com/free/dbip-asn-lite-2026-11.csv.gz",
+            "https://hole.cert.pl/domains/v2/domains.txt",
+            "https://www.circl.lu/doc/misp/feed-osint/manifest.json",
+            "https://www.circl.lu/doc/misp/feed-osint/hashes.csv",
         ]
     )
     assert (folder / "dbip-country.csv").read_bytes() == b"1.0.0.0,1.0.0.255,AU\n"

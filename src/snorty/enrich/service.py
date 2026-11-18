@@ -14,6 +14,7 @@ from snorty.core.events import AlertFlagged, AlertRaised, Event
 from snorty.core.models import Alert
 from snorty.core.repository import AlertRepository
 from snorty.enrich.fetch import Fetch, gunzip
+from snorty.enrich.osint import DomainList, OsintIndex, parse_cert_pl
 from snorty.enrich.ranges import RangeTable, parse_drop, parse_feodo
 from snorty.enrich.rdns import ReverseDns
 
@@ -22,6 +23,9 @@ log = logging.getLogger("snorty.enrich")
 DAY = 86400.0
 FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist.txt"
 DROP_URL = "https://www.spamhaus.org/drop/drop.txt"
+CIRCL_FEED = "https://www.circl.lu/doc/misp/feed-osint/"  # manifest.json 1.4 MB, hashes.csv 42 MB
+CERT_PL_URL = "https://hole.cert.pl/domains/v2/domains.txt"  # 2.6 MB
+NAMED_FACTS = ("dns", "tls", "http")  # flow facts that carry a host name
 
 
 def remote_address(alert: Alert) -> str | None:
@@ -35,10 +39,17 @@ def remote_address(alert: Alert) -> str | None:
     return None
 
 
+def flow_names(facts: list[tuple[str, str]]) -> list[str]:
+    """The host names among an alert's flow facts (a web request's host, without its path)."""
+    names = (v.split("/", 1)[0] for k, v in facts if k in NAMED_FACTS)
+    return list(dict.fromkeys(n.lower().rstrip(".") for n in names if n))
+
+
 class EnrichService:
     """Pipeline: each step reads the loaded tables and adds a `kind: value` note. The tables come
-    from files in `folder`; with a `fetch` they are refreshed (lists daily, DB-IP monthly), and
-    without one only the files already there are used."""
+    from files in `folder`; with a `fetch` they are refreshed (lists daily, DB-IP monthly, the
+    CIRCL OSINT feed weekly), and without one only the files already there are used. The remote
+    address and, for Suricata, the host names seen on the alert's flow are what is looked up."""
 
     def __init__(
         self,
@@ -61,6 +72,8 @@ class EnrichService:
         self._bad: list[RangeTable] = []
         self._country = RangeTable()
         self._asn = RangeTable()
+        self._osint = OsintIndex()
+        self._phishing = DomainList()
         self._sub: Subscription | None = None
         self._tasks: list[asyncio.Task[None]] = []
 
@@ -108,19 +121,32 @@ class EnrichService:
     # --- the pipeline -----------------------------------------------------------------
 
     def enrich(self, alert: Alert) -> dict[str, str]:
-        """Blocking: store and return the notes for `alert` (empty for private-only flows)."""
+        """Blocking: store and return the notes for `alert` (empty when it has neither a public
+        address nor a host name)."""
         ip = remote_address(alert)
-        if ip is None or not alert.id:
+        flow = alert.flow_id
+        names = flow_names(self._repo.flow_facts(flow)) if flow is not None else []
+        if (ip is None and not names) or not alert.id:
             return {}
-        notes: dict[str, str] = {}
-        steps: list[tuple[str, Callable[[str], str | None]]] = [
-            ("bad", lambda a: next((m for t in self._bad if (m := t.find(a))), None)),
-            ("country", self._country.find),
-            ("asn", self._asn.find),
-            ("rdns", self._rdns.name if self._rdns else lambda _: None),
+
+        def first(values: list[str], find: Callable[[str], str | None]) -> str | None:
+            return next((m for v in values if (m := find(v))), None)
+
+        def bad_ip(a: str) -> str | None:
+            return next((m for t in self._bad if (m := t.find(a))), None)
+
+        ips = [ip] if ip else []
+        rdns = self._rdns.name if self._rdns else (lambda _: None)
+        steps: list[tuple[str, Callable[[], str | None]]] = [
+            ("bad", lambda: first(ips, bad_ip) or first(names, self._phishing.find)),
+            ("osint", lambda: first(ips + names, self._osint.find)),  # a mention, not a verdict
+            ("country", lambda: first(ips, self._country.find)),
+            ("asn", lambda: first(ips, self._asn.find)),
+            ("rdns", lambda: first(ips, rdns)),
         ]
+        notes: dict[str, str] = {}
         for kind, step in steps:
-            value = step(ip)
+            value = step()
             if value:
                 notes[kind] = value
                 self._repo.annotate(alert.id, kind, value)
@@ -142,6 +168,10 @@ class EnrichService:
         self._bad = [parse_feodo(read("feodo.txt")), parse_drop(read("drop.txt"))]
         self._country = RangeTable.from_csv(read("dbip-country.csv").splitlines(), slice(0, 1))
         self._asn = RangeTable.from_csv(read("dbip-asn.csv").splitlines(), slice(0, 2))
+        self._osint = OsintIndex.parse(
+            read("circl-manifest.json"), read("circl-hashes.csv").splitlines()
+        )
+        self._phishing = parse_cert_pl(read("cert-pl-domains.txt"))
 
     def refresh(self) -> bool:
         """Download whatever is out of date; True if any file changed."""
@@ -152,6 +182,9 @@ class EnrichService:
             ("drop.txt", DROP_URL, DAY, False),
             ("dbip-country.csv", f"{base}country-lite-{month}.csv.gz", 30 * DAY, True),
             ("dbip-asn.csv", f"{base}asn-lite-{month}.csv.gz", 30 * DAY, True),
+            ("cert-pl-domains.txt", CERT_PL_URL, DAY, False),
+            ("circl-manifest.json", f"{CIRCL_FEED}manifest.json", 7 * DAY, False),
+            ("circl-hashes.csv", f"{CIRCL_FEED}hashes.csv", 7 * DAY, False),
         ]
         changed = False
         self._folder.mkdir(parents=True, exist_ok=True)

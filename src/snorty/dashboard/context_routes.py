@@ -29,13 +29,14 @@ class Context:
     seen: tuple[tuple[str, str], ...] = ()  # (kind, value) the engine saw on the flow
     attack: Attack | None = None  # the rule's MITRE ATT&CK tags
     around: "Around | None" = None  # connection and DNS context, for engines that log flows
+    osint: str | None = None  # mentioned in a public OSINT report: a hint, not a verdict
 
     @property
     def empty(self) -> bool:
         return not any(
             (
                 self.process, self.bad, self.country, self.asn, self.rdns, self.seen,
-                self.attack, self.around,
+                self.attack, self.around, self.osint,
             )
         )  # fmt: skip
 
@@ -134,6 +135,7 @@ def build_context(
         seen,
         attack,
         nearby,
+        notes.get("osint"),
     )
 
 

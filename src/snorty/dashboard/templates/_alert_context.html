@@ -8,6 +8,7 @@
     {% if ctx.country %}<dt>Country</dt><dd>{{ ctx.country }}</dd>{% endif %}
     {% if ctx.asn %}<dt>Network</dt><dd>{{ ctx.asn }}</dd>{% endif %}
     {% if ctx.rdns %}<dt>Hostname</dt><dd class="mono">{{ ctx.rdns }}</dd>{% endif %}
+    {% if ctx.osint %}<dt>In public reports</dt><dd>{{ ctx.osint }} <span class="muted">(CIRCL OSINT feed; a mention, not a verdict)</span></dd>{% endif %}
     {% for kind, value in ctx.seen %}<dt>{{ labels[kind] }}</dt><dd class="mono">{{ value }}
       {%- if kind in ("dns", "tls") %} <button type="button" class="small" hx-post="/triage/archive-host?host={{ value|urlencode }}" hx-target="#flash" hx-swap="outerHTML" title="Acknowledge alerts naming this host or a subdomain, from now on">Auto-acknowledge this host</button>{% endif %}</dd>{% endfor %}
     {% if ctx.attack %}<dt>ATT&amp;CK</dt><dd>
