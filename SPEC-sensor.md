@@ -26,6 +26,7 @@ It never runs a subprocess itself (that is `snorty.snort`) and never parses text
 6. **Backlog vs live.** Lines already in `alert.ids` when the sensor starts (the *backlog*) are stored silently: no `AlertRaised`. Lines that arrive after the first end-of-file are *live*. An `AlertRaised` is published only when the repository says the row is new, so a restart never re-announces old alerts.
 7. **Crash recovery.** Snort exiting while `RUNNING` (not requested) → `STARTING` with the reason (exit code) and a wait of 2 s, 4 s, 8 s, … up to 60 s. After `max_restarts` (default 5) failures in a row → `FAILED`. A run that stays up 60 s resets the counter.
 8. **Network change.** Every `network_check_interval` (default 30 s) the sensor compares `find_local_ip()` with the bound interface's IP; if they differ (Wi-Fi roam, Ethernet plugged in) it restarts onto the new interface with reason `"network changed"`. Not done when `interface_ip` is set.
+8a. **Log rotation.** The engine's own logs are never trimmed by the engine (Suricata's `eve.json` grows about 170 MB a day on a busy PC). For each file in `rotate_logs` (Suricata: `eve.json`, `stats.log`, `fast.log`, `suricata.log`; Snort: none) the sensor checks every `rotate_check_interval` (60 s) whether it is over `rotate_bytes` (256 MB); if so it restarts the engine with reason `"rotating <names>"`, not counted as a failure. Before every start, with the engine stopped and its alert file read to the end, each oversized file becomes `<name>.1`, replacing the one before, so nothing is lost and each file stays under about twice the limit. A file that cannot be renamed (held open by a process Snorty did not start) is logged and not watched again until a later start renames it, so it cannot cause a restart a minute. The capture gap is the engine's start time, a few seconds.
 9. **Status.** `status()` returns a frozen snapshot: state, reason, interface, pid, started_at, alerts_seen, last_alert_ts, unparsed, restarts, last_error. (Bus drops are per subscriber, `Subscription.dropped`; the bus keeps no aggregate, so the sensor does not report one.)
 10. **Single instance.** `start()` refuses (→ `FAILED("Snort already running (pid N)")`) when the pid file `<log_dir>/snorty-sensor.pid` names a live `snort.exe`. The pid file is written on start and removed on a clean stop.
 11. **CLI.** `uv run python -m snorty.sensor [--db PATH] [--interface-ip IP]` runs the sensor in the foreground, prints one line per state change and per live alert, and exits 0 on Ctrl+C after a clean stop.
@@ -39,7 +40,7 @@ It never runs a subprocess itself (that is `snorty.snort`) and never parses text
 | STARTING | STARTING | start attempt failed, retry after backoff |
 | STARTING | FAILED | no interface, stale instance, or `max_restarts` reached |
 | STARTING | STOPPING | `stop()` during start |
-| RUNNING | STARTING | Snort died, or network changed, or `restart()` |
+| RUNNING | STARTING | Snort died, or network changed, or a log outgrew its limit, or `restart()` |
 | RUNNING | STOPPING | `stop()` |
 | STOPPING | STOPPED | Snort stopped and tail drained |
 | FAILED | STARTING | `start()` |

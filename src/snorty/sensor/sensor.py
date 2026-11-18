@@ -28,7 +28,7 @@ from snorty.snort.models import Interface, SnortError
 log = logging.getLogger("snorty.sensor")
 
 type StartOutcome = tuple[Literal["ok", "retry", "fatal"], str | None]
-type MonitorEvent = Literal["stop", "restart", "network", "exited"]
+type MonitorEvent = Literal["stop", "restart", "network", "logs", "exited"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +100,7 @@ class Sensor:
         self._backlog_done = False
         self._ingest_task: asyncio.Task[None] | None = None
         self._decoder: AlertDecoder = decoder or FastDecoder(tz)
+        self._unrotatable: set[Path] = set()  # oversized logs a rename failed on
 
         self._state = State.STOPPED
         self._reason: str | None = None
@@ -276,6 +277,8 @@ class Sensor:
             while await self._poll_once():  # one chunk at a time: bounded memory, lock released
                 pass
             self._backlog_done = True
+        # The engine is stopped and its alert file read to the end, so a rename loses nothing.
+        await asyncio.to_thread(self._rotate_logs)
         try:
             proc = await self._port.start(chosen)
         except SnortError as e:
@@ -306,6 +309,8 @@ class Sensor:
         }
         if self._config.interface_ip is None and self._select_interface is None:
             tasks["network"] = asyncio.create_task(self._watch_network())
+        if self._config.rotate_logs:
+            tasks["logs"] = asyncio.create_task(self._watch_logs())
         try:
             await asyncio.wait(set(tasks.values()), return_when=asyncio.FIRST_COMPLETED)
         finally:
@@ -317,8 +322,9 @@ class Sensor:
         if self._restart_requested.is_set():
             self._restart_requested.clear()
             return "restart", "restart requested"
-        if "network" in tasks and tasks["network"].done() and not tasks["network"].cancelled():
-            return "network", str(tasks["network"].result())
+        for event in ("network", "logs"):
+            if event in tasks and tasks[event].done() and not tasks[event].cancelled():
+                return event, str(tasks[event].result())
         return "exited", f"snort exited unexpectedly (code {proc.returncode})"
 
     async def _watch_network(self) -> str:
@@ -329,6 +335,39 @@ class Sensor:
             current = self._port.local_ip()
             if current is not None and bound is not None and current != bound:
                 return f"network changed ({bound} -> {current})"
+
+    def _oversized_logs(self) -> list[Path]:
+        cfg = self._config
+        found = []
+        for name in cfg.rotate_logs:
+            path = cfg.paths.log_dir / name
+            try:
+                if path.stat().st_size > cfg.rotate_bytes:
+                    found.append(path)
+            except FileNotFoundError:
+                pass
+        return found
+
+    async def _watch_logs(self) -> str:
+        """Returns once an engine log has outgrown rotate_bytes, so it is rotated on restart."""
+        while True:
+            await self._sleep(self._config.rotate_check_interval)
+            big = await asyncio.to_thread(self._oversized_logs)
+            if due := [p for p in big if p not in self._unrotatable]:
+                return f"rotating {', '.join(p.name for p in due)}"
+
+    def _rotate_logs(self) -> None:
+        """Runs while no engine holds the files: each oversized log becomes <name>.1. One that
+        cannot be renamed is not watched again until a later start renames it, or a restart a
+        minute would follow."""
+        self._unrotatable.clear()
+        for path in self._oversized_logs():
+            try:
+                path.replace(path.with_name(f"{path.name}.1"))
+                log.info("rotated %s", path)
+            except OSError as e:  # held open by a process Snorty did not start
+                self._unrotatable.add(path)
+                log.warning("could not rotate %s: %s", path, e)
 
     async def _wait_or_stop(self, delay: float) -> bool:
         """Sleep `delay` seconds unless stop() arrives first. True if stop was requested."""

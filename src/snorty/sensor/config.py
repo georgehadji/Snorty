@@ -13,3 +13,9 @@ class SensorConfig:
     max_restarts: int = 5
     stable_after: float = 60.0
     stop_timeout: float = 15.0
+    # Engine logs in the log dir kept from growing without end (nothing else trims them): once
+    # one is bigger than rotate_bytes the engine is restarted, and before each start such a
+    # file becomes <name>.1, replacing the one before. Empty: never rotated.
+    rotate_logs: tuple[str, ...] = ()
+    rotate_bytes: int = 256 * 1024 * 1024
+    rotate_check_interval: float = 60.0

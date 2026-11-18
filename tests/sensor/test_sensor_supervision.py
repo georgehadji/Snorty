@@ -124,6 +124,43 @@ async def test_network_change_restarts_onto_the_new_interface(rig: Rig) -> None:
     await rig.sensor.stop()
 
 
+async def test_an_oversized_engine_log_is_rotated_on_a_restart_that_is_not_a_failure(
+    tmp_path: Path,
+) -> None:
+    r = Rig(tmp_path, rotate_logs=("stats.log", "small.log"), rotate_bytes=10)
+    r.log_dir.mkdir(parents=True)
+    (r.log_dir / "small.log").write_text("tiny")
+    (r.log_dir / "stats.log.1").write_text("older copy")
+    try:
+        await r.sensor.start()
+        (r.log_dir / "stats.log").write_text("x" * 20)
+        await eventually(lambda: r.running_on(2))
+        assert (r.log_dir / "stats.log.1").read_text() == "x" * 20  # replaced the older copy
+        assert not (r.log_dir / "stats.log").exists()
+        assert (r.log_dir / "small.log").read_text() == "tiny"  # under the limit: kept
+        assert any("rotating stats.log" in (why or "") for _, _, why in r.steps())
+        assert 2.0 not in r.clock.sleeps  # no backoff: it is not a crash
+        await r.sensor.stop()
+    finally:
+        r.repo.close()
+
+
+async def test_a_log_that_cannot_be_renamed_does_not_restart_the_engine_again_and_again(
+    tmp_path: Path,
+) -> None:
+    r = Rig(tmp_path, rotate_logs=("stats.log",), rotate_bytes=10)
+    r.log_dir.mkdir(parents=True)
+    (r.log_dir / "stats.log").write_text("x" * 20)
+    try:
+        with (r.log_dir / "stats.log").open("rb"):  # held open: Windows refuses the rename
+            await r.sensor.start()
+            await asyncio.sleep(0.2)
+        assert r.running_on(1)
+        await r.sensor.stop()
+    finally:
+        r.repo.close()
+
+
 async def test_no_network_route_does_not_restart(rig: Rig) -> None:
     await rig.sensor.start()
     rig.port.ip = None

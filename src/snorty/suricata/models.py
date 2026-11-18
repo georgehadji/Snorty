@@ -2,6 +2,9 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+# The files Suricata appends to in its log dir for as long as it runs, and never trims.
+LOGS = ("eve.json", "stats.log", "fast.log", "suricata.log")
+
 
 @dataclass(frozen=True, slots=True)
 class SuricataPaths:

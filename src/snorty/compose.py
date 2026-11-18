@@ -37,6 +37,7 @@ from snorty.sensor.port import SuricataAdapter
 from snorty.services import Services
 from snorty.snort import PERFMON_FILE, DropReader, Interface, SnortPaths, SubprocessRunner
 from snorty.snort.interfaces import find_local_ip
+from snorty.suricata import LOGS as SURICATA_LOGS
 from snorty.suricata import SuricataPaths
 from snorty.triage import TriageService
 from snorty.winevt import SysmonHistory, probe
@@ -172,7 +173,9 @@ def compose(
         adapter, validator = SnortAdapter(paths), SnortValidator(paths)
     bus = EventBus()
     repo = AlertRepository(db_path or data_dir / "snorty.db")
-    config = SensorConfig(paths=sensor_paths, interface_ip=interface_ip)
+    # Suricata's logs grow by hundreds of MB a day on a busy PC; Snort's are left as they were.
+    rotate = SURICATA_LOGS if engine == "suricata" else ()
+    config = SensorConfig(paths=sensor_paths, interface_ip=interface_ip, rotate_logs=rotate)
     sensor = Sensor(
         config,
         adapter,
