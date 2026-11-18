@@ -192,6 +192,28 @@ def test_a_tls_record_without_or_with_odd_fingerprints_gives_only_the_name() -> 
     assert facts(d) == {(1234567890, "ja4", "t13d_x_y")}
 
 
+def test_a_file_on_an_alerted_flow_gives_its_name_and_md5() -> None:
+    d = EveDecoder()
+    d.decode([eve()], NOW.year, (), NOW)
+    md5 = "44d88612fea8a8f36de82e1278abb02f"
+
+    def record(info: dict[str, object]) -> str:
+        return json.dumps(
+            {"event_type": "fileinfo", "timestamp": TS, "flow_id": 1234567890, "fileinfo": info}
+        )
+
+    files = [
+        record({"filename": "/x/setup.exe", "md5": md5, "size": 68}),
+        record({"filename": "a.txt", "md5": "<script>"}),  # an odd hash is dropped
+    ]
+    d.decode(files, NOW.year, (), NOW)
+    assert facts(d) == {
+        (1234567890, "file", "/x/setup.exe"),
+        (1234567890, "md5", md5),
+        (1234567890, "file", "a.txt"),
+    }
+
+
 def test_a_fact_that_came_before_its_alert_is_kept() -> None:
     d = EveDecoder()
     tls = json.dumps(

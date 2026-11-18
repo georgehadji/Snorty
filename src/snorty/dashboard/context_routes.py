@@ -117,6 +117,8 @@ SEEN_LABELS = {
     "http": "Web request",
     "ja3": "Client fingerprint (JA3)",
     "ja4": "Client fingerprint (JA4)",
+    "file": "File",
+    "md5": "File MD5",
 }
 
 

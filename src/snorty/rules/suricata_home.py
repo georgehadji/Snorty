@@ -19,10 +19,17 @@ log = logging.getLogger("snorty.rules")
 _LISTED = re.compile(r"^[ \t]*-[ \t]*(\S+\.rules)[ \t]*$")
 SOURCE = ".snorty-source"  # SHA-256 of the install's suricata.yaml, then RECIPE
 BEFORE = "suricata.yaml.before-rebuild"  # the config a rebuild replaced
-RECIPE = 2  # raise when home_conf changes, so existing copies are made again once
+RECIPE = 3  # raise when home_conf changes, so existing copies are made again once
 # Commented-out lines of the stock config that the copy switches on, first occurrence each:
-# the client TLS fingerprints, and logging JA4 in EVE `tls` records (the first `# ja4:`).
-_TURN_ON = (("ja3-fingerprints", "yes"), ("ja4-fingerprints", "yes"), ("ja4", "on"))
+# the client TLS fingerprints, logging JA4 in EVE `tls` records (the first `# ja4:`), and the
+# MD5 of every file in EVE `fileinfo` records, matched against ClamAV's hash signatures. The
+# files themselves are never stored (file-store stays off).
+_TURN_ON = (
+    ("ja3-fingerprints", "yes"),
+    ("ja4-fingerprints", "yes"),
+    ("ja4", "on"),
+    ("force-hash", "[md5]"),
+)
 
 
 def _uncomment(text: str, key: str, value: str) -> str:

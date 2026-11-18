@@ -392,6 +392,13 @@ class AlertRepository:
             for r in rows
         ]
 
+    def alerts_on_flow(self, flow_id: int, limit: int = 20) -> list[Alert]:
+        """Stored alerts of one engine flow, newest first."""
+        sql = f"SELECT {_SELECT}{_COLUMNS} FROM alerts WHERE flow_id = ? ORDER BY ts DESC LIMIT ?"
+        with self._lock:
+            rows = self._conn.execute(sql, [flow_id, limit]).fetchall()
+        return [_alert(r) for r in rows]
+
     def get(self, alert_id: int) -> Alert | None:
         """One stored alert by its row id, or None."""
         sql = f"SELECT {_SELECT}{_COLUMNS} FROM alerts WHERE id = ?"

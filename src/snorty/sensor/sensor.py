@@ -8,8 +8,14 @@ from typing import Literal
 
 from snorty.core.bus import EventBus
 from snorty.core.decoder import AlertDecoder, FastDecoder
-from snorty.core.events import AlertRaised, AlertsBackfilled, SensorHealth, SensorStateChanged
-from snorty.core.models import Alert
+from snorty.core.events import (
+    AlertRaised,
+    AlertsBackfilled,
+    FilesSeen,
+    SensorHealth,
+    SensorStateChanged,
+)
+from snorty.core.models import Alert, FlowFact
 from snorty.core.repository import TAIL_KEY, AlertRepository
 from snorty.sensor.config import SensorConfig
 from snorty.sensor.policy import backoff_delay, should_give_up
@@ -436,7 +442,7 @@ class Sensor:
         moved = result.rotated or result.state.offset != self._tail.offset
         if result.state != self._tail or result.rotated:
             # Rows and checkpoint are stored together, so a restart resumes exactly here.
-            new, bad = await asyncio.to_thread(
+            new, bad, files = await asyncio.to_thread(
                 self._store_lines,
                 result.lines,
                 self._wall().year,
@@ -454,6 +460,8 @@ class Sensor:
                         self._bus.publish(AlertRaised(alert))
                 else:  # no toast for old alerts, but the journal must know which days changed
                     self._bus.publish(AlertsBackfilled(min(a.ts for a in new), newest))
+            if files and (self._backlog_done or result.rotated):
+                self._bus.publish(FilesSeen(files))
         self._note_health()
         self._tail = result.state
         # A chunk of blank lines moves the offset without yielding a line: keep reading.
@@ -471,12 +479,14 @@ class Sensor:
         year: int,
         ties: Sequence[int] = (),
         checkpoint: str | None = None,
-    ) -> tuple[list[Alert], int]:
-        """Runs in a worker thread: parse and store. Returns (new alerts, unparsed count).
-        `ties[i]` says which of several identical lines `lines[i]` is (0 when not given)."""
+    ) -> tuple[list[Alert], int, tuple[FlowFact, ...]]:
+        """Runs in a worker thread: parse and store. Returns (new alerts, unparsed count, file
+        MD5s seen on alerted flows). `ties[i]` says which of several identical lines `lines[i]`
+        is (0 when not given)."""
         alerts, bad = self._decoder.decode(lines, year, ties, self._wall())
         new = self._repo.add_new(alerts, checkpoint)
-        self._repo.add_flow_facts(self._decoder.take_flows())
+        facts = self._decoder.take_flows()
+        self._repo.add_flow_facts(facts)
         self._repo.note_seen("dns", self._decoder.take_names(), self._wall())
         self._repo.add_context(*self._decoder.take_context())
-        return new, bad
+        return new, bad, tuple(f for f in facts if f.kind == "md5")

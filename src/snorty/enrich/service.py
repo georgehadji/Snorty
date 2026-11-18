@@ -5,14 +5,15 @@ import ipaddress
 import logging
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
 from snorty.core.bus import EventBus, Subscription
-from snorty.core.events import AlertFlagged, AlertRaised, Event
-from snorty.core.models import Alert
+from snorty.core.events import AlertFlagged, AlertRaised, Event, FilesSeen
+from snorty.core.models import Alert, FlowFact
 from snorty.core.repository import AlertRepository
+from snorty.enrich.clamav import ClamHashes, read_database
 from snorty.enrich.fetch import Fetch, gunzip
 from snorty.enrich.osint import DomainList, OsintIndex, parse_cert_pl
 from snorty.enrich.ranges import RangeTable, parse_drop, parse_feodo
@@ -49,7 +50,11 @@ class EnrichService:
     """Pipeline: each step reads the loaded tables and adds a `kind: value` note. The tables come
     from files in `folder`; with a `fetch` they are refreshed (lists daily, DB-IP monthly, the
     CIRCL OSINT feed weekly), and without one only the files already there are used. The remote
-    address and, for Suricata, the host names seen on the alert's flow are what is looked up."""
+    address and, for Suricata, the host names seen on the alert's flow are what is looked up.
+
+    Files the engine saw on an alert's flow (`FilesSeen`) are matched by MD5 against the ClamAV
+    hash signatures in `clamav` (freshclam's database folder, kept up to date by the user); a hit
+    is a `bad` note on each alert of that flow. The folder is read again when its files change."""
 
     def __init__(
         self,
@@ -59,6 +64,7 @@ class EnrichService:
         *,
         fetch: Fetch | None = None,
         rdns: ReverseDns | None = None,
+        clamav: Path | None = None,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
         clock: Callable[[], float] = time.time,
     ) -> None:
@@ -74,6 +80,9 @@ class EnrichService:
         self._asn = RangeTable()
         self._osint = OsintIndex()
         self._phishing = DomainList()
+        self._clamav_dir = clamav
+        self._clamav = ClamHashes()
+        self._clamav_files: tuple[tuple[str, int], ...] = ()
         self._sub: Subscription | None = None
         self._tasks: list[asyncio.Task[None]] = []
 
@@ -99,6 +108,15 @@ class EnrichService:
 
     async def _consume(self, sub: Subscription) -> None:
         async for event in sub:
+            if isinstance(event, FilesSeen):
+                try:
+                    hits = await asyncio.to_thread(self.check_files, event.files)
+                except Exception:  # one bad batch must not end the consumer
+                    log.exception("could not check %d files", len(event.files))
+                    continue
+                for alert, label in hits:
+                    self._bus.publish(AlertFlagged(alert, label))
+                continue
             if not isinstance(event, AlertRaised):
                 continue
             try:
@@ -112,7 +130,8 @@ class EnrichService:
     async def _refresh_loop(self) -> None:
         while self._fetch is not None:
             try:
-                if await asyncio.to_thread(self.refresh):
+                fresh = await asyncio.to_thread(self.refresh)
+                if fresh or self._clamav_stamp() != self._clamav_files:  # freshclam ran
                     await asyncio.to_thread(self.load)
             except Exception:  # offline or a changed address: try again tomorrow
                 log.exception("could not refresh the enrichment data")
@@ -154,7 +173,29 @@ class EnrichService:
             self._repo.note_seen("country", [notes["country"]], alert.ts)
         return notes
 
+    def check_files(self, files: Sequence[FlowFact]) -> list[tuple[Alert, str]]:
+        """Blocking: note a ClamAV hit on every stored alert of the file's flow. Returns the
+        (alert, label) pairs flagged."""
+        hits: list[tuple[Alert, str]] = []
+        for fact in files:
+            label = self._clamav.find(fact.value) if fact.kind == "md5" else None
+            if label is None:
+                continue
+            for alert in self._repo.alerts_on_flow(fact.flow_id):
+                if alert.id and self._repo.annotations(alert.id).get("bad") != label:
+                    self._repo.annotate(alert.id, "bad", label)
+                    hits.append((alert, label))
+        return hits
+
     # --- data -------------------------------------------------------------------------
+
+    def _clamav_stamp(self) -> tuple[tuple[str, int], ...]:
+        folder = self._clamav_dir
+        try:
+            files = sorted(folder.glob("*.c[vl]d")) if folder and folder.is_dir() else []
+            return tuple((f.name, f.stat().st_mtime_ns) for f in files)
+        except OSError:
+            return ()
 
     def load(self) -> None:
         """Read the tables from the files in the folder; a missing or broken file is skipped."""
@@ -181,6 +222,8 @@ class EnrichService:
             read("circl-manifest.json"), read("circl-hashes.csv").splitlines()
         )
         self._phishing = parse_cert_pl(read("cert-pl-domains.txt"))
+        self._clamav_files = self._clamav_stamp()
+        self._clamav = read_database(self._clamav_dir) if self._clamav_dir else ClamHashes()
 
     def refresh(self) -> bool:
         """Download whatever is out of date; True if any file changed."""
@@ -217,4 +260,4 @@ class EnrichService:
 
 
 def _wants(event: Event) -> bool:
-    return isinstance(event, AlertRaised)
+    return isinstance(event, AlertRaised | FilesSeen)

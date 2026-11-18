@@ -17,7 +17,7 @@ SHARED = {"tlp:white", "tlp:clear"}  # only reports marked shareable with anyone
 INFO_CHARS = 120
 
 
-class _Digests:
+class Digests:
     """The sorted digests as a sequence of 16-byte slices, for bisect."""
 
     def __init__(self, data: bytes) -> None:
@@ -39,7 +39,7 @@ class OsintIndex:
         events: Iterable[int] = (),
         reports: Iterable[tuple[str, str]] = (),
     ) -> None:
-        self._digests = _Digests(digests)
+        self._digests = Digests(digests)
         self._events = array("H", events)  # report index of each digest
         self._reports = list(reports)  # (date, title)
 

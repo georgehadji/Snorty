@@ -61,13 +61,14 @@ class Suppression:
         return line
 
 
-type FactKind = Literal["dns", "tls", "http", "ja3", "ja4"]
+type FactKind = Literal["dns", "tls", "http", "ja3", "ja4", "file", "md5"]
 
 
 @dataclass(frozen=True, slots=True)
 class FlowFact:
     """Something the engine saw on the flow of an alert: a name looked up, a TLS server name, a
-    web request, the client's TLS fingerprint (JA3 hash, JA4). Shown in the alert's detail."""
+    web request, the client's TLS fingerprint (JA3 hash, JA4), a file's name and MD5. Shown in
+    the alert's detail."""
 
     flow_id: int
     kind: FactKind

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from snorty.core.models import Alert
+from snorty.core.models import Alert, FlowFact
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +49,20 @@ class SensorHealth:
     drop_pct: float
 
 
+@dataclass(frozen=True, slots=True)
+class FilesSeen:
+    """Files the engine logged on flows that have an alert, as `md5` flow facts. Published after
+    the alerts of the same read, so a file that finished after its alert is still checked."""
+
+    files: tuple[FlowFact, ...]
+
+
 type Event = (
-    AlertRaised | AlertsBackfilled | AlertFlagged | SensorStateChanged | RulesUpdated | SensorHealth
+    AlertRaised
+    | AlertsBackfilled
+    | AlertFlagged
+    | SensorStateChanged
+    | RulesUpdated
+    | SensorHealth
+    | FilesSeen
 )

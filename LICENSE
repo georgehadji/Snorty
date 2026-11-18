@@ -37,3 +37,5 @@ These components keep their own licences. This notice does not cover them.
 - Data that Snorty downloads at run time: DB-IP Lite (CC BY 4.0), Spamhaus DROP,
   abuse.ch Feodo Tracker, the CIRCL OSINT feed (TLP:CLEAR), the CERT Polska warning
   list and Emerging Threats Open rules, each under its provider's terms.
+- The ClamAV signature database, which the user downloads with ClamAV's own freshclam;
+  Snorty only reads its file hashes, under the ClamAV project's terms.

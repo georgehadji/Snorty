@@ -71,8 +71,23 @@ and it never blocks anything (`src/snorty/enrich/service.py`).
 10. Reverse DNS: cache of 2048 entries for 1 h, misses cached too, at most 4 lookups in flight,
     least recently used entry evicted first (`rdns.py:14-48`).
 11. Labels: Feodo entries read "Feodo Tracker botnet C2"; DROP entries "Spamhaus DROP SBLnnn"
-    (`ranges.py:66-82`); CERT Polska ones "CERT Polska phishing warning list: <domain>". Bad lines
-    in any source are skipped (`ranges.py:41-63`, `osint.py`).
+    (`ranges.py:66-82`); CERT Polska ones "CERT Polska phishing warning list: <domain>"; ClamAV
+    ones "ClamAV signature <name>". Bad lines in any source are skipped (`ranges.py:41-63`,
+    `osint.py`, `clamav.py`).
+12. Files (`clamav.py`, Suricata only):
+    - `home_conf` turns on `force-hash: [md5]` for EVE `fileinfo` records; file-store stays off,
+      so no file is ever written to disk.
+    - The decoder keeps a file's name and MD5 as `file` and `md5` flow facts of an alerted flow.
+      After each read the sensor publishes the new `md5` facts as `FilesSeen`, after the read's
+      `AlertRaised` events, so a file that finished after its alert is still checked.
+    - `check_files` looks each MD5 up in ClamAV's whole-file hash signatures (`.hdb`, `.hsb`
+      rows of the `.cvd`/`.cld` files in the `clamav` folder, minus ClamAV's clean list `.fp`,
+      `.sfp`). A hit is a `bad` note on every alert of the flow and one `AlertFlagged` each; an
+      alert already carrying that note is not flagged again.
+    - Every signature is keyed by the md5 of its hex text, in one sorted 16-byte buffer, with the
+      names in one byte string (about 30 bytes per signature).
+    - The folder is the user's freshclam database (Snorty never runs freshclam). It is read at
+      start and again by the daily refresh loop when a database file's name or time changed.
 
 ## Security and privacy
 
@@ -82,6 +97,8 @@ and it never blocks anything (`src/snorty/enrich/service.py`).
 - Reverse DNS sends the remote address to the PC's configured DNS resolver
   (`socket.gethostbyaddr`, `rdns.py:16`). That is the one way alert data leaves the PC here.
 - Downloaded text is parsed with `ipaddress` and `csv`; invalid rows are dropped.
+- File checks use only hashes Suricata logs; files are never stored, so Defender never sees or
+  uploads one. The ClamAV database is read from its tar members in memory, never extracted.
 
 ## Tests
 
@@ -91,6 +108,10 @@ and it never blocks anything (`src/snorty/enrich/service.py`).
 - `tests/core/test_osint.py`: the CIRCL index (shared reports only, counts, newest, broken
   rows), the CERT Polska list with parent domains, and the pipeline: names from flow facts, a
   phishing name flags, an OSINT mention does not.
+- `tests/core/test_clamav.py`: the signature table (MD5 and SHA-256 rows, the clean list,
+  broken rows), reading `.cvd` and `.cld` files, flagging every alert on a file's flow once, and
+  `FilesSeen` on the bus raising a flag. The decoder, sensor and config parts are in
+  `test_eve_decoder.py`, `test_sensor_ingest.py` and `test_suricata_home.py`.
 
 ## Deviations and known limits
 
@@ -99,5 +120,10 @@ and it never blocks anything (`src/snorty/enrich/service.py`).
 - Every alert with a public remote address triggers a reverse DNS query unless cached.
 - Names come from the flow facts stored when the alert arrives. A TLS or web event that Suricata
   logs after its alert lands on a later poll, so its name is not checked.
+- File checks match whole-file hashes only (about 540,000 ClamAV signatures); ClamAV's content
+  patterns and PE-section hashes need the file. Most traffic is HTTPS, whose files Suricata
+  cannot see, and a hash is only logged when Suricata saw the whole file (stream depth limits
+  apply). Files on flows with no alert are hashed but not checked.
+- The signature's file size is not compared; a different file with the same MD5 would match.
 - `circl-hashes.csv` is about 42 MB and grows; the 64 MiB download limit will need raising one
   day. A failed download keeps the old file.

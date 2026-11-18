@@ -127,7 +127,11 @@ def _int(value: object, default: int) -> int | None:
 _REMEMBERED = 4096  # how many addresses, flows and alerted flows an EveDecoder keeps in mind
 _PER_FLOW = 6
 _VALUE_CHARS = 200
-_FINGERPRINT = {"ja3": re.compile(r"[0-9a-f]{32}"), "ja4": re.compile(r"[a-z0-9_]{1,64}")}
+_FINGERPRINT = {
+    "ja3": re.compile(r"[0-9a-f]{32}"),
+    "ja4": re.compile(r"[a-z0-9_]{1,64}"),
+    "md5": re.compile(r"[0-9a-f]{32}"),
+}
 
 
 def _remember(table: "OrderedDict[Any, Any]", key: object, value: object) -> None:
@@ -258,7 +262,7 @@ class EveDecoder:
                 elif kind == "flow":
                     if conn := _conn(data):
                         self._conns.append(conn)
-                elif kind in ("dns", "tls", "http"):
+                elif kind in ("dns", "tls", "http", "fileinfo"):
                     self._note_event(kind, data)
                 continue
             alert = self._alert(data, text) if isinstance(data, dict) else None
@@ -317,20 +321,26 @@ class EveDecoder:
         flow, ts, info = data.get("flow_id"), _stamp(data.get("timestamp")), data.get(kind)
         if type(flow) is not int or ts is None or not isinstance(info, dict):
             return []
-        if kind != "tls":  # a web request: the host and path, never the query (it may hold secrets)
+        if (
+            kind == "http"
+        ):  # a web request: the host and path, never the query (it may hold secrets)
             host, url = _text(info.get("hostname")), _text(info.get("url"))
             value = _text(f"{host or ''}{url.split('?')[0] if url else ''}")
             return [FlowFact(flow, "http", value, ts)] if value else []
-        ja3 = info.get("ja3")
-        found: list[tuple[FactKind, object]] = [
-            ("tls", info.get("sni")),
-            ("ja3", ja3.get("hash") if isinstance(ja3, dict) else None),
-            ("ja4", info.get("ja4")),
-        ]
+        found: list[tuple[FactKind, object]]
+        if kind == "fileinfo":  # its MD5 only when the config forces hashing (home_conf does)
+            found = [("file", info.get("filename")), ("md5", info.get("md5"))]
+        else:
+            ja3 = info.get("ja3")
+            found = [
+                ("tls", info.get("sni")),
+                ("ja3", ja3.get("hash") if isinstance(ja3, dict) else None),
+                ("ja4", info.get("ja4")),
+            ]
         return [
             FlowFact(flow, k, v, ts)
             for k, raw in found
-            if (v := _text(raw)) and (k == "tls" or _FINGERPRINT[k].fullmatch(v))
+            if (v := _text(raw)) and (k not in _FINGERPRINT or _FINGERPRINT[k].fullmatch(v))
         ]
 
     def _note_stats(self, data: dict[str, object]) -> None:

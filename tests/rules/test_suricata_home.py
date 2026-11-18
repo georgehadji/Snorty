@@ -119,6 +119,9 @@ FINGERPRINT_BLOCK = (
     "            # ja4: off\n"
     "        - quic:\n"
     "            # ja4: off\n"
+    "        - files:\n"
+    "            force-magic: no\n"
+    "            #force-hash: [md5]\n"
     "app-layer:\n"
     "  protocols:\n"
     "    tls:\n"
@@ -128,18 +131,22 @@ FINGERPRINT_BLOCK = (
 )
 
 
-def test_the_copy_turns_on_tls_fingerprints_and_keeps_every_other_line(tmp_path: Path) -> None:
+def test_the_copy_turns_on_fingerprints_and_file_md5s_and_keeps_every_other_line(
+    tmp_path: Path,
+) -> None:
     install = fake_install(tmp_path)
     (install / "suricata.yaml").write_text(STOCK + FINGERPRINT_BLOCK)
     home = tmp_path / "home"
     text = prepare_suricata_home(install, home).conf.read_text()
     assert "            ja4: on\n        - quic:\n            # ja4: off\n" in text
     assert "      ja3-fingerprints: yes\n      ja4-fingerprints: yes\n" in text
+    assert "            force-magic: no\n            force-hash: [md5]\n" in text
     gone = set((STOCK + FINGERPRINT_BLOCK).splitlines()) - set(text.splitlines())
-    # besides the paths, only the two key lines left; `# ja4: off` stays, under quic
+    # besides the paths, only the three key lines left; `# ja4: off` stays, under quic
     assert {line for line in gone if "Program Files" not in line} == {
         "      #ja3-fingerprints: auto",
         "      #ja4-fingerprints: auto",
+        "            #force-hash: [md5]",
     }
 
 

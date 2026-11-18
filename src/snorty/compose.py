@@ -242,7 +242,12 @@ def compose(
             bus, repo, WinConnectionLookup(), find_local_ip, _connection_history()
         )
         enrich = EnrichService(
-            bus, repo, data_dir / "enrich", fetch=urllib_fetch, rdns=ReverseDns()
+            bus,
+            repo,
+            data_dir / "enrich",
+            fetch=urllib_fetch,
+            rdns=ReverseDns(),
+            clamav=data_dir / "clamav" / "db",  # freshclam's database, if the user set it up
         )
     return Runtime(
         services, toasts, journal, TriageService(bus, repo), attribution, enrich, blocker, explainer

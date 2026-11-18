@@ -287,7 +287,7 @@ def yearless(month_day: str) -> str:
 def test_december_lines_read_in_january_belong_to_last_year(tmp_path: Path) -> None:
     rig = Rig(tmp_path)
     rig.sensor._wall = lambda: datetime(2027, 1, 2, 9, 0, tzinfo=UTC)
-    new, bad = rig.sensor._store_lines([yearless("12/30"), yearless("01/02")], 2027)
+    new, bad, _ = rig.sensor._store_lines([yearless("12/30"), yearless("01/02")], 2027)
     assert bad == 0
     assert [a.ts.year for a in new] == [2026, 2027]
 
@@ -295,7 +295,7 @@ def test_december_lines_read_in_january_belong_to_last_year(tmp_path: Path) -> N
 def test_a_line_from_today_keeps_the_current_year(tmp_path: Path) -> None:
     rig = Rig(tmp_path)
     rig.sensor._wall = lambda: datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
-    new, _ = rig.sensor._store_lines([yearless("11/16"), yearless("11/15")], 2026)
+    new, _, _ = rig.sensor._store_lines([yearless("11/16"), yearless("11/15")], 2026)
     assert [a.ts.year for a in new] == [2026, 2026]
 
 
@@ -329,7 +329,7 @@ def test_the_repeated_hour_of_a_clock_change_is_read_in_the_right_order(tmp_path
 
     lines = [at("02:50", 1), at("03:10", 2), at("03:50", 3), at("03:05", 4), at("03:30", 5),
              at("04:10", 6)]  # fmt: skip
-    new, bad = rig.sensor._store_lines(lines, 2026)
+    new, bad, _ = rig.sensor._store_lines(lines, 2026)
     assert bad == 0
     assert [a.ts.astimezone(UTC).strftime("%H:%M") for a in new] == [
         "23:50", "00:10", "00:50",  # first pass at +03:00
@@ -463,6 +463,26 @@ async def test_the_connection_context_the_decoder_saw_is_stored(tmp_path: Path) 
     ]
     await r.sensor.stop()
     r.repo.close()
+
+
+async def test_file_md5s_on_alerted_flows_are_announced_after_their_alerts(rig: Rig) -> None:
+    from snorty.core.events import FilesSeen
+    from snorty.core.models import FlowFact
+
+    t = datetime.now(UTC)
+
+    class Seen(FastDecoder):
+        def take_flows(self) -> list[FlowFact]:
+            return [FlowFact(9, "file", "a.exe", t), FlowFact(9, "md5", "0" * 32, t)]
+
+    rig.sensor._decoder = Seen(UTC)
+    rig.sensor._backlog_done = True
+    rig.append(line(1))
+    await rig.sensor._poll_once()
+    events = [e for e in rig.drain() if isinstance(e, AlertRaised | FilesSeen)]
+    assert [type(e) for e in events] == [AlertRaised, FilesSeen]
+    assert isinstance(events[1], FilesSeen) and [f.kind for f in events[1].files] == ["md5"]
+    assert ("md5", "0" * 32) in rig.repo.flow_facts(9)
 
 
 async def test_names_the_decoder_saw_answered_are_noted_as_seen(tmp_path: Path) -> None:
